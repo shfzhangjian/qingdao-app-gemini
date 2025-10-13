@@ -1,29 +1,21 @@
 /**
- * @file /js/components/QueryForm.js
- * @description 动态查询表单/工具栏组件
- * @version 1.0.0 - 2025-10-13 - Gemini - 初始创建并添加文件头注释
+ * 源码路径: js/components/QueryForm.js
+ * 功能说明: 根据配置动态创建查询表单和工具栏。
+ * 版本变动:
+ * v1.2.0 - 2025-10-13: 新增键盘支持，可通过回车查询和箭头键移动焦点。
  */
 
-/**
- * A component for dynamically creating query forms and toolbars.
- */
+import DatePicker from './DatePicker.js';
+
 export default class QueryForm {
-    /**
-     * @param {object} config
-     * @param {Array<object>} config.fields - Configuration for form fields.
-     * @param {Array<object>} config.actions - Configuration for action buttons.
-     */
     constructor({ fields = [], actions = [] }) {
         this.fields = fields;
         this.actions = actions;
         this.container = null;
-        this.callbacks = {}; // Simple event handler store
+        this.callbacks = {};
+        this.datePickers = []; // Store date picker instances
     }
 
-    /**
-     * Renders the form into a specified container.
-     * @param {HTMLElement} container - The element to render the form into.
-     */
     render(container) {
         if (!container) {
             console.error("QueryForm requires a container element to render.");
@@ -45,109 +37,113 @@ export default class QueryForm {
         `;
 
         this._attachEventListeners();
+        this._initializeDatePickers(); // Initialize after rendering
     }
 
-    /**
-     * Creates HTML for form fields.
-     * @private
-     */
     _createFieldsHtml() {
         return this.fields.map(field => {
-            const commonParts = `
-                <label class="form-label mb-0 flex-shrink-0" ${field.labelWidth ? `style="width:${field.labelWidth}; text-align: right; margin-right: 0.5rem;"` : ''}>
-                    ${field.label}:
-                </label>`;
+            const commonParts = `<label class="form-label mb-0 flex-shrink-0" ${field.labelWidth ? `style="width:${field.labelWidth}; text-align: right; margin-right: 0.5rem;"` : ''}>${field.label}:</label>`;
 
             switch (field.type) {
                 case 'text':
-                    return `
-                        <div class="d-flex align-items-center ${field.containerClass || ''}">
-                            ${commonParts}
-                            <input type="text" name="${field.name}" class="form-control form-control-sm" ${field.style ? `style="${field.style}"` : ''} value="${field.defaultValue || ''}">
-                        </div>`;
+                    return `<div class="d-flex align-items-center ${field.containerClass || ''}">${commonParts}<input type="text" name="${field.name}" class="form-control form-control-sm" ${field.style ? `style="${field.style}"` : ''} value="${field.defaultValue || ''}"></div>`;
                 case 'pills':
-                    const optionsHtml = field.options.map(opt => `
-                        <input type="radio" class="btn-check" name="${field.name}" id="${field.name}-${opt.value}" autocomplete="off" ${opt.checked ? 'checked' : ''}>
-                        <label class="btn btn-outline-secondary" for="${field.name}-${opt.value}">${opt.label}</label>
-                    `).join('');
-                    return `
-                        <div class="d-flex align-items-center gap-2 ${field.containerClass || ''}">
-                            ${commonParts}
-                            <div class="btn-group btn-group-sm" role="group">
-                                ${optionsHtml}
-                            </div>
-                        </div>`;
+                    const optionsHtml = field.options.map(opt => `<input type="radio" class="btn-check" name="${field.name}" id="${field.name}-${opt.value}" value="${opt.value}" autocomplete="off" ${opt.checked ? 'checked' : ''}><label class="btn btn-outline-secondary" for="${field.name}-${opt.value}">${opt.label}</label>`).join('');
+                    return `<div class="d-flex align-items-center gap-2 ${field.containerClass || ''}">${commonParts}<div class="btn-group btn-group-sm" role="group">${optionsHtml}</div></div>`;
+                case 'daterange':
+                    return `<div class="d-flex align-items-center ${field.containerClass || ''}">${commonParts}<input type="text" name="${field.name}" class="form-control form-control-sm" ${field.style ? `style="${field.style}"` : ''} placeholder="请选择日期范围..."></div>`;
                 default:
                     return '';
             }
         }).join('');
     }
 
-    /**
-     * Creates HTML for action buttons.
-     * @private
-     */
-    _createActionsHtml() {
-        return this.actions.map(action => `
-            <button class="btn btn-sm ${action.class || 'btn-primary'}" data-action="${action.name}">
-                ${action.text}
-            </button>
-        `).join('');
-    }
-
-    /**
-     * Attaches event listeners for action buttons.
-     * @private
-     */
-    _attachEventListeners() {
-        this.actions.forEach(action => {
-            const button = this.container.querySelector(`[data-action="${action.name}"]`);
-            if (button) {
-                button.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    this._trigger(action.name, this.getValues());
-                });
+    _initializeDatePickers() {
+        this.destroyDatePickers(); // Clean up old instances first
+        this.fields.forEach(field => {
+            if (field.type === 'daterange') {
+                const input = this.container.querySelector(`input[name="${field.name}"]`);
+                if (input) {
+                    this.datePickers.push(new DatePicker(input, field.options || {}));
+                }
             }
         });
     }
 
-    /**
-     * Gets the current values of all form fields.
-     * @returns {object} - An object containing field names and their values.
-     */
+    _createActionsHtml() {
+        return this.actions.map(action => `<button class="btn btn-sm ${action.class || 'btn-primary'}" data-action="${action.name}">${action.text}</button>`).join('');
+    }
+
+    _attachEventListeners() {
+        // --- Click Event Listeners ---
+        this.container.addEventListener('click', (e) => {
+            const button = e.target.closest('button[data-action]');
+            if (button) {
+                e.preventDefault();
+                this._trigger(button.dataset.action, this.getValues());
+            }
+        });
+
+        // --- Keyboard Event Listeners ---
+        this.container.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.matches('input')) {
+                e.preventDefault();
+                const searchButton = this.container.querySelector('[data-action="search"]') || this.container.querySelector('button[data-action]');
+                searchButton?.click();
+            }
+
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                const focusable = Array.from(this.container.querySelectorAll('input, button'));
+                const currentIndex = focusable.indexOf(document.activeElement);
+
+                if (currentIndex === -1) {
+                    focusable[0]?.focus();
+                    return;
+                }
+
+                let nextIndex;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    nextIndex = (currentIndex + 1) % focusable.length;
+                } else {
+                    nextIndex = (currentIndex - 1 + focusable.length) % focusable.length;
+                }
+                focusable[nextIndex]?.focus();
+            }
+        });
+    }
+
     getValues() {
         const values = {};
         this.fields.forEach(field => {
-            if (field.type === 'text') {
-                const input = this.container.querySelector(`input[name="${field.name}"]`);
-                if (input) values[field.name] = input.value;
-            } else if (field.type === 'pills') {
+            const input = this.container.querySelector(`[name="${field.name}"]`);
+            if (!input) return;
+
+            if (field.type === 'pills') {
                 const checkedInput = this.container.querySelector(`input[name="${field.name}"]:checked`);
-                if (checkedInput) values[field.name] = checkedInput.id.split('-').pop();
+                if (checkedInput) values[field.name] = checkedInput.value;
+            } else {
+                values[field.name] = input.value;
             }
         });
         return values;
     }
 
-    /**
-     * Registers a callback for a specific action.
-     * @param {string} eventName - The name of the action/event (e.g., 'search').
-     * @param {function} callback - The function to call when the event is triggered.
-     */
     on(eventName, callback) {
         if (typeof callback === 'function') {
             this.callbacks[eventName] = callback;
         }
     }
 
-    /**
-     * Triggers a registered callback.
-     * @private
-     */
     _trigger(eventName, data) {
         if (this.callbacks[eventName]) {
             this.callbacks[eventName](data);
         }
+    }
+
+    destroyDatePickers() {
+        this.datePickers.forEach(dp => dp.destroy());
+        this.datePickers = [];
     }
 }
 

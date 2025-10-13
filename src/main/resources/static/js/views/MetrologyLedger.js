@@ -3,8 +3,7 @@
  * 功能说明: 计量台账页面的视图逻辑。
  * 负责组装QueryForm和DataTable组件来构建完整的页面。
  * 版本变动:
- * v1.0.0 - 2025-10-13: 初始版本，使用组件构建UI。
- * v1.1.0 - 2025-10-13: 适配v2.2.0的DataTable组件，将工具栏配置移入DataTable。
+ * v1.9.1 - 2025-10-13: 为 "是否过期" 和 "台账挂接" 列的渲染函数添加调试日志。
  */
 import DataTable from '../components/DataTable.js';
 import QueryForm from '../components/QueryForm.js';
@@ -12,13 +11,14 @@ import Modal from '../components/Modal.js';
 
 function generateMetrologyLedgerData() {
     const items = [
-        { expired: false, sysId: 'SYS001', seq: 1, enterpriseId: '01200002', erpId: 'JL009219', deviceName: '电子台秤', model: 'TCS-B', factoryId: '1339744', range: '0-1000kg', location: '车间A-01', accuracy: 'III级', nextDate: '2026-08-22', status: '正常' },
-        { expired: true, sysId: 'SYS002', seq: 2, enterpriseId: '01200003', erpId: 'JL009220', deviceName: '电子台秤', model: 'TCS-B', factoryId: '234422', range: '0.4kg-60kg', location: '仓库B-05', accuracy: 'III级', nextDate: '2025-01-10', status: '正常' },
-        { expired: false, sysId: 'SYS003', seq: 3, enterpriseId: '01200004', erpId: 'JL009221', deviceName: '电子台秤', model: 'TCS-B', factoryId: '223421', range: '0-1000kg', location: '车间A-02', accuracy: 'III级', nextDate: '2026-08-20', status: '正常' },
-        { expired: false, sysId: 'SYS004', seq: 4, enterpriseId: '01200005', erpId: 'JL009222', deviceName: '压力计', model: 'YK-100', factoryId: '5582910', range: '0-1.6MPa', location: '管道1', accuracy: '1.6级', nextDate: '2026-08-19', status: '维修中' },
-        { expired: false, sysId: 'SYS005', seq: 5, enterpriseId: '01200006', erpId: 'JL009223', deviceName: '温度计', model: 'WSS-411', factoryId: '9821345', range: '-40-600℃', location: '锅炉3', accuracy: '1.5级', nextDate: '2026-08-18', status: '已报废' },
+        { expired: false, isLinked: true, sysId: 'SYS001', seq: 1, enterpriseId: '01200002', erpId: 'JL009219', deviceName: '电子台秤', model: 'TCS-B', factoryId: '1339744', range: '0-1000kg', location: '车间A-01', accuracy: 'III级', nextDate: '2026-08-22', status: '正常' },
+        { expired: true, isLinked: false, sysId: 'SYS002', seq: 2, enterpriseId: '01200003', erpId: 'JL009220', deviceName: '电子台秤', model: 'TCS-B', factoryId: '234422', range: '0.4kg-60kg', location: '仓库B-05', accuracy: 'III级', nextDate: '2025-01-10', status: '正常' },
+        { expired: false, isLinked: true, sysId: 'SYS003', seq: 3, enterpriseId: '01200004', erpId: 'JL009221', deviceName: '电子台秤', model: 'TCS-B', factoryId: '223421', range: '0-1000kg', location: '车间A-02', accuracy: 'III级', nextDate: '2026-08-20', status: '正常' },
+        { expired: false, isLinked: false, sysId: 'SYS004', seq: 4, enterpriseId: '01200005', erpId: 'JL009222', deviceName: '压力计', model: 'YK-100', factoryId: '5582910', range: '0-1.6MPa', location: '管道1', accuracy: '1.6级', nextDate: '2026-08-19', status: '维修中' },
+        { expired: false, isLinked: true, sysId: 'SYS005', seq: 5, enterpriseId: '01200006', erpId: 'JL009223', deviceName: '温度计', model: 'WSS-411', factoryId: '9821345', range: '-40-600℃', location: '锅炉3', accuracy: '1.5级', nextDate: '2026-08-18', status: '已报废' },
     ];
-    return items.map(item => ({...item, linkage: '', controlId: '-', gbAccuracy: '-', uncertainty: '-', resolution: '-', techParams: '-', parentDevice: '-', abc: 'A', controlType: '-', manufacturer: '-', mfgDate: '-', startDate: '-', owner: '-', funcUnit: '-', assetCode: '-', periodUnit: '-', confirmDate: '-', interval: '-', verificationType: '-', verificationUnit: '-', mandatory: '-', energyMgmt: '-', qcInstrument: '-', verifier: '-', validator: '-', notes: '-', deptId: '-', deptName: '-', createDate: '-', firstVerification: '-', reviewer: '-' }));
+    // Add placeholder data for all columns
+    return items.map(item => ({...item, controlId: '-', gbAccuracy: '-', uncertainty: '-', resolution: '-', techParams: '-', parentDevice: '-', abc: 'A', controlType: '-', manufacturer: '-', mfgDate: '-', startDate: '-', owner: '-', funcUnit: '-', assetCode: '-', periodUnit: '-', confirmDate: '-', interval: '-', verificationType: '-', verificationUnit: '-', mandatory: '-', energyMgmt: '-', qcInstrument: '-', verifier: '-', validator: '-', notes: '-', deptId: '-', deptName: '-', createDate: '-', firstVerification: '-', reviewer: '-' }));
 }
 
 export default class MetrologyLedger {
@@ -28,19 +28,16 @@ export default class MetrologyLedger {
         this.queryForm = null;
     }
 
-    render(container, footerContainer) {
-        // The main container is now a flex container to support the table placeholder
+    render(container) {
         container.innerHTML = `
-            <div id="breadcrumb-container" class="mb-3"></div>
-            <div class="p-3 rounded" style="background-color: var(--bg-dark-secondary); display: flex; flex-direction: column; flex-grow: 1;">
+            <div class="p-3 rounded" style="background-color: var(--bg-dark-secondary); display: flex; flex-direction: column; height: 100%;">
                 <div id="query-form-container"></div>
-                <div id="data-table-container" style="flex-grow: 1; display: flex; flex-direction: column;"></div>
+                <div id="data-table-container" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"></div>
             </div>
         `;
 
         this._renderQueryForm(container.querySelector('#query-form-container'));
         this._renderDataTable(container.querySelector('#data-table-container'));
-        this._renderFooter(footerContainer);
 
         this._attachEventListeners();
     }
@@ -61,8 +58,14 @@ export default class MetrologyLedger {
 
     _renderDataTable(container) {
         const columns = [
-            { key: 'expired', title: '是否过期', visible: true, render: (val, row) => row.expired ? `<span class="badge bg-danger">是</span>` : `<span class="badge bg-success">否</span>` },
-            { key: 'linkage', title: '台账挂接', visible: true, render: () => `<button class="btn btn-sm btn-outline-primary py-0">挂接</button>` },
+            { key: 'expired', title: '是否过期', visible: true, render: (val) => {
+                    console.log(`Rendering 'expired' column with value:`, val);
+                    return val ? '<i class="bi bi-check-circle-fill text-danger"></i>' : '<i class="bi bi-circle text-secondary"></i>';
+                }},
+            { key: 'isLinked', title: '台账挂接', visible: true, render: (val) => {
+                    console.log(`Rendering 'isLinked' column with value:`, val);
+                    return val ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-circle text-secondary"></i>';
+                }},
             { key: 'sysId', title: '系统编号', visible: true },
             { key: 'seq', title: '序号', visible: true },
             { key: 'enterpriseId', title: '企业编号', visible: true },
@@ -124,34 +127,18 @@ export default class MetrologyLedger {
             filters: filters,
             options: {
                 configurable: true,
-                storageKey: 'metrologyLedgerTable'
+                storageKey: 'metrologyLedgerTable',
+                selectable: 'single'
             }
         });
 
         this.dataTable.render(container);
     }
 
-    _renderFooter(container) {
-        container.innerHTML = `
-            <nav class="d-flex justify-content-end">
-                <ul class="pagination pagination-sm mb-0">
-                    <li class="page-item disabled"><a class="page-link" href="#">&laquo;</a></li>
-                    <li class="page-item"><a class="page-link" href="#">1</a></li>
-                    <li class="page-item active"><a class="page-link" href="#">2</a></li>
-                    <li class="page-item"><a class="page-link" href="#">3</a></li>
-                    <li class="page-item"><a class="page-link" href="#">...</a></li>
-                    <li class="page-item"><a class="page-link" href="#">10</a></li>
-                    <li class="page-item"><a class="page-link" href="#">&raquo;</a></li>
-                </ul>
-            </nav>
-        `;
-    }
-
     _attachEventListeners() {
         const tableContainer = document.getElementById('data-table-container');
         if (!tableContainer) return;
 
-        // Listen for clicks on the toolbar buttons
         tableContainer.addEventListener('click', (e) => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
@@ -159,34 +146,13 @@ export default class MetrologyLedger {
             const action = button.dataset.action;
             if (action === 'search') {
                 const queryValues = this.queryForm.getValues();
-                const status = tableContainer.querySelector('input[name="deviceStatus"]:checked').id.split('-').pop();
-                const category = tableContainer.querySelector('input[name="abcCategory"]:checked').id.split('-').pop();
+                const status = tableContainer.querySelector('input[name="deviceStatus"]:checked').value;
+                const category = tableContainer.querySelector('input[name="abcCategory"]:checked').value;
 
                 console.log('Searching with:', { ...queryValues, status, category });
                 Modal.alert('执行查询（模拟）');
-                // this.dataTable.updateData( ... new data from API ... );
             }
         });
-
-        // Listen for clicks on table rows for selection
-        const tableBody = tableContainer.querySelector('tbody');
-        if (tableBody) {
-            tableBody.addEventListener('click', (e) => {
-                const row = e.target.closest('tr');
-                if (!row || !row.parentElement) return; // Ensure row and its parent exist
-
-                // Do not trigger selection if a button inside the row was clicked
-                if (e.target.closest('button')) {
-                    return;
-                }
-
-                const currentlyActive = tableBody.querySelector('.table-active-custom');
-                if (currentlyActive) {
-                    currentlyActive.classList.remove('table-active-custom');
-                }
-                row.classList.add('table-active-custom');
-            });
-        }
     }
 }
 

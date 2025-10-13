@@ -194,39 +194,20 @@ body.sidebar-collapsed #sidebar {
     flex-direction: column;
     flex-grow: 1;
     padding: 1.5rem;
-    overflow-y: auto;
+    overflow: hidden; /* 内容区自身不滚动 */
     transition: margin-left 0.3s ease;
-    padding-bottom: 70px; /* 为固定页脚留出空间 */
 }
 
-/* --- 固定页脚 --- */
-.page-footer {
-    position: fixed;
-    bottom: 0;
-    right: 0;
-    left: 220px; /* 匹配侧边栏宽度 */
-    padding: 0.75rem 1.5rem;
-    background-color: var(--bg-dark-secondary);
-    border-top: 1px solid var(--border-color);
-    transition: left 0.3s ease;
-    z-index: 1020;
-}
-body.sidebar-collapsed .page-footer {
-    left: 50px; /* 匹配收缩后侧边栏宽度 */
-}
-
-
-/* 覆盖Bootstrap组件样式以匹配主题 */
-/* --- 【更新】面包屑样式覆盖 --- */
+/* --- 覆盖Bootstrap组件样式以匹配主题 --- */
 .breadcrumb {
     padding: 0;
     margin-bottom: 1rem;
     background-color: transparent;
 }
 .breadcrumb-item + .breadcrumb-item::before {
-    content: '/'; /* 直接设置分隔符 */
-    padding: 0 0.5rem; /* 设置间距 */
-    color: var(--text-secondary); /* 设置分隔符颜色 */
+    content: '/';
+    padding: 0 0.5rem;
+    color: var(--text-secondary);
 }
 .breadcrumb-item a {
     color: var(--text-secondary);
@@ -238,7 +219,6 @@ body.sidebar-collapsed .page-footer {
 .breadcrumb-item.active {
     color: var(--text-primary);
 }
-
 
 .btn-primary {
     background-color: var(--accent-color);
@@ -261,6 +241,7 @@ body.sidebar-collapsed .page-footer {
     color: var(--text-primary);
 }
 .table {
+    table-layout: fixed;
     --bs-table-bg: var(--bg-dark-secondary);
     --bs-table-color: var(--text-primary);
     --bs-table-border-color: var(--border-color);
@@ -268,24 +249,103 @@ body.sidebar-collapsed .page-footer {
     --bs-table-hover-bg: #32383e;
 }
 .table thead th {
+    position: relative;
     background-color: #343a40;
     white-space: nowrap;
+    border-color: var(--border-color);
+    border-width: 0 0 1px 1px;
 }
+.table thead th:first-child {
+    border-left-width: 0;
+}
+.table thead .resizer {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    width: 5px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 1;
+}
+
+/* --- 【新增】冻结列样式 --- */
+.table th.dt-cell-frozen-left,
+.table td.dt-cell-frozen-left {
+    position: sticky;
+    z-index: 2;
+    background-color: var(--bg-dark-secondary);
+}
+.table th.dt-cell-frozen-right,
+.table td.dt-cell-frozen-right {
+    position: sticky;
+    z-index: 2;
+    background-color: var(--bg-dark-secondary);
+}
+.table thead th.dt-cell-frozen-left,
+.table thead th.dt-cell-frozen-right {
+    z-index: 3;
+    background-color: #343a40; /* Match header background */
+}
+
+
 .table tbody tr {
     cursor: pointer;
 }
 .table-active-custom {
-    --bs-table-bg-state: #005a9e; /* 自定义选中颜色 */
+    --bs-table-bg-state: #005a9e;
     --bs-table-color-state: #fff;
     background-color: var(--bs-table-bg-state) !important;
     color: var(--bs-table-color-state) !important;
 }
 
-/* 【核心修改】为table-responsive添加flex布局，使其填满剩余高度 */
+
+.table-row-abnormal td {
+    background-color: rgba(217, 83, 79, 0.15) !important;
+}
+
+.table-hover > tbody > .table-row-abnormal:hover > * {
+    --bs-table-hover-bg: rgba(217, 83, 79, 0.25);
+}
+
 .table-responsive {
     flex-grow: 1;
-    min-height: 0; /* 关键属性，允许flex item在必要时收缩 */
-    overflow: auto; /* 确保滚动条出现 */
+    min-height: 0;
+    overflow: auto;
+}
+
+/* --- 【新增】模态窗口样式覆盖 --- */
+.modal-content {
+    background-color: var(--bg-dark-secondary);
+    border: 1px solid var(--border-color);
+}
+.modal-header, .modal-footer {
+    border-color: var(--border-color);
+}
+.modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+.modal .list-group-item {
+    background-color: var(--bg-dark-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+.modal .list-group-item:hover {
+    background-color: #343a40;
+}
+.form-switch .form-check-input {
+    background-color: #555;
+    border-color: #777;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ccc'/%3e%3c/svg%3e");
+}
+.form-switch .form-check-input:checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+}
+.form-switch .form-check-input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 0.25rem rgba(0, 122, 204, 0.25);
 }
 
 
@@ -318,8 +378,61 @@ body.sidebar-collapsed .page-footer {
     border-color: #555;
 }
 
+/* --- 【新增】Flatpickr 日历暗色主题 --- */
+.flatpickr-calendar {
+    background: var(--bg-dark-secondary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+    box-shadow: 0 3px 15px rgba(0,0,0,0.4);
+}
+.flatpickr-months .flatpickr-month {
+    color: var(--text-primary);
+    fill: var(--text-primary);
+}
+.flatpickr-months .flatpickr-prev-month, .flatpickr-months .flatpickr-next-month {
+    fill: var(--text-secondary);
+}
+.flatpickr-months .flatpickr-prev-month:hover, .flatpickr-months .flatpickr-next-month:hover {
+    fill: var(--accent-color);
+}
+.flatpickr-current-month .numInputWrapper .numInput {
+    color: inherit;
+}
+span.flatpickr-weekday {
+    color: var(--text-secondary);
+}
+.flatpickr-day {
+    color: var(--text-primary);
+}
+.flatpickr-day:hover, .flatpickr-day:focus {
+    background: #3a3f44;
+    border-color: #3a3f44;
+}
+.flatpickr-day.today {
+    border-color: var(--accent-color);
+}
+.flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange, .flatpickr-day.selected:focus, .flatpickr-day.startRange:focus, .flatpickr-day.endRange:focus, .flatpickr-day.selected:hover, .flatpickr-day.startRange:hover, .flatpickr-day.endRange:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+.flatpickr-day.inRange {
+    background: rgba(0, 122, 204, 0.2);
+    border-color: transparent;
+    box-shadow: -5px 0 0 rgba(0, 122, 204, 0.2), 5px 0 0 rgba(0, 122, 204, 0.2);
+}
+.flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay {
+    color: rgba(204, 204, 204, 0.3);
+}
+.flatpickr-time {
+    border-top-color: var(--border-color) !important;
+}
+.flatpickr-time .numInputWrapper span:hover {
+    background: #3a3f44;
+}
+
+
 /* --- 自定义滚动条 --- */
-/* 适用于 Webkit 浏览器 (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -339,7 +452,6 @@ body.sidebar-collapsed .page-footer {
     background-color: #777;
 }
 
-/* 适用于 Firefox */
 * {
     scrollbar-width: thin;
     scrollbar-color: #555 var(--bg-dark-primary);

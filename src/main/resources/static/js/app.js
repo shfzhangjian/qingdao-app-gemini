@@ -1,9 +1,11 @@
 /**
- * @file /js/app.js
- * @description 应用主入口文件，负责框架初始化、路由和视图调度
- * @version 1.2.0 - 2025-10-13 - Gemini - 集成面包屑组件，优化视图渲染逻辑
+ * 源码路径: js/app.js
+ * 功能说明: 应用的主入口文件，负责初始化、路由管理、页面调度和主框架渲染。
+ * 版本变动:
+ * v1.0.0 - 2025-10-13: 初始版本，实现基础框架和路由。
+ * v1.1.0 - 2025-10-13: 集成面包屑组件，优化内容区布局。
+ * v1.4.0 - 2025-10-13: 【最终方案】移除所有JS高度计算和page-footer，回归纯CSS Flexbox终极布局方案。
  */
-
 import menuConfig from './config/menu.js';
 import Breadcrumb from './components/Breadcrumb.js';
 
@@ -17,8 +19,8 @@ class App {
         this.sidebar = document.getElementById('sidebar');
         this.sidebarHeaderTitle = document.getElementById('sidebar-header-title');
         this.appBody = document.getElementById('app-body');
-        this.pageFooter = document.getElementById('page-footer');
-        this.viewInstances = new Map(); // Cache view instances
+        // 【核心修改】移除 this.pageFooter
+        this.viewInstances = new Map();
         this.breadcrumb = new Breadcrumb();
 
         this.init();
@@ -37,6 +39,7 @@ class App {
 
         window.addEventListener('hashchange', () => this.handleRouteChange());
         window.addEventListener('load', () => this.handleRouteChange());
+        // 移除 resize listener
     }
 
     toggleSidebar() {
@@ -114,32 +117,29 @@ class App {
         };
 
         const pathParts = hash.substring(3).split('/');
-        const [topMenuId, ...restPath] = pathParts;
 
-        const breadcrumbPath = this.findPathToRoute(pathParts);
+        this.contentArea.innerHTML = `
+            <div id="breadcrumb-container"></div>
+            <div id="view-container" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"></div>
+        `;
+        const breadcrumbContainer = this.contentArea.querySelector('#breadcrumb-container');
+        const viewContainer = this.contentArea.querySelector('#view-container');
 
-        // Update UI only if not in content-only mode
+        const path = this.findPath(pathParts);
+        this.breadcrumb.render(breadcrumbContainer, path);
+
+        const activeRoute = path[path.length - 1];
+
         if (!this.appBody.classList.contains('content-only-mode')) {
+            const [topMenuId] = pathParts;
             const topMenuItem = this.menuConfig.find(item => item.id === topMenuId);
             if (topMenuItem) {
                 this.sidebarHeaderTitle.textContent = topMenuItem.title;
             }
-            this.updateNavActiveState(this.topNav, topMenuId, true);
+            this.updateNavActiveState(this.topNav, topMenuId);
             this.renderSidebar(topMenuId);
-
-            const activeLeafId = pathParts[pathParts.length - 1];
-            this.updateSidebarActiveState(activeLeafId);
+            this.updateSidebarActiveState(activeRoute.id);
         }
-
-        // Clear content and render breadcrumb first
-        this.contentArea.innerHTML = '';
-        this.pageFooter.innerHTML = '';
-
-        const breadcrumbContainer = document.createElement('div');
-        this.contentArea.appendChild(breadcrumbContainer);
-        this.breadcrumb.render(breadcrumbContainer, breadcrumbPath);
-
-        const activeRoute = breadcrumbPath.length > 0 ? breadcrumbPath[breadcrumbPath.length - 1] : null;
 
         if (activeRoute && activeRoute.component) {
             try {
@@ -151,38 +151,34 @@ class App {
                 }
                 const viewInstance = this.viewInstances.get(ViewClass);
 
-                // Create a new container for the view content itself, after the breadcrumb
-                const viewContainer = document.createElement('div');
-                this.contentArea.appendChild(viewContainer);
-                viewInstance.render(viewContainer, this.pageFooter, activeRoute);
+                // 【核心修改】render方法不再传递 footerContainer
+                viewInstance.render(viewContainer, activeRoute);
 
             } catch (error) {
                 console.error("Failed to load or render view:", error);
-                this.contentArea.innerHTML += `<div>Error loading page: ${error.message}</div>`;
+                viewContainer.innerHTML = `<div>Error loading page: ${error.message}</div>`;
             }
-        } else if (hash !== (defaultRoute ? defaultRoute.url : '')) {
-            this.contentArea.innerHTML += '<h4>404 - Page Not Found</h4>';
+        } else {
+            viewContainer.innerHTML = '<h4>404 - Page Not Found</h4>';
         }
     }
 
-    findPathToRoute(pathParts, menu = this.menuConfig, currentPath = []) {
-        if (pathParts.length === 0) return currentPath;
-
+    findPath(pathParts, items = this.menuConfig, basePath = []) {
+        if (!pathParts || pathParts.length === 0) return basePath;
         const currentId = pathParts[0];
-        const foundItem = menu.find(item => item.id === currentId);
+        const foundItem = items.find(item => item.id === currentId);
+        if (!foundItem) return basePath;
 
-        if (!foundItem) return currentPath;
+        const newPath = [...basePath, foundItem];
 
-        const newPath = [...currentPath, foundItem];
-
-        if (foundItem.children && pathParts.length > 1) {
-            return this.findPathToRoute(pathParts.slice(1), foundItem.children, newPath);
+        if (foundItem.children) {
+            return this.findPath(pathParts.slice(1), foundItem.children, newPath);
         }
 
         return newPath;
     }
 
-    updateNavActiveState(navList, activeId, isTopNav = false) {
+    updateNavActiveState(navList, activeId) {
         navList.querySelectorAll('.nav-link').forEach(link => {
             if (link.dataset.id === activeId) {
                 link.classList.add('active');
@@ -212,6 +208,5 @@ class App {
     }
 }
 
-// Start the app
 new App(menuConfig);
 
