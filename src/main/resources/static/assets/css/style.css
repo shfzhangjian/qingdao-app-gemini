@@ -1,0 +1,347 @@
+/* 颜色和字体变量，完全匹配原型图配色 */
+:root {
+    --bg-dark-primary: #1c1c1c; /* 最深背景色 */
+    --bg-dark-secondary: #252526; /* 侧边栏和头部背景色 */
+    --accent-color: #007acc; /* 顶部导航高亮色 */
+    --text-primary: #e9ecef; /* 主要文字颜色 */
+    --text-secondary: #ccc; /* 次要文字颜色 */
+    --border-color: #3e3e42; /* 边框颜色 */
+}
+
+body {
+    background-color: var(--bg-dark-primary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    font-size: 14px;
+}
+
+/* --- 内容页独立模式 --- */
+body.content-only-mode .main-header,
+body.content-only-mode #sidebar,
+body.content-only-mode .page-footer {
+    display: none !important;
+}
+body.content-only-mode #content-area {
+    margin-left: 0 !important;
+    padding: 1.5rem !important; /* 增加边距 */
+    height: 100vh;
+}
+
+
+/* --- 整体布局 --- */
+.wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.main-container {
+    display: flex;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+/* --- 顶部导航栏 --- */
+.main-header {
+    background-color: var(--bg-dark-secondary);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    height: 56px;
+    padding: 0 1.5rem;
+}
+.main-header .navbar-brand {
+    color: var(--text-primary);
+    font-weight: bold;
+}
+.main-header .navbar-brand span {
+    font-size: 1.15rem;
+}
+.main-header .navbar-brand i {
+    color: var(--accent-color);
+    font-size: 1.5rem;
+    margin-right: 0.5rem;
+}
+.main-header .nav-link {
+    color: var(--text-secondary);
+    padding: 0.3rem 0.7rem;
+    margin: 0 0.25rem;
+    border: 1px solid transparent;
+    transition: all 0.3s ease;
+}
+.main-header .nav-link:hover {
+    color: #fff;
+}
+.main-header .nav-link.active {
+    color: #fff;
+    background-color: var(--accent-color);
+    border: 1px solid var(--accent-color);
+    border-radius: .25rem;
+}
+.main-header .user-info {
+    color: var(--text-secondary);
+}
+.main-header .user-info i {
+    margin-left: 1rem;
+    cursor: pointer;
+}
+
+/* --- 侧边导航栏 --- */
+#sidebar {
+    width: 220px;
+    background-color: var(--bg-dark-secondary);
+    transition: width 0.3s ease;
+    overflow-x: hidden;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+}
+#sidebar .sidebar-header {
+    padding: 1rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 1rem;
+    font-weight: bold;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+#sidebar .sidebar-menu {
+    list-style: none;
+    padding: 0;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+#sidebar .sidebar-menu .menu-item a {
+    display: flex;
+    align-items: center;
+    padding: 0.8rem 1.5rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.2s ease-in-out;
+    white-space: nowrap;
+}
+#sidebar .sidebar-menu .menu-item a .menu-icon {
+    margin-right: 1rem;
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+}
+#sidebar .sidebar-menu .menu-item a {
+    display: flex;
+    align-items: center;
+    padding: 0.6rem 1rem;
+    color: #ccc;
+    text-decoration: none;
+    transition: all 0.2s ease-in-out;
+    white-space: nowrap;
+    border-left: 3px solid transparent;
+}
+#sidebar .sidebar-menu .menu-item a .menu-icon {
+    margin-right: 1rem;
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+}
+#sidebar .sidebar-menu .menu-item a:hover {
+    background-color: #343a40;
+    color: #fff;
+}
+#sidebar .sidebar-menu .menu-item.active > a,
+#sidebar .sidebar-menu .menu-item .submenu .menu-item.active > a {
+    color: #fff;
+    background-color: #3a3f44;
+    border-left-color: #e44d26; /* accent-red-orange */
+}
+#sidebar .sidebar-menu .submenu {
+    list-style: none;
+    padding-left: 0;
+    background-color: rgba(0,0,0,0.2);
+}
+#sidebar .sidebar-menu .submenu .menu-item a {
+    padding-left: 3.5rem; /* 增加子菜单缩进 */
+}
+
+/* 侧边栏收缩状态 */
+body.sidebar-collapsed #sidebar {
+    width: 50px;
+}
+#sidebar.collapsed .sidebar-header .header-title {
+    display: none;
+}
+#sidebar.collapsed .sidebar-header .bi-list{
+    margin: 0 auto;
+}
+#sidebar.collapsed .menu-text,
+#sidebar.collapsed .arrow-icon {
+    display: none;
+}
+#sidebar.collapsed .sidebar-menu .menu-item a .menu-icon {
+    margin-right: 0;
+}
+#sidebar.collapsed .sidebar-menu .menu-item a {
+    justify-content: center;
+}
+#sidebar.collapsed .sidebar-menu .submenu {
+    display: none; /* simple collapse hides submenu */
+}
+
+
+/* --- 主要内容区 --- */
+#content-area {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    padding: 1.5rem;
+    overflow-y: auto;
+    transition: margin-left 0.3s ease;
+    padding-bottom: 70px; /* 为固定页脚留出空间 */
+}
+
+/* --- 固定页脚 --- */
+.page-footer {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    left: 220px; /* 匹配侧边栏宽度 */
+    padding: 0.75rem 1.5rem;
+    background-color: var(--bg-dark-secondary);
+    border-top: 1px solid var(--border-color);
+    transition: left 0.3s ease;
+    z-index: 1020;
+}
+body.sidebar-collapsed .page-footer {
+    left: 50px; /* 匹配收缩后侧边栏宽度 */
+}
+
+
+/* 覆盖Bootstrap组件样式以匹配主题 */
+/* --- 【更新】面包屑样式覆盖 --- */
+.breadcrumb {
+    padding: 0;
+    margin-bottom: 1rem;
+    background-color: transparent;
+}
+.breadcrumb-item + .breadcrumb-item::before {
+    content: '/'; /* 直接设置分隔符 */
+    padding: 0 0.5rem; /* 设置间距 */
+    color: var(--text-secondary); /* 设置分隔符颜色 */
+}
+.breadcrumb-item a {
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+.breadcrumb-item a:hover {
+    color: var(--text-primary);
+}
+.breadcrumb-item.active {
+    color: var(--text-primary);
+}
+
+
+.btn-primary {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+.btn-primary:hover {
+    opacity: 0.85;
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+.form-control, .form-select {
+    background-color: var(--bg-dark-secondary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+.form-control:focus, .form-select:focus {
+    background-color: var(--bg-dark-secondary);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 0.25rem rgba(0, 122, 204, 0.25);
+    color: var(--text-primary);
+}
+.table {
+    --bs-table-bg: var(--bg-dark-secondary);
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
+    --bs-table-striped-bg: #2c3034;
+    --bs-table-hover-bg: #32383e;
+}
+.table thead th {
+    background-color: #343a40;
+    white-space: nowrap;
+}
+.table tbody tr {
+    cursor: pointer;
+}
+.table-active-custom {
+    --bs-table-bg-state: #005a9e; /* 自定义选中颜色 */
+    --bs-table-color-state: #fff;
+    background-color: var(--bs-table-bg-state) !important;
+    color: var(--bs-table-color-state) !important;
+}
+
+/* 【核心修改】为table-responsive添加flex布局，使其填满剩余高度 */
+.table-responsive {
+    flex-grow: 1;
+    min-height: 0; /* 关键属性，允许flex item在必要时收缩 */
+    overflow: auto; /* 确保滚动条出现 */
+}
+
+
+.text-danger {
+    color: #ff6b6b !important;
+}
+.text-success {
+    color: #28a745 !important;
+}
+.pagination {
+    --bs-pagination-bg: var(--bg-dark-secondary);
+    --bs-pagination-border-color: var(--border-color);
+    --bs-pagination-hover-bg: #32383e;
+    --bs-pagination-hover-color: var(--text-primary);
+    --bs-pagination-disabled-bg: var(--bg-dark-secondary);
+    --bs-pagination-disabled-border-color: var(--border-color);
+}
+.btn-check:checked+.btn-outline-secondary {
+    color: #fff;
+    background-color: #555;
+    border-color: #666;
+}
+.btn-outline-secondary {
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+}
+.btn-outline-secondary:hover {
+    color: #fff;
+    background-color: #444;
+    border-color: #555;
+}
+
+/* --- 自定义滚动条 --- */
+/* 适用于 Webkit 浏览器 (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-dark-primary);
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #555;
+    border-radius: 4px;
+    border: 2px solid var(--bg-dark-primary);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #777;
+}
+
+/* 适用于 Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #555 var(--bg-dark-primary);
+}
+

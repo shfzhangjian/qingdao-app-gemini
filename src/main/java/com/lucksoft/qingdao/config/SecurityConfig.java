@@ -27,9 +27,13 @@ public class SecurityConfig {
                         .frameOptions(frameOptions -> frameOptions.disable())
                 )
                 .authorizeHttpRequests(authz -> authz
-                        // 允许公共端点
-                        .antMatchers("/", "/login.html", "/stomp.min.js", "/sockjs.min.js", "/index.html","/main.html","/query-template.html", "/simulate.html").permitAll()
-                        // 【新增】允许WebSocket连接
+                        // 允许所有用户访问根URL和主HTML文件
+                        .antMatchers("/", "/index.html").permitAll()
+                        // 【更新】允许访问所有在 /assets/ 和 /js/ 目录下的静态资源
+                        .antMatchers("/assets/**", "/js/**").permitAll()
+                        .antMatchers("/assets/**", "/js/components/**","/js/views/**","/js/services/**").permitAll()
+                        // 保留您原有的其他公共端点
+                        .antMatchers("/login.html", "/stomp.min.js", "/sockjs.min.js","/main.html","/query-template.html", "/simulate.html").permitAll()
                         .antMatchers("/my-websocket/**").permitAll()
                         .antMatchers("/api/system/auth/**","/api/maintainbook/**", "/api/tspm/simulate/**","/api/tspm/generate-json/**","/api/tspm/received-data/**", "/api/tspm/logs").permitAll()
                         .antMatchers("/api/trigger/**").hasRole("API")
@@ -47,4 +51,3 @@ public class SecurityConfig {
         return http.build();
     }
 }
-
