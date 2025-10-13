@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 引入Spring Boot的默认配置 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- 定义日志文件存放路径 -->
+    <property name="LOG_PATH" value="logs"/>
+
+    <!-- 1. 控制台输出 Appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 2. Kafka Topic 日志文件 Appenders -->
+    <!-- ... (所有 topic appenders 保持不变) ... -->
+    <appender name="TASK_COMPLETION_FEEDBACK_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/tims.feedback.completed.maintenance.task.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.feedback.completed.maintenance.task-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern><maxHistory>7</maxHistory><timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP"><maxFileSize>10MB</maxFileSize></timeBasedFileNamingAndTriggeringPolicy></rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="TASK_SCORE_FEEDBACK_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/tims.feedback.maintenance.task.score.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.feedback.maintenance.task.score-%d{yyyy-MM-dd}.log.gz</fileNamePattern><maxHistory>7</maxHistory></rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="FAULT_REPORT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/tims.create.fault.report.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.create.fault.report-%d{yyyy-MM-dd}.log.gz</fileNamePattern><maxHistory>7</maxHistory></rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="RECOMMENDED_ROTATIONAL_TASK_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/tims.recommend.rotational.task.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.recommend.rotational.task-%d{yyyy-MM-dd}.log.gz</fileNamePattern><maxHistory>7</maxHistory></rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="ROTATIONAL_TASK_COMPLETION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/tims.feedback.completed.rotational.task.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.feedback.completed.rotational.task-%d{yyyy-MM-dd}.log.gz</fileNamePattern><maxHistory>7</maxHistory></rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="ROTATIONAL_TASK_SCORE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/tims.feedback.rotational.task.score.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.feedback.rotational.task.score-%d{yyyy-MM-dd}.log.gz</fileNamePattern><maxHistory>7</maxHistory></rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="FAULT_ANALYSIS_REPORT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/tims.create.fault.analysis.report.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.create.fault.analysis.report-%d{yyyy-MM-dd}.log.gz</fileNamePattern><maxHistory>7</maxHistory></rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="PRODUCTION_HALT_COMPLETION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/tims.feedback.completed.production.halt.maintenance.task.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.feedback.completed.production.halt.maintenance.task-%d{yyyy-MM-dd}.log.gz</fileNamePattern><maxHistory>7</maxHistory></rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
+    </appender>
+
+    <!-- 3. 动态SQL查询服务专用 Appender -->
+    <appender name="SQL_QUERY_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/sql-query.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/sql-query-%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 4. 日志记录器 Loggers -->
+    <!-- Kafka消费者专用Loggers -->
+    <logger name="kafka.consumer.task_completion" level="INFO" additivity="false"><appender-ref ref="TASK_COMPLETION_FEEDBACK_FILE"/></logger>
+    <logger name="kafka.consumer.task_score" level="INFO" additivity="false"><appender-ref ref="TASK_SCORE_FEEDBACK_FILE"/></logger>
+    <logger name="kafka.consumer.fault_report" level="INFO" additivity="false"><appender-ref ref="FAULT_REPORT_FILE"/></logger>
+    <logger name="kafka.consumer.recommended_task" level="INFO" additivity="false"><appender-ref ref="RECOMMENDED_ROTATIONAL_TASK_FILE"/></logger>
+    <logger name="kafka.consumer.rotational_completion" level="INFO" additivity="false"><appender-ref ref="ROTATIONAL_TASK_COMPLETION_FILE"/></logger>
+    <logger name="kafka.consumer.rotational_score" level="INFO" additivity="false"><appender-ref ref="ROTATIONAL_TASK_SCORE_FILE"/></logger>
+    <logger name="kafka.consumer.fault_analysis" level="INFO" additivity="false"><appender-ref ref="FAULT_ANALYSIS_REPORT_FILE"/></logger>
+    <logger name="kafka.consumer.production_halt_completion" level="INFO" additivity="false"><appender-ref ref="PRODUCTION_HALT_COMPLETION_FILE"/></logger>
+
+    <!-- 动态SQL查询服务专用 Logger -->
+    <logger name="com.lucksoft.qingdao.tspm.service.DynamicQueryService" level="DEBUG" additivity="false">
+        <appender-ref ref="SQL_QUERY_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- ===================================================================== -->
+    <!-- 【关键修复】降低Kafka客户端自身的日志级别，减少控制台噪音             -->
+    <!-- ===================================================================== -->
+    <!-- 这将隐藏所有来自Kafka内部客户端的INFO级别日志，但保留WARN和ERROR -->
+    <logger name="org.apache.kafka" level="WARN"/>
+
+    <!-- 5. 根 Logger (默认配置) -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
+

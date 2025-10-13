@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烟草设备综合管理 - 仪表盘</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            background-color: #f0f2f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            font-size: 14px;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1.8fr 1.2fr;
+            gap: 1.5rem;
+            padding: 1.5rem;
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .card {
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            display: flex;
+            flex-direction: column;
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid #f0f0f0;
+            font-weight: 500;
+            color: #333;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+        .card-header i {
+            margin-right: 0.5rem;
+        }
+        .card-body {
+            padding: 1.5rem;
+            background-color: #fff;
+        }
+
+        /* --- 任务提醒复合组件样式 (已调整) --- */
+        .task-highlights {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+        .highlight-card {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 0.4rem 0.7rem; /* 减小内边距，使色块更紧凑 */
+            border-radius: 8px;
+            text-align: left;
+        }
+        .highlight-card.priority-high {
+            background-color: #fff6f6;
+            border-color: #f5c2c7;
+        }
+        .highlight-card .highlight-title {
+            font-size: 0.8em; /* 调整标题字体 */
+            color: #6c757d;
+        }
+        .highlight-card .highlight-value {
+            font-size: 1.5rem; /* 调整数字字体大小 */
+            font-weight: bold;
+            color: #dc3545;
+        }
+        .highlight-card .highlight-value small {
+            font-size: 0.6rem;
+            font-weight: normal;
+            color: #6c757d;
+        }
+
+        .task-details-list {
+            max-height: 210px;
+            overflow-y: auto;
+            column-count: 2;
+            column-gap: 2rem;
+            padding: 0.5rem;
+        }
+        .task-details-list .detail-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 1em; /* 加大列表字体 */
+            break-inside: avoid-column;
+            padding: 0.25rem 0;
+        }
+        .task-details-list .detail-item .badge {
+            flex-shrink: 0;
+        }
+
+        /* 基础模块样式 */
+        .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 1.5rem; text-align: center; }
+        .menu-item a { text-decoration: none; color: #333; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+        .menu-item .icon-wrapper { width: 60px; height: 60px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; transition: transform 0.2s; }
+        .menu-item a:hover .icon-wrapper { transform: scale(1.1); }
+        .menu-item .icon-wrapper i { font-size: 2.5rem; }
+        .bg-icon-blue { background-color: #5d9cec; } .bg-icon-grey { background-color: #8a96a2; } .bg-icon-dark-grey { background-color: #656d78; } .bg-icon-orange { background-color: #fc6e51; } .bg-icon-gold { background-color: #ffce54; } .bg-icon-teal { background-color: #48cfad; } .bg-icon-purple { background-color: #ac92ec; } .bg-icon-green { background-color: #a0d468; } .bg-icon-pink { background-color: #ec87c0; }
+        .scrollable-list { max-height: 220px; overflow-y: auto; padding-right: 0.5rem; }
+        .icon-list { list-style: none; padding-left: 0; margin-bottom: 0; }
+        .icon-list li { display: flex; align-items: center; padding-bottom: 0.75rem; margin-bottom: 0.75rem; border-bottom: 1px solid #f0f0f0; }
+        .icon-list li:last-child { margin-bottom: 0; border-bottom: none; }
+        .icon-list .list-icon { margin-right: 0.75rem; font-size: 1.1rem; }
+        .icon-list .list-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .calendar-widget .greeting-info { display: flex; justify-content: space-between; align-items: flex-start; }
+        .calendar-widget .user-greet strong { font-size: 1.2rem; }
+        .calendar-widget .user-greet span { font-size: 0.9em; color: #666; display: block; margin-top: 0.5rem;}
+        .calendar-widget .day-display { text-align: right; }
+        .calendar-widget .day-display .day { font-size: 2.5rem; font-weight: 300; line-height: 1; }
+        .calendar-widget table { width: 100%; text-align: center; margin-top: 1rem; }
+        .calendar-widget .today { background-color: #ffc107; color: white; border-radius: 50%; }
+        .calendar-widget .selected { background-color: #0d6efd; color: white; border-radius: 50%; }
+
+        .chart-container { height: 220px; display: flex; justify-content: space-around; align-items: flex-end; padding: 1rem 0; border-bottom: 1px solid #f0f0f0; }
+        .chart-bar { width: 15%; background-color: #5b9bd5; border-radius: 4px 4px 0 0; }
+        .chart-labels { display: flex; justify-content: space-around; padding-top: 0.5rem; font-size: 0.9em; color: #888; }
+        .schedule-style-list .list-item { display: flex; align-items: flex-start; padding: 0.75rem 0; border-bottom: 1px solid #f0f0f0; }
+        .schedule-style-list .list-item:last-child { border-bottom: none; }
+        .schedule-style-list .marker { padding-right: 1rem; margin-right: 1rem; font-size: 1.5rem; line-height: 1.2; color: #0d6efd; }
+        .schedule-style-list .details .title { font-weight: 500; }
+        .schedule-style-list .details .meta { font-size: 0.9em; color: #888; }
+
+        .oee-stats-widget .stat-circle { width: 150px; height: 150px; border-radius: 50%; margin: 1rem auto; background-color: #e6f7ff; color: #1890ff; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 8px solid #b3d7ff; }
+        .oee-stats-widget .stat-circle .count { font-size: 2.5rem; font-weight: bold; line-height: 1; }
+        .oee-stats-widget .stat-circle .label { font-size: 1rem; margin-top: 5px;}
+        .oee-stats-widget .sub-stats { display: flex; justify-content: space-around; text-align: center; }
+
+        @media (max-width: 1400px) { .main-container { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 992px) { .main-container { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <div class="column">
+        <div class="card calendar-widget">
+            <div class="card-body">
+                <div class="greeting-info">
+                    <div class="user-greet">
+                        <strong>管理员, 欢迎您!</strong>
+                        <span>部门: XX车间设备部</span>
+                        <span>岗位: 工段长[正]</span>
+                    </div>
+                    <div class="day-display">
+                        <div class="day">27</div>
+                        <div>2025年8月</div>
+                    </div>
+                </div>
+                <table>
+                    <thead><tr><th>一</th><th>二</th><th>三</th><th>四</th><th>五</th><th>六</th><th>日</th></tr></thead>
+                    <tbody>
+                    <tr><td></td><td></td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td></tr>
+                    <tr><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td></tr>
+                    <tr><td>13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td></tr>
+                    <tr><td>20</td><td>21</td><td>22</td><td>23</td><td>24</td><td>25</td><td>26</td></tr>
+                    <tr><td class="today">27</td><td>28</td><td>29</td><td>30</td><td>31</td><td></td><td></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><i class="bi bi-bell-fill"></i>任务提醒</div>
+            <div class="card-body">
+                <div class="task-highlights">
+                    <div class="highlight-card priority-high">
+                        <div class="highlight-title">日常计划</div>
+                        <div class="highlight-value">1000 <small>份</small></div>
+                    </div>
+                    <div class="highlight-card priority-high">
+                        <div class="highlight-title">ERP</div>
+                        <div class="highlight-value">419 <small>份</small></div>
+                    </div>
+                    <div class="highlight-card priority-high">
+                        <div class="highlight-title">工作任务(延期)</div>
+                        <div class="highlight-value">18 <small>份</small></div>
+                    </div>
+                    <div class="highlight-card priority-high">
+                        <div class="highlight-title">维修工单</div>
+                        <div class="highlight-value">10 <small>份</small></div>
+                    </div>
+                </div>
+                <hr class="my-3">
+                <div class="task-details-list">
+                    <div class="detail-item"><span>异常隐患综合台账</span> <span class="badge bg-primary rounded-pill">9</span></div>
+                    <div class="detail-item"><span>故障分析报告</span> <span class="badge bg-primary rounded-pill">8</span></div>
+                    <div class="detail-item"><span>待出库</span> <span class="badge bg-primary rounded-pill">7</span></div>
+                    <div class="detail-item"><span>系统问题处理</span> <span class="badge bg-primary rounded-pill">5</span></div>
+                    <div class="detail-item"><span>故障综合台账</span> <span class="badge bg-secondary rounded-pill">4</span></div>
+                    <div class="detail-item"><span>寄售件变更</span> <span class="badge bg-secondary rounded-pill">3</span></div>
+                    <div class="detail-item"><span>单点课OPL</span> <span class="badge bg-secondary rounded-pill">3</span></div>
+                    <div class="detail-item"><span>SOP审核</span> <span class="badge bg-secondary rounded-pill">3</span></div>
+                    <div class="detail-item"><span>新物料需求计划汇总</span> <span class="badge bg-secondary rounded-pill">2</span></div>
+                    <div class="detail-item"><span>改善提案OPS</span> <span class="badge bg-secondary rounded-pill">2</span></div>
+                    <div class="detail-item"><span>设备综合检查任务单</span> <span class="badge bg-secondary rounded-pill">2</span></div>
+                    <div class="detail-item"><span>已有物料需求计划汇总</span> <span class="badge bg-secondary rounded-pill">1</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="column">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-grid-3x3-gap"></i>常用菜单</div>
+            <div class="card-body menu-grid">
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-blue"><i class="bi bi-rulers"></i></div><span>计量系统</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-blue"><i class="bi bi-box-seam"></i></div><span>备件库系统</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-dark-grey"><i class="bi bi-power"></i></div><span>设备开停</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-blue"><i class="bi bi-graph-up-arrow"></i></div><span>年检任务统计</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-gold"><i class="bi bi-file-earmark-text"></i></div><span>合同管理</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-teal"><i class="bi bi-archive"></i></div><span>资料归档管理</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-orange"><i class="bi bi-calendar3-week"></i></div><span>日常维修汇总</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-grey"><i class="bi bi-file-earmark-plus"></i></div><span>维修工单提报</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-blue"><i class="bi bi-search"></i></div><span>维修工单查询</span></a></div>
+
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-purple"><i class="bi bi-binoculars"></i></div><span>专业化点检查询</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-purple"><i class="bi bi-binoculars-fill"></i></div><span>精密点检查询</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-purple"><i class="bi bi-search-heart"></i></div><span>日常点检查询</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-green"><i class="bi bi-journal-check"></i></div><span>日常维修策略</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-green"><i class="bi bi-shield-check"></i></div><span>日保标准</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-grey"><i class="bi bi-lightning-charge"></i></div><span>停电工单提报</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-purple"><i class="bi bi-wrench-adjustable-circle"></i></div><span>维修工单处理</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-gold"><i class="bi bi-arrow-repeat"></i></div><span>寄售件变更</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-green"><i class="bi bi-table"></i></div><span>维修工单统计</span></a></div>
+
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-pink"><i class="bi bi-clipboard-data"></i></div><span>动力生产计划1</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-grey"><i class="bi bi-plug-fill"></i></div><span>送电工单提报</span></a></div>
+                <div class="menu-item"><a href="#"><div class="icon-wrapper bg-icon-pink"><i class="bi bi-exclamation-triangle-fill"></i></div><span>故障提报</span></a></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><i class="bi bi-graph-up"></i>关键设备MTTR分析 (小时)</div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <div class="chart-bar" style="height: 60%; background-color:#dc3545;"></div>
+                    <div class="chart-bar" style="height: 40%;"></div>
+                    <div class="chart-bar" style="height: 25%;"></div>
+                    <div class="chart-bar" style="height: 85%; background-color:#ffc107;"></div>
+                    <div class="chart-bar" style="height: 35%;"></div>
+                </div>
+                <div class="chart-labels">
+                    <span>卷烟机(YJ17)</span>
+                    <span>包装机(ZB47)</span>
+                    <span>滤棒成型(FL-02)</span>
+                    <span>传送系统</span>
+                    <span>动力单元</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="column">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-list-task"></i>待办任务</div>
+            <div class="card-body scrollable-list schedule-style-list">
+                <div class="list-item">
+                    <div class="marker"><i class="bi bi-card-checklist"></i></div>
+                    <div class="details">
+                        <div class="title">【维修工单(待执行)】第三到四</div>
+                        <div class="meta"><i class="bi bi-box-arrow-in-right"></i> 来自: 流程中心</div>
+                    </div>
+                </div>
+                <div class="list-item">
+                    <div class="marker"><i class="bi bi-card-checklist"></i></div>
+                    <div class="details">
+                        <div class="title">【维修工单(待执行)】尺寸上厕所</div>
+                        <div class="meta"><i class="bi bi-box-arrow-in-right"></i> 来自: 流程中心</div>
+                    </div>
+                </div>
+                <div class="list-item">
+                    <div class="marker"><i class="bi bi-card-checklist"></i></div>
+                    <div class="details">
+                        <div class="title">【维修工单(执行中)】大屏边框计算</div>
+                        <div class="meta"><i class="bi bi-box-arrow-in-right"></i> 来自: 流程中心</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><i class="bi bi-exclamation-triangle"></i>故障 | 异常数据</div>
+            <div class="card-body scrollable-list">
+                <ul class="icon-list">
+                    <li><i class="bi bi-x-circle-fill list-icon text-danger"></i><span class="list-text">2025-01-02 11:15 【42#】卷烟机子1#【作废】</span></li>
+                    <li><i class="bi bi-exclamation-triangle-fill list-icon text-warning"></i><span class="list-text">2024-07-29 11:27 【FOCKE 2#包装机】</span></li>
+                    <li><i class="bi bi-x-circle-fill list-icon text-danger"></i><span class="list-text">2024-06-28 05:07 【PROTOS 1#卷烟机组】</span></li>
+                </ul>
+            </div>
+        </div>
+        <div class="card oee-stats-widget">
+            <div class="card-header"><i class="bi bi-speedometer2"></i>设备综合效率 (OEE)</div>
+            <div class="card-body text-center">
+                <div class="stat-circle">
+                    <span class="count">85<small>%</small></span>
+                    <span class="label">综合效率</span>
+                </div>
+                <div class="sub-stats">
+                    <div><strong>可用率:</strong> 95.5%</div>
+                    <div><strong>表现性:</strong> 92.1%</div>
+                    <div><strong>质量率:</strong> 97.2%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
