@@ -13,9 +13,10 @@
 import Modal from './Modal.js';
 import QueryForm from './QueryForm.js';
 
+
 export default class DataTable {
     constructor({ columns = [], data = [], actions = [], filters = [], pagination = true, options = {} }) {
-        // 【核心修复】使用 function-safe 的方式复制列配置，避免 render 函数丢失
+        // 使用 function-safe 的方式复制列配置，避免 render 函数丢失
         this.originalColumns = columns.map(c => ({...c, width: c.width || null, frozen: c.frozen || false }));
         this.data = data;
         this.actions = actions;
@@ -34,7 +35,6 @@ export default class DataTable {
                 let parsedConfig = JSON.parse(savedConfig);
                 const loadedKeys = new Set(parsedConfig.map(c => c.key));
 
-                // Merge saved config with any new columns from original config
                 const newColumns = this.originalColumns.filter(c => !loadedKeys.has(c.key));
                 parsedConfig.push(...newColumns);
 
@@ -302,9 +302,6 @@ export default class DataTable {
 
 
     _showColumnConfigModal() {
-        // Create a temporary copy for live editing in the modal
-        let tempColumns = JSON.parse(JSON.stringify(this.columns));
-
         const modalBody = document.createElement('div');
         modalBody.innerHTML = `
             <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
@@ -318,8 +315,8 @@ export default class DataTable {
 
         const listContainer = modalBody.querySelector('#column-config-list');
 
-        const renderList = () => {
-            listContainer.innerHTML = tempColumns.map((col, index) => `
+        const renderList = (columnsToList) => {
+            listContainer.innerHTML = columnsToList.map(col => `
                 <li class="list-group-item d-flex align-items-center" draggable="true" data-key="${col.key}">
                     <i class="bi bi-grip-vertical me-2" style="cursor: move;"></i>
                     <span class="flex-grow-1">${col.title}</span>
@@ -334,16 +331,18 @@ export default class DataTable {
                 </li>
             `).join('');
         };
-        renderList();
+
+        renderList(this.columns);
 
         const footer = `
+            <button type="button" class="btn btn-outline-secondary me-auto" id="reset-column-config">恢复默认</button>
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
             <button type="button" class="btn btn-primary" id="save-column-config">确定</button>
         `;
 
         const configModal = new Modal({ title: '列表字段设置', body: modalBody, footer: footer, size: 'lg' });
 
-        // --- Event Listeners ---
+        // Event Listeners
         const filterInput = configModal.modalElement.querySelector('#column-config-filter');
 
         filterInput.addEventListener('input', (e) => {
@@ -362,39 +361,51 @@ export default class DataTable {
             configModal.modalElement.querySelectorAll('#column-config-list li:not(.d-none) input[type="checkbox"]').forEach(cb => cb.checked = !cb.checked);
         });
 
-        listContainer.addEventListener('click', (e) => {
-            const pinButton = e.target.closest('button[data-action="pin"]');
-            if (pinButton) {
-                const key = pinButton.closest('li').dataset.key;
-                const value = pinButton.dataset.value === 'false' ? false : pinButton.dataset.value;
-                const col = tempColumns.find(c => c.key === key);
-                if (col) col.frozen = value;
-                renderList(); // Re-render to update active states
-            }
-        });
-
-        this._attachDragAndDropHandlers(listContainer, tempColumns);
-
         configModal.modalElement.querySelector('#save-column-config').addEventListener('click', () => {
-            const reorderedKeys = Array.from(configModal.modalElement.querySelectorAll('#column-config-list li')).map(item => item.dataset.key);
+            const finalColumns = [];
+            const modalListItems = configModal.modalElement.querySelectorAll('#column-config-list li');
 
-            tempColumns.forEach(col => {
-                const li = configModal.modalElement.querySelector(`li[data-key="${col.key}"]`);
-                if(li) col.visible = li.querySelector('input[type="checkbox"]').checked;
+            modalListItems.forEach(item => {
+                const key = item.dataset.key;
+                const originalColumn = this.originalColumns.find(c => c.key === key);
+
+                if (originalColumn) {
+                    const visible = item.querySelector('input[type="checkbox"]').checked;
+                    const frozenValue = item.querySelector('.btn-group .active').dataset.value;
+                    const frozen = frozenValue === 'false' ? false : frozenValue;
+
+                    finalColumns.push({
+                        ...originalColumn,
+                        ...this.columns.find(c => c.key === key),
+                        visible,
+                        frozen,
+                    });
+                }
             });
 
-            // Apply new order
-            this.columns = reorderedKeys.map(key => tempColumns.find(c => c.key === key));
-
+            this.columns = finalColumns;
             this._saveConfig();
             this.render(this.container);
             configModal.hide();
         });
 
+        // 【新增】恢复默认按钮事件
+        configModal.modalElement.querySelector('#reset-column-config').addEventListener('click', async () => {
+            const confirmed = await Modal.confirm('恢复默认设置', '您确定要将列的显示、排序、宽度和锁定状态恢复到初始默认设置吗？此操作不可撤销。');
+            if (confirmed) {
+                if (this.options.storageKey) {
+                    localStorage.removeItem(this.options.storageKey);
+                }
+                // Create a fresh copy from original config
+                this.columns = this.originalColumns.map(c => ({...c}));
+                this.render(this.container);
+                configModal.hide();
+            }
+        });
+
+        this._attachDragAndDropHandlers(listContainer);
         configModal.show();
     }
-
-
 
     _attachDragAndDropHandlers(list) {
         let draggedItem = null;

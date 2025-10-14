@@ -268,7 +268,7 @@ body.sidebar-collapsed #sidebar {
     z-index: 1;
 }
 
-/* --- 【新增】冻结列样式 --- */
+/* --- 冻结列样式 --- */
 .table th.dt-cell-frozen-left,
 .table td.dt-cell-frozen-left {
     position: sticky;
@@ -284,7 +284,7 @@ body.sidebar-collapsed #sidebar {
 .table thead th.dt-cell-frozen-left,
 .table thead th.dt-cell-frozen-right {
     z-index: 3;
-    background-color: #343a40; /* Match header background */
+    background-color: #343a40;
 }
 
 
@@ -297,7 +297,6 @@ body.sidebar-collapsed #sidebar {
     background-color: var(--bs-table-bg-state) !important;
     color: var(--bs-table-color-state) !important;
 }
-
 
 .table-row-abnormal td {
     background-color: rgba(217, 83, 79, 0.15) !important;
@@ -313,17 +312,22 @@ body.sidebar-collapsed #sidebar {
     overflow: auto;
 }
 
-/* --- 【新增】模态窗口样式覆盖 --- */
+/* --- 【核心修复】模态窗口样式覆盖 --- */
 .modal-content {
     background-color: var(--bg-dark-secondary);
     border: 1px solid var(--border-color);
+    color: var(--text-primary); /* 确保所有子元素继承亮的文字颜色 */
 }
 .modal-header, .modal-footer {
     border-color: var(--border-color);
 }
+.modal-header .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%); /* 让关闭按钮变白 */
+}
 .modal-body {
     max-height: 70vh;
     overflow-y: auto;
+    color: var(--text-primary); /* 再次确认body文字颜色 */
 }
 .modal .list-group-item {
     background-color: var(--bg-dark-secondary);
@@ -377,60 +381,6 @@ body.sidebar-collapsed #sidebar {
     background-color: #444;
     border-color: #555;
 }
-
-/* --- 【新增】Flatpickr 日历暗色主题 --- */
-.flatpickr-calendar {
-    background: var(--bg-dark-secondary);
-    border-color: var(--border-color);
-    color: var(--text-primary);
-    box-shadow: 0 3px 15px rgba(0,0,0,0.4);
-}
-.flatpickr-months .flatpickr-month {
-    color: var(--text-primary);
-    fill: var(--text-primary);
-}
-.flatpickr-months .flatpickr-prev-month, .flatpickr-months .flatpickr-next-month {
-    fill: var(--text-secondary);
-}
-.flatpickr-months .flatpickr-prev-month:hover, .flatpickr-months .flatpickr-next-month:hover {
-    fill: var(--accent-color);
-}
-.flatpickr-current-month .numInputWrapper .numInput {
-    color: inherit;
-}
-span.flatpickr-weekday {
-    color: var(--text-secondary);
-}
-.flatpickr-day {
-    color: var(--text-primary);
-}
-.flatpickr-day:hover, .flatpickr-day:focus {
-    background: #3a3f44;
-    border-color: #3a3f44;
-}
-.flatpickr-day.today {
-    border-color: var(--accent-color);
-}
-.flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange, .flatpickr-day.selected:focus, .flatpickr-day.startRange:focus, .flatpickr-day.endRange:focus, .flatpickr-day.selected:hover, .flatpickr-day.startRange:hover, .flatpickr-day.endRange:hover {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-    color: #fff;
-}
-.flatpickr-day.inRange {
-    background: rgba(0, 122, 204, 0.2);
-    border-color: transparent;
-    box-shadow: -5px 0 0 rgba(0, 122, 204, 0.2), 5px 0 0 rgba(0, 122, 204, 0.2);
-}
-.flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay {
-    color: rgba(204, 204, 204, 0.3);
-}
-.flatpickr-time {
-    border-top-color: var(--border-color) !important;
-}
-.flatpickr-time .numInputWrapper span:hover {
-    background: #3a3f44;
-}
-
 
 /* --- 自定义滚动条 --- */
 ::-webkit-scrollbar {
