@@ -234,45 +234,26 @@ body.sidebar-collapsed .sidebar-menu .submenu {
 .form-control:focus, .form-select:focus { background-color: var(--bg-secondary); border-color: var(--accent-color); box-shadow: 0 0 0 0.25rem rgba(0, 122, 204, 0.25); color: var(--text-primary); }
 body.theme-light .form-control::placeholder { color: #6c757d; }
 
-.table { table-layout: fixed; --bs-table-bg: var(--bg-secondary); --bs-table-color: var(--text-primary); --bs-table-border-color: var(--border-color); --bs-table-striped-bg: rgba(0,0,0,0.05); --bs-table-hover-bg: rgba(0,0,0,0.075); }
-.table thead th { position: sticky; top: 0; z-index: 1; background-color: var(--bg-secondary); border-bottom-width: 2px !important; white-space: nowrap; border-color: var(--border-color); border-width: 0 0 1px 1px; }
-
-/* --- 【核心修复】锁定列样式 --- */
-/* 为左右锁定的单元格（包括表头和数据单元格）应用sticky定位 */
-.table th.dt-cell-frozen-left, .table td.dt-cell-frozen-left,
-.table th.dt-cell-frozen-right, .table td.dt-cell-frozen-right {
-    position: sticky;
-    z-index: 2; /* 确保数据单元格在普通单元格之上 */
-    background-color: var(--bg-secondary); /* 确保背景色不透明，遮挡下方内容 */
-}
-
-/* 左侧锁定列的特殊样式 */
-.table th.dt-cell-frozen-left, .table td.dt-cell-frozen-left {
-    border-right: 1px solid var(--border-color) !important;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.2);
-}
-
-/* 右侧锁定列的特殊样式 */
-.table th.dt-cell-frozen-right, .table td.dt-cell-frozen-right {
-    border-left: 1px solid var(--border-color) !important;
-    box-shadow: -2px 0 5px rgba(0,0,0,0.2);
-}
-
-/* 提升锁定表头的层级，使其在滚动的表头之上 */
-.table thead th.dt-cell-frozen-left, .table thead th.dt-cell-frozen-right {
-    z-index: 3;
-}
-/* ---------------------------------- */
-
-.datatable-wrapper .table thead th:first-child { border-left-width: 0; }
-body.theme-dark .table thead th { background-color: #343a40; }
-.table thead .resizer { position: absolute; top: 0; right: -2px; width: 5px; height: 100%; cursor: col-resize; z-index: 1; }
-body.theme-dark .table thead th.dt-cell-frozen-left, body.theme-dark .table thead th.dt-cell-frozen-right { background-color: #343a40; }
-.table tbody tr { cursor: pointer; }
+.table { --bs-table-bg: var(--bg-secondary); --bs-table-color: var(--text-primary); --bs-table-border-color: var(--border-color); --bs-table-striped-bg: rgba(0,0,0,0.05); --bs-table-hover-bg: rgba(0,0,0,0.075); }
 .table-active-custom { --bs-table-bg-state: var(--accent-color); --bs-table-color-state: #fff; background-color: var(--bs-table-bg-state) !important; color: var(--bs-table-color-state) !important; }
 .table-row-abnormal td { background-color: rgba(217, 83, 79, 0.15) !important; }
 .table-hover > tbody > .table-row-abnormal:hover > * { --bs-table-hover-bg: rgba(217, 83, 79, 0.25); }
-.table-responsive { flex-grow: 1; min-height: 0; overflow: auto; }
+.table thead .resizer { position: absolute; top: 0; right: -2px; width: 5px; height: 100%; cursor: col-resize; z-index: 1; }
+
+/* --- 【结构性锁定】表格样式 v3.0 --- */
+.datatable-main-wrapper { display: flex; flex-direction: row; width: 100%; overflow: hidden; flex-grow: 1; border: 1px solid var(--border-color); border-radius: .25rem; }
+.datatable-frozen-pane-left, .datatable-frozen-pane-right { flex-shrink: 0; overflow-y: scroll; overflow-x: hidden; position: relative; }
+.datatable-frozen-pane-left::-webkit-scrollbar, .datatable-frozen-pane-right::-webkit-scrollbar { display: none; }
+.datatable-frozen-pane-left, .datatable-frozen-pane-right { -ms-overflow-style: none; scrollbar-width: none; }
+.datatable-scrollable-pane { flex-grow: 1; overflow: auto; }
+.datatable-main-wrapper table { table-layout: fixed; border: none; margin-bottom: 0; }
+.datatable-main-wrapper thead th { background-color: var(--bg-secondary); position: sticky; top: 0; z-index: 1;}
+.datatable-frozen-pane-left table, .datatable-scrollable-pane table { border-right: none; }
+.datatable-frozen-pane-left { box-shadow: 2px 0 5px rgba(0,0,0,0.15); z-index: 1; }
+.datatable-frozen-pane-right { box-shadow: -2px 0 5px rgba(0,0,0,0.15); z-index: 1; }
+.table-hover-custom { --bs-table-hover-bg: rgba(0,0,0,0.075); background-color: var(--bs-table-hover-bg); }
+body.theme-light .table-hover-custom { --bs-table-hover-bg: #f5f5f5; }
+
 
 /* --- 模态窗口/下拉菜单/Offcanvas 样式覆盖 --- */
 .modal-content, .dropdown-menu, .offcanvas { background-color: var(--bg-secondary); border-color: var(--border-color); color: var(--text-primary); }
@@ -284,32 +265,8 @@ body.theme-dark .modal-header .btn-close, body.theme-dark .offcanvas-header .btn
 .dropdown-item:hover, .dropdown-item:focus { background-color: rgba(0,0,0,0.1); color: var(--text-primary); }
 body.theme-dark .dropdown-item:hover, body.theme-dark .dropdown-item:focus { background-color: #3a3f44; }
 
-/* 【核心修复】1. 配置列对话框内容高度 */
-#column-config-list {
-    display: block;
-    max-height: 60vh;
-    overflow-y: auto;
-}
-
-/* 【核心修复】2. 锁定列在 Hover 和 Active 状态下的背景色 */
-.table-hover > tbody > tr:hover > .dt-cell-frozen-left,
-.table-hover > tbody > tr:hover > .dt-cell-frozen-right {
-    background-color: var(--bs-table-hover-bg);
-}
-
-.table > tbody > tr.table-active-custom > .dt-cell-frozen-left,
-.table > tbody > tr.table-active-custom > .dt-cell-frozen-right {
-    background-color: var(--bs-table-bg-state);
-    color: var(--bs-table-color-state);
-}
-
-/* 改进拖拽时的视觉效果 */
-.list-group-item.dragging {
-    opacity: 0.5;
-    background-color: #444 !important;
-}
-
-
+#column-config-list { display: block; max-height: 60vh; overflow-y: auto; }
+.list-group-item.dragging { opacity: 0.5; background-color: #444 !important; }
 .list-group-item { background-color: transparent; border-color: var(--border-color); color: var(--text-primary); }
 .list-group-item:hover { background-color: rgba(0,0,0,0.1); }
 body.theme-dark .list-group-item:hover { background-color: #343a40; }

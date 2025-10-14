@@ -1,36 +1,28 @@
 /**
- * 源码路径: js/views/MetrologyLedger.js
- * 功能说明: 计量台账页面的视图逻辑。
- * - 从后端API获取并展示分页数据。
- * - 实现查询表单和表格筛选器的联合查询。
- * - 监听分页事件，实现前后端分页联动。
- * 版本变动:
- * v2.5.0 - 2025-10-14: 采用“先渲染框架，后加载数据”模式，优化了加载体验和错误处理。
+ * 源码路径: js/views/MetrologyLedger_Updated.js
+ * 功能说明: 这是 MetrologyLedger.js 的更新版本，展示了如何使用 Optimized_DataTable.js 组件。
+ *
+ * --- 主要变化 ---
+ * 1.  **组件引用**: 导入了 Optimized_DataTable.js。
+ * 2.  **状态简化**: 移除了视图层中对 currentPage 和 currentFilters 的管理，这些状态已移入新表格组件内部。
+ * 3.  **事件统一**: 废弃了对 'pageChange' 和筛选器 'change' 的单独监听，改为统一监听表格派发的 'queryChange' 事件。
+ * 4.  **开启排序**: 在列定义中，为 'sysId', 'enterpriseId', 'nextDate' 添加了 `sortable: true` 属性。
+ * 5.  **加载逻辑**: `_loadData` 方法现在接收所有查询参数，并使用新表格的 `toggleLoading` 方法来显示加载状态。
+ *
+ * @version 3.2.0 - 2025-10-14 (修复了 'pageNum=undefined' 的bug)
  */
-/**
- * 源码路径: js/views/MetrologyLedger.js
- * 功能说明: 计量台账页面的视图逻辑。
- * - 适配了独立的后端Controller。
- * 版本变动:
- * v2.7.0 - 2025-10-14: 更新API调用以匹配新的Controller结构。
- */
-import DataTable from '../components/DataTable.js';
+// 变化1: 导入优化后的组件
+import DataTable from '../components/Optimized_DataTable.js';
 import QueryForm from '../components/QueryForm.js';
 import Modal from '../components/Modal.js';
 import { getMetrologyLedger, exportMetrologyLedger } from '../services/api.js';
 
-export default class MetrologyLedger {
+export default class MetrologyLedgerUpdated {
     constructor() {
         this.dataTable = null;
         this.queryForm = null;
         this.container = null;
-        this.currentPage = 1;
-        this.pageSize = 10;
-
-        this.currentFilters = {
-            deviceStatus: 'all',
-            abcCategory: 'all'
-        };
+        // 变化2: 移除 currentPage, pageSize, currentFilters，这些状态由 DataTable 内部管理
     }
 
     render(container) {
@@ -45,6 +37,7 @@ export default class MetrologyLedger {
         this._renderQueryForm(container.querySelector('#query-form-container'));
         this._renderDataTable(container.querySelector('#data-table-container'));
 
+        // 初始加载
         this._loadData();
         this._attachEventListeners();
     }
@@ -66,20 +59,23 @@ export default class MetrologyLedger {
 
     _renderDataTable(container) {
         const columns = [
+            // --- 默认显示列 ---
             { key: 'expired', title: '是否过期', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-danger"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
             { key: 'isLinked', title: '台账挂接', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
-            { key: 'sysId', title: '系统编号', visible: true, width: 100 },
-            { key: 'enterpriseId', title: '企业编号', visible: true, width: 120 },
+            { key: 'sysId', title: '系统编号', visible: true, width: 100, sortable: true },
+            { key: 'enterpriseId', title: '企业编号', visible: true, width: 120, sortable: true },
             { key: 'deviceName', title: '设备名称', visible: true, width: 180 },
             { key: 'model', title: '规格型号', visible: true, width: 120 },
             { key: 'factoryId', title: '出厂编号', visible: true, width: 120 },
             { key: 'location', title: '安装位置/使用人', visible: true, width: 150 },
             { key: 'accuracy', title: '准确度等级', visible: true, width: 120 },
             { key: 'status', title: '设备状态', visible: true, width: 90 },
-            { key: 'nextDate', title: '下次确认日期', visible: true, width: 120 },
+            { key: 'nextDate', title: '下次确认日期', visible: true, width: 120, sortable: true },
             { key: 'parentDevice', title: '所属设备', visible: true, width: 120 },
             { key: 'department', title: '使用部门', visible: true, width: 120 },
             { key: 'abc', title: 'ABC分类', visible: true, width: 90 },
+
+            // --- 默认隐藏列 (已补全) ---
             { key: 'seq', title: '序号', visible: false },
             { key: 'erpId', title: 'ERP编号', visible: false },
             { key: 'range', title: '量程范围', visible: false },
@@ -117,54 +113,82 @@ export default class MetrologyLedger {
             { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'a'}, {label: 'B', 'value': 'b'}, {label: 'C', value: 'c'}] }
         ];
 
-        this.dataTable = new DataTable({
+        this.dataTable = new DataTable({ // 使用优化后的 DataTable
             columns, actions, filters, data: [],
-            options: { configurable: true, storageKey: 'metrologyLedgerTable', selectable: 'single' }
+            options: {
+                configurable: true,
+                storageKey: 'metrologyLedgerTable',
+                selectable: 'single',
+                // 可以设置默认排序
+                defaultSortBy: 'sysId',
+                defaultSortOrder: 'desc'
+            }
         });
         this.dataTable.render(container);
     }
 
+    /**
+     * [已修复] _loadData 方法不再接收参数，而是直接从组件状态中获取所有查询条件，逻辑更健壮。
+     */
     async _loadData() {
-        const tbody = this.dataTable.container.querySelector('tbody');
-        if (!tbody) return;
-
-        const visibleCols = this.dataTable._getVisibleColumns().length;
-        tbody.innerHTML = `<tr><td colspan="${visibleCols}" class="text-center p-4"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div> 正在加载...</td></tr>`;
+        this.dataTable.toggleLoading(true); // 显示加载动画
 
         try {
+            const formParams = this.queryForm.getValues();
+            const tableState = this.dataTable.state; // 直接从 DataTable 实例获取当前状态
+
+            // 合并来自查询表单和表格内部状态（分页、排序、筛选）的参数
             const params = {
-                ...this.queryForm.getValues(),
-                pageNum: this.currentPage,
-                pageSize: this.pageSize,
-                ...this.currentFilters
+                ...formParams,
+                ...tableState.filters,
+                pageNum: tableState.pageNum,
+                pageSize: tableState.pageSize,
+                sortBy: tableState.sortBy,
+                sortOrder: tableState.sortOrder,
             };
+
+            // 清理无效参数
+            if (!params.sortBy) {
+                delete params.sortBy;
+                delete params.sortOrder;
+            }
+
             const pageResult = await getMetrologyLedger(params);
             this.dataTable.updateView(pageResult);
         } catch (error) {
             console.error("加载台账数据失败:", error);
-            tbody.innerHTML = `<tr><td colspan="${visibleCols}" class="text-center p-4 text-danger">加载数据失败: ${error.message}</td></tr>`;
+            Modal.alert(`加载数据失败: ${error.message}`);
+        } finally {
+            this.dataTable.toggleLoading(false); // 隐藏加载动画
         }
     }
 
+    /**
+     * [已修复] 简化事件监听逻辑，统一处理
+     */
     _attachEventListeners() {
         const tableContainer = this.container.querySelector('#data-table-container');
         if (!tableContainer) return;
 
+        // 监听工具栏的 "查询" 和 "导出" 按钮
         tableContainer.addEventListener('click', async (e) => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
 
             const action = button.dataset.action;
             if (action === 'search') {
-                this.currentPage = 1;
+                this.dataTable.state.pageNum = 1; // 点击查询按钮，重置到第一页
                 this._loadData();
             } else if (action === 'export') {
                 button.disabled = true;
                 button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 正在导出...';
                 try {
+                    // 导出时也直接从组件状态获取最新参数
                     const params = {
                         ...this.queryForm.getValues(),
-                        ...this.currentFilters,
+                        ...this.dataTable.state.filters,
+                        sortBy: this.dataTable.state.sortBy,
+                        sortOrder: this.dataTable.state.sortOrder,
                         columns: this.dataTable.columns.filter(c => c.visible).map(({ key, title }) => ({ key, title }))
                     };
                     await exportMetrologyLedger(params);
@@ -178,17 +202,8 @@ export default class MetrologyLedger {
             }
         });
 
-        tableContainer.addEventListener('change', (e) => {
-            const radio = e.target.closest('input[type="radio"]');
-            if (radio && this.currentFilters.hasOwnProperty(radio.name)) {
-                this.currentFilters[radio.name] = radio.value;
-                this.currentPage = 1;
-                this._loadData();
-            }
-        });
-
-        tableContainer.addEventListener('pageChange', (e) => {
-            this.currentPage = e.detail.pageNum;
+        // [已修复] 统一监听表格内部状态变化（分页、排序、筛选），触发数据重新加载
+        tableContainer.addEventListener('queryChange', () => {
             this._loadData();
         });
     }
