@@ -5,9 +5,11 @@
  * v1.0.0 - 2025-10-13: 初始版本，实现基础框架和路由。
  * v1.1.0 - 2025-10-13: 集成面包屑组件，优化内容区布局。
  * v1.4.0 - 2025-10-13: 【最终方案】移除所有JS高度计算和page-footer，回归纯CSS Flexbox终极布局方案。
+ * v1.6.0 - 2025-10-14: 新增了右上角用户菜单的交互功能（退出确认、通知面板）。
  */
 import menuConfig from './config/menu.js';
 import Breadcrumb from './components/Breadcrumb.js';
+import Modal from './components/Modal.js';
 
 class App {
     constructor(menuConfig) {
@@ -37,15 +39,35 @@ class App {
         } else {
             this.renderTopNav();
             this.sidebarToggle.addEventListener('click', () => this.toggleSidebar());
-            this.themeToggler.addEventListener('click', (e) => {
-                e.preventDefault();
-                this._toggleTheme();
-            });
+            this._attachHeaderListeners();
         }
 
         window.addEventListener('hashchange', () => this.handleRouteChange());
         window.addEventListener('load', () => this.handleRouteChange());
     }
+
+    _attachHeaderListeners() {
+        // Theme Toggler
+        this.themeToggler.addEventListener('click', (e) => {
+            e.preventDefault();
+            this._toggleTheme();
+        });
+
+        // Logout Button
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const confirmed = await Modal.confirm('退出系统', '您确定要退出当前系统吗？');
+                if (confirmed) {
+                    console.log("用户确认退出。正在跳转到登录页(模拟)...");
+                    Modal.alert('您已成功退出。');
+                    // In a real app: window.location.href = '/login.html';
+                }
+            });
+        }
+    }
+
 
     _initTheme() {
         const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -73,6 +95,7 @@ class App {
             icon.classList.add('bi-sun-fill');
         }
     }
+
 
     toggleSidebar() {
         this.sidebar.classList.toggle('collapsed');

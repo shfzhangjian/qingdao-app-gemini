@@ -235,17 +235,9 @@ body.sidebar-collapsed .sidebar-menu .submenu {
 body.theme-light .form-control::placeholder { color: #6c757d; }
 
 .table { table-layout: fixed; --bs-table-bg: var(--bg-secondary); --bs-table-color: var(--text-primary); --bs-table-border-color: var(--border-color); --bs-table-striped-bg: rgba(0,0,0,0.05); --bs-table-hover-bg: rgba(0,0,0,0.075); }
-.table thead th {
-    position: sticky; /* 【核心修复】改为 sticky */
-    top: 0; /* 【核心修复】固定在滚动容器顶部 */
-    z-index: 1; /* 【核心修复】确保在普通单元格之上 */
-    background-color: var(--bg-secondary);
-    border-bottom-width: 2px !important;
-    white-space: nowrap;
-    border-color: var(--border-color);
-    border-width: 0 0 1px 1px;
-}
-.table thead th:first-child { border-left-width: 0; }
+.table thead th { position: sticky; top: 0; z-index: 1; background-color: var(--bg-secondary); border-bottom-width: 2px !important; white-space: nowrap; border-color: var(--border-color); border-width: 0 0 1px 1px; }
+/* 【核心修复】将规则限定在DataTable组件内部，避免影响其他表格 */
+.datatable-wrapper .table thead th:first-child { border-left-width: 0; }
 body.theme-dark .table thead th { background-color: #343a40; }
 .table thead .resizer { position: absolute; top: 0; right: -2px; width: 5px; height: 100%; cursor: col-resize; z-index: 1; }
 .table th.dt-cell-frozen-left, .table td.dt-cell-frozen-left { position: sticky; z-index: 2; background-color: var(--bg-secondary); }
@@ -258,15 +250,20 @@ body.theme-dark .table thead th.dt-cell-frozen-left, body.theme-dark .table thea
 .table-hover > tbody > .table-row-abnormal:hover > * { --bs-table-hover-bg: rgba(217, 83, 79, 0.25); }
 .table-responsive { flex-grow: 1; min-height: 0; overflow: auto; }
 
-/* --- 模态窗口样式覆盖 --- */
-.modal-content { background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); }
-.modal-header, .modal-footer { border-color: var(--border-color); }
-.modal-header .btn-close { filter: invert(0.5) sepia(0.5) saturate(0.5) hue-rotate(0deg); }
-body.theme-dark .modal-header .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+/* --- 模态窗口/下拉菜单/Offcanvas 样式覆盖 --- */
+.modal-content, .dropdown-menu, .offcanvas { background-color: var(--bg-secondary); border-color: var(--border-color); color: var(--text-primary); }
+.modal-header, .modal-footer, .dropdown-divider, .offcanvas-header { border-color: var(--border-color); }
+.modal-header .btn-close, .offcanvas-header .btn-close { filter: invert(0.5) sepia(0.5) saturate(0.5) hue-rotate(0deg); }
+body.theme-dark .modal-header .btn-close, body.theme-dark .offcanvas-header .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
 .modal-body { max-height: 70vh; overflow-y: auto; color: var(--text-primary); }
-.modal .list-group-item { background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color); }
-.modal .list-group-item:hover { background-color: rgba(0,0,0,0.1); }
-body.theme-dark .modal .list-group-item:hover { background-color: #343a40; }
+.dropdown-item { color: var(--text-primary); }
+.dropdown-item:hover, .dropdown-item:focus { background-color: rgba(0,0,0,0.1); color: var(--text-primary); }
+body.theme-dark .dropdown-item:hover, body.theme-dark .dropdown-item:focus { background-color: #3a3f44; }
+
+.list-group-item { background-color: transparent; border-color: var(--border-color); color: var(--text-primary); }
+.list-group-item:hover { background-color: rgba(0,0,0,0.1); }
+body.theme-dark .list-group-item:hover { background-color: #343a40; }
+
 .form-switch .form-check-input { background-color: #aaa; border-color: #888; }
 body.theme-dark .form-switch .form-check-input { background-color: #555; border-color: #777; }
 .form-switch .form-check-input:checked { background-color: var(--accent-color); border-color: var(--accent-color); }

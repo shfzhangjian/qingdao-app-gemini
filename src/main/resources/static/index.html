@@ -29,11 +29,25 @@
             <a href="#" class="nav-icon" id="theme-toggler" title="切换主题">
                 <i class="bi bi-sun-fill"></i>
             </a>
-            <i class="bi bi-bell-fill"></i>
-            <i class="bi bi-grid-3x3-gap-fill"></i>
-            <i class="bi bi-person-circle"></i>
-            <span class="ms-2">admin</span>
-            <i class="bi bi-box-arrow-right"></i>
+            <a href="#" class="nav-icon" id="notification-bell" title="通知" data-bs-toggle="offcanvas" data-bs-target="#notification-panel">
+                <i class="bi bi-bell-fill"></i>
+            </a>
+            <a href="#" class="nav-icon" title="应用">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+            </a>
+
+            <div class="dropdown">
+                <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle ms-3" data-bs-toggle="dropdown">
+                    <i class="bi bi-person-circle"></i>
+                    <span class="ms-2">admin</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#">员工姓名</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" id="logout-btn">退出</a></li>
+                </ul>
+            </div>
+
         </div>
     </header>
 
@@ -55,6 +69,39 @@
         </main>
     </div>
 
+</div>
+
+<!-- 【新增】通知中心 Offcanvas 面板 -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="notification-panel">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title">通知中心</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="list-group list-group-flush">
+            <a href="#" class="list-group-item list-group-item-action">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">系统升级通知</h6>
+                    <small>3天前</small>
+                </div>
+                <p class="mb-1">系统将于今晚22:00进行升级，预计持续2小时。</p>
+            </a>
+            <a href="#" class="list-group-item list-group-item-action">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">新的工单待处理</h6>
+                    <small class="text-muted">1周前</small>
+                </div>
+                <p class="mb-1">您有一个来自“卷包车间”的异常工单待处理。</p>
+            </a>
+            <a href="#" class="list-group-item list-group-item-action">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">密码即将过期</h6>
+                    <small class="text-muted">2周前</small>
+                </div>
+                <p class="mb-1">您的密码将于15天后过期，请及时修改。</p>
+            </a>
+        </div>
+    </div>
 </div>
 
 <!-- Third-party JS -->
