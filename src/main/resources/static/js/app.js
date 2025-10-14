@@ -19,14 +19,16 @@ class App {
         this.sidebar = document.getElementById('sidebar');
         this.sidebarHeaderTitle = document.getElementById('sidebar-header-title');
         this.appBody = document.getElementById('app-body');
-        // 【核心修改】移除 this.pageFooter
         this.viewInstances = new Map();
         this.breadcrumb = new Breadcrumb();
+        this.themeToggler = document.getElementById('theme-toggler');
 
         this.init();
     }
 
     init() {
+        this._initTheme();
+
         const urlParams = new URLSearchParams(window.location.search);
         const isContentOnly = urlParams.get('view') === 'content';
 
@@ -35,11 +37,41 @@ class App {
         } else {
             this.renderTopNav();
             this.sidebarToggle.addEventListener('click', () => this.toggleSidebar());
+            this.themeToggler.addEventListener('click', (e) => {
+                e.preventDefault();
+                this._toggleTheme();
+            });
         }
 
         window.addEventListener('hashchange', () => this.handleRouteChange());
         window.addEventListener('load', () => this.handleRouteChange());
-        // 移除 resize listener
+    }
+
+    _initTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        this.appBody.classList.add(`theme-${savedTheme}`);
+        this._updateThemeIcon(savedTheme);
+    }
+
+    _toggleTheme() {
+        const currentTheme = this.appBody.classList.contains('theme-light') ? 'light' : 'dark';
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+        this.appBody.classList.remove(`theme-${currentTheme}`);
+        this.appBody.classList.add(`theme-${newTheme}`);
+        localStorage.setItem('theme', newTheme);
+        this._updateThemeIcon(newTheme);
+    }
+
+    _updateThemeIcon(theme) {
+        const icon = this.themeToggler.querySelector('i');
+        if (theme === 'light') {
+            icon.classList.remove('bi-sun-fill');
+            icon.classList.add('bi-moon-fill');
+        } else {
+            icon.classList.remove('bi-moon-fill');
+            icon.classList.add('bi-sun-fill');
+        }
     }
 
     toggleSidebar() {
