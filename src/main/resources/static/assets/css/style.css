@@ -238,22 +238,29 @@ body.theme-light .form-control::placeholder { color: #6c757d; }
 .table thead th { position: sticky; top: 0; z-index: 1; background-color: var(--bg-secondary); border-bottom-width: 2px !important; white-space: nowrap; border-color: var(--border-color); border-width: 0 0 1px 1px; }
 
 /* --- 【核心修复】锁定列样式 --- */
-.table th.dt-cell-frozen-left, .table td.dt-cell-frozen-left {
+/* 为左右锁定的单元格（包括表头和数据单元格）应用sticky定位 */
+.table th.dt-cell-frozen-left, .table td.dt-cell-frozen-left,
+.table th.dt-cell-frozen-right, .table td.dt-cell-frozen-right {
     position: sticky;
-    z-index: 2;
-    background-color: var(--bg-secondary);
+    z-index: 2; /* 确保数据单元格在普通单元格之上 */
+    background-color: var(--bg-secondary); /* 确保背景色不透明，遮挡下方内容 */
+}
+
+/* 左侧锁定列的特殊样式 */
+.table th.dt-cell-frozen-left, .table td.dt-cell-frozen-left {
     border-right: 1px solid var(--border-color) !important;
     box-shadow: 2px 0 5px rgba(0,0,0,0.2);
 }
+
+/* 右侧锁定列的特殊样式 */
 .table th.dt-cell-frozen-right, .table td.dt-cell-frozen-right {
-    position: sticky;
-    z-index: 2;
-    background-color: var(--bg-secondary);
     border-left: 1px solid var(--border-color) !important;
     box-shadow: -2px 0 5px rgba(0,0,0,0.2);
 }
+
+/* 提升锁定表头的层级，使其在滚动的表头之上 */
 .table thead th.dt-cell-frozen-left, .table thead th.dt-cell-frozen-right {
-    z-index: 3; /* 让表头锁定列在普通表头之上 */
+    z-index: 3;
 }
 /* ---------------------------------- */
 

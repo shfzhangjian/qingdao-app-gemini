@@ -7,6 +7,13 @@
  * 版本变动:
  * v2.5.0 - 2025-10-14: 采用“先渲染框架，后加载数据”模式，优化了加载体验和错误处理。
  */
+/**
+ * 源码路径: js/views/MetrologyLedger.js
+ * 功能说明: 计量台账页面的视图逻辑。
+ * - 适配了独立的后端Controller。
+ * 版本变动:
+ * v2.7.0 - 2025-10-14: 更新API调用以匹配新的Controller结构。
+ */
 import DataTable from '../components/DataTable.js';
 import QueryForm from '../components/QueryForm.js';
 import Modal from '../components/Modal.js';
@@ -36,10 +43,8 @@ export default class MetrologyLedger {
         `;
 
         this._renderQueryForm(container.querySelector('#query-form-container'));
-        // 【核心修改】1. 先完整渲染出表格的框架
         this._renderDataTable(container.querySelector('#data-table-container'));
 
-        // 【核心修改】2. 然后再去异步加载数据填充表格
         this._loadData();
         this._attachEventListeners();
     }
@@ -61,7 +66,6 @@ export default class MetrologyLedger {
 
     _renderDataTable(container) {
         const columns = [
-            // --- 核心显示字段 ---
             { key: 'expired', title: '是否过期', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-danger"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
             { key: 'isLinked', title: '台账挂接', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
             { key: 'sysId', title: '系统编号', visible: true, width: 100 },
@@ -76,8 +80,6 @@ export default class MetrologyLedger {
             { key: 'parentDevice', title: '所属设备', visible: true, width: 120 },
             { key: 'department', title: '使用部门', visible: true, width: 120 },
             { key: 'abc', title: 'ABC分类', visible: true, width: 90 },
-
-            // --- 默认隐藏字段 ---
             { key: 'seq', title: '序号', visible: false },
             { key: 'erpId', title: 'ERP编号', visible: false },
             { key: 'range', title: '量程范围', visible: false },
@@ -116,106 +118,56 @@ export default class MetrologyLedger {
         ];
 
         this.dataTable = new DataTable({
-            columns: columns,
-            actions: actions,
-            filters: filters,
-            options: {
-                configurable: true,
-                storageKey: 'metrologyLedgerTable',
-                selectable: 'single'
-            }
+            columns, actions, filters, data: [],
+            options: { configurable: true, storageKey: 'metrologyLedgerTable', selectable: 'single' }
         });
-
         this.dataTable.render(container);
     }
 
     async _loadData() {
-        if (!this.dataTable || !this.dataTable.container) return;
-
         const tbody = this.dataTable.container.querySelector('tbody');
         if (!tbody) return;
 
-        // 【核心修改】在 tbody 中显示加载状态
-        const visibleColsCount = this.dataTable._getVisibleColumns().length;
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="${visibleColsCount}" class="text-center p-4">
-                    <div class="spinner-border spinner-border-sm" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <span class="ms-2">正在加载数据...</span>
-                </td>
-            </tr>
-        `;
+        const visibleCols = this.dataTable._getVisibleColumns().length;
+        tbody.innerHTML = `<tr><td colspan="${visibleCols}" class="text-center p-4"><div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div> 正在加载...</td></tr>`;
 
         try {
-            const queryValues = this.queryForm.getValues();
-
             const params = {
-                ...queryValues,
+                ...this.queryForm.getValues(),
                 pageNum: this.currentPage,
                 pageSize: this.pageSize,
-                deviceStatus: this.currentFilters.deviceStatus,
-                abcCategory: this.currentFilters.abcCategory
+                ...this.currentFilters
             };
-
             const pageResult = await getMetrologyLedger(params);
-
-            console.log("[DEBUG] Received from backend:", pageResult);
-
-            // 【核心修改】不再全量渲染，仅更新数据
             this.dataTable.updateView(pageResult);
-
         } catch (error) {
             console.error("加载台账数据失败:", error);
-            Modal.alert(`加载台账数据失败: ${error.message}`);
-
-            // 【核心修改】在 tbody 中显示错误信息
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="${visibleColsCount}" class="text-center p-4 text-danger">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                        数据加载失败，请检查网络或联系管理员。
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = `<tr><td colspan="${visibleCols}" class="text-center p-4 text-danger">加载数据失败: ${error.message}</td></tr>`;
         }
     }
-
 
     _attachEventListeners() {
         const tableContainer = this.container.querySelector('#data-table-container');
         if (!tableContainer) return;
 
-        // Listen for clicks on action buttons (Search, Export)
         tableContainer.addEventListener('click', async (e) => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
 
             const action = button.dataset.action;
-
             if (action === 'search') {
                 this.currentPage = 1;
                 this._loadData();
             } else if (action === 'export') {
                 button.disabled = true;
-                button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在导出...';
-
+                button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 正在导出...';
                 try {
-                    const queryValues = this.queryForm.getValues();
-
                     const params = {
-                        ...queryValues,
-                        deviceStatus: this.currentFilters.deviceStatus,
-                        abcCategory: this.currentFilters.abcCategory,
-                        // Get current visible columns config from DataTable
-                        columns: this.dataTable.columns
-                            .filter(col => col.visible)
-                            .map(({ key, title }) => ({ key, title }))
+                        ...this.queryForm.getValues(),
+                        ...this.currentFilters,
+                        columns: this.dataTable.columns.filter(c => c.visible).map(({ key, title }) => ({ key, title }))
                     };
-
                     await exportMetrologyLedger(params);
-
                 } catch (error) {
                     console.error("导出失败:", error);
                     Modal.alert(`导出失败: ${error.message}`);
@@ -226,20 +178,19 @@ export default class MetrologyLedger {
             }
         });
 
-        // Listen for filter changes
         tableContainer.addEventListener('change', (e) => {
             const radio = e.target.closest('input[type="radio"]');
-            if (radio && (radio.name === 'deviceStatus' || radio.name === 'abcCategory')) {
+            if (radio && this.currentFilters.hasOwnProperty(radio.name)) {
                 this.currentFilters[radio.name] = radio.value;
                 this.currentPage = 1;
                 this._loadData();
             }
         });
 
-        // Listen for pagination changes
         tableContainer.addEventListener('pageChange', (e) => {
             this.currentPage = e.detail.pageNum;
             this._loadData();
         });
     }
 }
+

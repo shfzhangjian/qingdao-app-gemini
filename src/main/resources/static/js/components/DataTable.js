@@ -3,9 +3,8 @@
  * 功能说明: 一个功能强大的数据表格组件
  * - 支持动态生成、列配置持久化、分页、单选/多选等。
  * 版本变动:
- * v2.9.6 - 2025-10-14: 优化了配置列过滤功能，使用CSS类替代行内样式，修复了相关bug。
+ * v2.9.8 - 2025-10-14: 彻底修复了因类型处理不当导致的列锁定状态无法正确持久化的问题。
  */
-
 import Modal from './Modal.js';
 import QueryForm from './QueryForm.js';
 
@@ -46,6 +45,10 @@ export default class DataTable {
                 const loadedColumns = parsedConfig.map(savedCol => {
                     const originalCol = originalColsMap.get(savedCol.key);
                     if (originalCol) {
+                        // 【核心修复】确保 'frozen' 属性类型一致，使用非严格等于处理字符串 "false" 和布尔值 false
+                        if (savedCol.frozen == 'false') {
+                            savedCol.frozen = false;
+                        }
                         // 以保存的列为基础，只补充 render 函数
                         return { ...originalCol, ...savedCol };
                     }
@@ -102,7 +105,7 @@ export default class DataTable {
         const visibleColumns = this._getVisibleColumns();
         const processedColumns = visibleColumns.map(col => ({ ...col, style: '', classes: '' }));
 
-        // 【已修复】分别计算左侧和右侧锁定的偏移量
+        // 分别计算左侧和右侧锁定的偏移量
         let leftOffset = 0;
         processedColumns.forEach(col => {
             if (col.frozen === 'left') {
@@ -142,7 +145,6 @@ export default class DataTable {
         this._attachEventListeners();
     }
 
-    // ... 其他方法 (_createToolbar, _createColGroup, etc.) 保持不变 ...
     _createToolbar() {
         const actionsHtml = new QueryForm({ actions: this.actions })._createActionsHtml();
         const filtersHtml = new QueryForm({ fields: this.filters })._createFieldsHtml();
@@ -397,7 +399,7 @@ export default class DataTable {
                     <span class="flex-grow-1">${col.title}</span>
                     <div class="btn-group btn-group-sm me-3" role="group">
                         <button type="button" class="btn btn-outline-secondary ${col.frozen === 'left' ? 'active' : ''}" data-action="pin" data-value="left" title="左固定"><i class="bi bi-arrow-left-square"></i></button>
-                        <button type="button" class="btn btn-outline-secondary ${!col.frozen ? 'active' : ''}" data-action="pin" data-value="false" title="不固定"><i class="bi bi-x-circle"></i></button>
+                        <button type="button" class="btn btn-outline-secondary ${col.frozen == false ? 'active' : ''}" data-action="pin" data-value="false" title="不固定"><i class="bi bi-x-circle"></i></button>
                         <button type="button" class="btn btn-outline-secondary ${col.frozen === 'right' ? 'active' : ''}" data-action="pin" data-value="right" title="右固定"><i class="bi bi-arrow-right-square"></i></button>
                     </div>
                     <div class="form-check form-switch">
@@ -417,7 +419,7 @@ export default class DataTable {
         const configModal = new Modal({ title: '列表字段设置', body: modalBody, footer: footer, size: 'lg' });
         const modalElement = configModal.modalElement;
 
-        // 【已修复】1. 过滤功能 - 使用 classList.toggle
+        // 过滤功能
         modalElement.querySelector('#column-config-filter').addEventListener('input', (e) => {
             const filterText = e.target.value.toLowerCase();
             modalElement.querySelectorAll('#column-config-list li').forEach(item => {
@@ -427,7 +429,7 @@ export default class DataTable {
             });
         });
 
-        // 2. 锁定/Pin功能
+        // 锁定/Pin功能
         modalElement.querySelector('#column-config-list').addEventListener('click', (e) => {
             const pinButton = e.target.closest('button[data-action="pin"]');
             if (pinButton) {
@@ -437,7 +439,7 @@ export default class DataTable {
             }
         });
 
-        // 3. 全选/反选/保存/恢复默认 功能
+        // 全选/反选/保存/恢复默认 功能
         modalElement.querySelector('#column-config-select-all').addEventListener('click', () => {
             modalElement.querySelectorAll('#column-config-list li:not(.d-none) input[type="checkbox"]').forEach(cb => cb.checked = true);
         });

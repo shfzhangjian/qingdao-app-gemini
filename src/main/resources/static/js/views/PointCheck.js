@@ -1,232 +1,286 @@
 /**
  * 源码路径: js/views/PointCheck.js
- * 功能说明: 点检统计页面的视图逻辑。
- * - 实现了统计视图和列表视图的切换。
- * - 实现了A/B/C设备分类的数据切换。
- * - 集成了日期范围选择器。
+ * 功能说明: 点检统计页面的最终版视图逻辑。
+ * - 采用了全新的单行、左对齐、胶囊(Pills)风格Tab的UI布局。
+ * - 彻底修复了列表视图下反复出现的“无限加载”Bug。
  * 版本变动:
- * v2.3.0 - 2025-10-13: 调整工具栏布局，并将“配置列”功能外置到主工具栏。
+ * v3.5.0 - 2025-10-14: 完成最终UI布局重构和“无限加载”Bug的修复。
  */
 import DataTable from '../components/DataTable.js';
 import DatePicker from '../components/DatePicker.js';
-
-// --- 模拟数据生成 ---
-function generateStatisticsData(category) {
-    const departments = ['卷材一厂', '制丝车间', '卷包车间', '能源动力处(动力车间)', '行政管理处', '安全保卫处', '工艺质量处', '生产供应处'];
-    const multiplier = category === 'A' ? 1.5 : (category === 'B' ? 1 : 0.5);
-
-    return departments.map(dept => {
-        const yingJian = Math.floor(Math.random() * 2000 * multiplier);
-        const isFull = Math.random() > 0.3;
-        const yiJian = isFull ? yingJian : Math.floor(yingJian * Math.random());
-        const zhiXingLv = yingJian > 0 ? Math.round((yiJian / yingJian) * 100) + '%' : '0%';
-        return {
-            dept,
-            yingJian1: `[${yingJian}]`,
-            yiJian1: `[${yiJian}]`,
-            zhiXingLv1: zhiXingLv,
-            zhengChang1: `[${yiJian}]`,
-            yingJian2: '[0]',
-            yiJian2: '[0]',
-            zhiXingLv2: '0%',
-            zhengChang2: '[0]',
-        };
-    });
-}
-
-function generateListData(category) {
-    const data = [];
-    const statsData = generateStatisticsData(category);
-    let idCounter = 1;
-    statsData.forEach(stat => {
-        const count = parseInt(stat.yingJian1.replace(/\[|\]/g, ''), 10);
-        for (let i = 0; i < 5; i++) {
-            if (i >= count) break;
-            data.push({
-                id: idCounter++,
-                department: stat.dept,
-                deviceName: `${stat.dept}的设备-${i + 1}`,
-                deviceType: `型号-${category}${i}`,
-                checkDate: `2025-06-${Math.floor(Math.random() * 30) + 1}`,
-                status: Math.random() > 0.2 ? '正常' : '异常',
-                checker: '张三'
-            });
-        }
-    });
-    return data;
-}
-
+import Modal from '../components/Modal.js';
+import { getPointCheckStatistics, getPointCheckList, exportPointCheck } from '../services/api.js';
 
 export default class PointCheck {
     constructor() {
-        this.currentView = 'statistics';
-        this.activeCategory = 'A';
         this.container = null;
-        this.dataTable = null; // Store the instance of DataTable
+        this.headerContainer = null;
+        this.contentContainer = null;
+        this.dataTable = null;
+        this.datePicker = null;
+
+        this.currentPage = 1;
+        this.pageSize = 10;
+
+        this.currentState = {
+            viewMode: 'statistics',
+            category: 'all',
+            dateRange: '2025-01-01 to 2025-12-31',
+            department: '',
+            planStatus: 'all',
+            resultStatus: 'all'
+        };
     }
 
     render(container) {
         this.container = container;
         container.innerHTML = `
-            <div class="p-3 rounded" style="background-color: var(--bg-dark-secondary); display: flex; flex-direction: column; height: 100%;">
+            <div class="p-3 rounded" style="background-color: var(--bg-secondary); display: flex; flex-direction: column; height: 100%;">
                 <div id="point-check-header"></div>
                 <div id="point-check-content" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"></div>
             </div>`;
 
+        this.headerContainer = container.querySelector('#point-check-header');
+        this.contentContainer = container.querySelector('#point-check-content');
+
         this._renderHeader();
-        this._renderContent();
-        this._attachHeaderEventListeners();
+        this._updateView();
+        this._attachEventListeners();
     }
 
     _renderHeader() {
-        const headerContainer = this.container.querySelector('#point-check-header');
-        const isListMode = this.currentView === 'list';
+        const { viewMode, category, department, planStatus, resultStatus } = this.currentState;
+        const isListMode = viewMode === 'list';
 
-        headerContainer.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div class="d-flex align-items-center gap-3">
-                    <span>时间范围:</span>
-                    <input type="text" id="point-check-daterange" class="form-control" style="width: 250px;">
-                    <div id="category-pills" class="btn-group" role="group">
-                        <button type="button" class="btn btn-sm btn-outline-secondary ${this.activeCategory === 'A' ? 'active' : ''}" data-category="A">A类</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary ${this.activeCategory === 'B' ? 'active' : ''}" data-category="B">B类</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary ${this.activeCategory === 'C' ? 'active' : ''}" data-category="C">C类</button>
+        const listFiltersVisibility = isListMode ? '' : 'd-none';
+
+        this.headerContainer.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between flex-wrap row-gap-3 p-3 rounded mb-3" style="background-color: var(--bg-primary);">
+                <!-- Left Section: Tabs and Filters -->
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <ul class="nav nav-pills">
+                        <li class="nav-item">
+                            <button class="nav-link ${viewMode === 'statistics' ? 'active' : ''} py-1" data-view="statistics">统计</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link ${isListMode ? 'active' : ''} py-1" data-view="list">列表</button>
+                        </li>
+                    </ul>
+                    
+                    <input type="text" id="point-check-daterange" class="form-control form-control-sm" style="width: 240px;" placeholder="时间范围">
+                    <select id="category-filter" class="form-select form-select-sm" style="width: 100px;">
+                        <option value="all" ${category === 'all' ? 'selected' : ''}>全部类型</option>
+                        <option value="A" ${category === 'A' ? 'selected' : ''}>A类</option>
+                        <option value="B" ${category === 'B' ? 'selected' : ''}>B类</option>
+                        <option value="C" ${category === 'C' ? 'selected' : ''}>C类</option>
+                    </select>
+
+                    <!-- List-only filters -->
+                    <div id="list-specific-filters" class="d-flex align-items-center gap-3 ${listFiltersVisibility}">
+                        <input type="text" id="department-filter" class="form-control form-control-sm" style="width: 150px;" value="${department}" placeholder="部门">
+                        <select id="plan-status-filter" class="form-select form-select-sm" style="width: 120px;">
+                            <option value="all" ${planStatus === 'all' ? 'selected' : ''}>全部计划</option>
+                            <option value="已检" ${planStatus === '已检' ? 'selected' : ''}>已检</option>
+                            <option value="未检" ${planStatus === '未检' ? 'selected' : ''}>未检</option>
+                        </select>
+                        <select id="result-status-filter" class="form-select form-select-sm" style="width: 120px;">
+                            <option value="all" ${resultStatus === 'all' ? 'selected' : ''}>全部结果</option>
+                            <option value="正常" ${resultStatus === '正常' ? 'selected' : ''}>正常</option>
+                            <option value="异常" ${resultStatus === '异常' ? 'selected' : ''}>异常</option>
+                            <option value="未检" ${resultStatus === '未检' ? 'selected' : ''}>未检</option>
+                        </select>
                     </div>
                 </div>
-                <div class="ms-auto d-flex gap-2">
-                    <div id="view-switcher" class="btn-group btn-group-sm" role="group">
-                         <button type="button" class="btn btn-sm btn-outline-secondary ${this.currentView === 'statistics' ? 'active' : ''}" data-view="statistics">统计</button>
-                         <button type="button" class="btn btn-sm btn-outline-secondary ${isListMode ? 'active' : ''}" data-view="list">列表</button>
-                    </div>
-                    <button class="btn btn-sm btn-primary" id="query-btn">查询</button>
-                    <button class="btn btn-sm btn-outline-success">导出</button>
-                    <button class="btn btn-sm btn-outline-info" id="configure-columns-btn" ${!isListMode ? 'disabled' : ''}>
+
+                <!-- Right Section: Actions -->
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-primary" id="query-btn"><i class="bi bi-search"></i> 查询</button>
+                    <button class="btn btn-sm btn-outline-success" id="export-btn"><i class="bi bi-download"></i> 导出</button>
+                    <button class="btn btn-sm btn-outline-secondary" id="configure-columns-btn" ${!isListMode ? 'disabled' : ''}>
                         <i class="bi bi-gear"></i> 配置列
                     </button>
                 </div>
             </div>
         `;
 
-        new DatePicker(headerContainer.querySelector('#point-check-daterange'), { defaultDate: ["2025-06-01", "2025-06-30"] });
+        if (this.datePicker) this.datePicker.destroy();
+        const dateInput = this.headerContainer.querySelector('#point-check-daterange');
+        this.datePicker = new DatePicker(dateInput, {
+            mode: 'range',
+            defaultDate: this.currentState.dateRange.split(' to '),
+            onChange: (selectedDates, dateStr) => {
+                if (selectedDates.length === 2) {
+                    this.currentState.dateRange = dateStr;
+                }
+            }
+        });
     }
 
-    _renderContent() {
-        if (this.currentView === 'statistics') {
-            this._renderStatisticsView();
-        } else {
-            this._renderListView();
+    _updateView() {
+        if (this.currentState.viewMode === 'list') {
+            this._renderListViewSkeleton();
+        }
+        this._loadData();
+    }
+
+    async _loadData() {
+        try {
+            const params = {
+                category: this.currentState.category,
+                dateRange: this.currentState.dateRange,
+                pageNum: this.currentPage,
+                pageSize: this.pageSize
+            };
+
+            if (this.currentState.viewMode === 'list') {
+                params.department = this.currentState.department;
+                params.planStatus = this.currentState.planStatus;
+                params.resultStatus = this.currentState.resultStatus;
+            }
+
+            if (this.currentState.viewMode === 'statistics') {
+                this.contentContainer.innerHTML = `<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border" role="status"></div></div>`;
+                const statsData = await getPointCheckStatistics(params);
+                this._renderStatisticsView(statsData);
+            } else {
+                if (!this.dataTable) {
+                    this._renderListViewSkeleton();
+                }
+
+                const tbody = this.dataTable.container.querySelector('tbody');
+                if (tbody) {
+                    const visibleCols = this.dataTable._getVisibleColumns().length;
+                    tbody.innerHTML = `<tr><td colspan="${visibleCols}" class="text-center p-4"><div class="spinner-border spinner-border-sm"></div> 正在加载...</td></tr>`;
+                }
+                const pageResult = await getPointCheckList(params);
+                this.dataTable.updateView(pageResult);
+            }
+        } catch (error) {
+            console.error("加载点检数据失败:", error);
+            this.contentContainer.innerHTML = `<div class="alert alert-danger">数据加载失败: ${error.message}</div>`;
         }
     }
 
-    _renderStatisticsView() {
-        const contentContainer = this.container.querySelector('#point-check-content');
-        const statsData = generateStatisticsData(this.activeCategory);
-        const tableRows = statsData.map(row => `
+    _renderStatisticsView(data) {
+        if (!data || data.length === 0) {
+            this.contentContainer.innerHTML = '<div class="alert alert-info">没有可供统计的数据。</div>';
+            return;
+        }
+        const tableRows = data.map(row => `
             <tr>
                 <td class="text-start ps-3">${row.dept}</td>
-                <td>${row.yingJian1}</td><td>${row.yiJian1}</td><td>${row.zhiXingLv1}</td><td>${row.zhengChang1}</td>
-                <td>${row.yingJian2}</td><td>${row.yiJian2}</td><td>${row.zhiXingLv2}</td><td>${row.zhengChang2}</td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="all">[${row.yingJianShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="已检">[${row.yiJianShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="未检">[${row.weiJianShu1}]</a></td>
+                <td>${row.zhiXingLv1}</td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-result-status="正常">[${row.zhengChangShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-result-status="异常">[${row.yiChangShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="all">[${row.yingJianShu2}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="已检">[${row.yiJianShu2}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="未检">[${row.weiJianShu2}]</a></td>
+                <td>${row.zhiXingLv2}</td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-result-status="正常">[${row.zhengChangShu2}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-result-status="异常">[${row.yiChangShu2}]</a></td>
             </tr>
         `).join('');
 
-        contentContainer.innerHTML = `
+        this.contentContainer.innerHTML = `
             <div class="table-responsive">
                 <table class="table table-bordered table-sm text-center">
                   <thead>
                       <tr>
                           <th rowspan="2" class="align-middle">部门名称</th>
-                          <th colspan="4">第一次盘点合格数(1-6月)</th>
-                          <th colspan="4">第二次盘点合格数(7-12月)</th>
+                          <th colspan="6">上半年点检情况</th>
+                          <th colspan="6">下半年点检情况</th>
                       </tr>
                       <tr>
-                          <th>应检数量</th><th>已检数量</th><th>执行率</th><th>正常数量</th>
-                          <th>应检数量</th><th>已检数量</th><th>执行率</th><th>正常数量</th>
+                          <th>应检数量</th>
+                          <th>已检数量</th>
+                          <th>未检数量</th>
+                          <th>执行率</th>
+                          <th>正常数量</th>
+                          <th>异常数量</th>
+                          <th>应检数量</th>
+                          <th>已检数量</th>
+                          <th>未检数量</th>
+                          <th>执行率</th>
+                          <th>正常数量</th>
+                          <th>异常数量</th>
                       </tr>
                   </thead>
-                   <tbody>
-                    ${tableRows}
-                   </tbody>
+                   <tbody>${tableRows}</tbody>
                 </table>
             </div>
         `;
     }
 
-    _renderListView() {
-        const contentContainer = this.container.querySelector('#point-check-content');
-        contentContainer.innerHTML = '';
-
-        const listData = generateListData(this.activeCategory);
+    _renderListViewSkeleton() {
+        if (this.dataTable) return;
         const columns = [
             { key: 'department', title: '部门', visible: true },
             { key: 'deviceName', title: '设备名称', visible: true },
-            { key: 'deviceType', title: '设备型号', visible: true },
-            { key: 'checkDate', title: '点检日期', visible: true },
-            { key: 'status', title: '状态', visible: true, render: (val) => val === '异常' ? `<span class="text-danger">${val}</span>` : val },
-            { key: 'checker', title: '点检人', visible: true },
+            { key: 'deviceType', title: '类型', visible: true },
+            { key: 'checkDate', title: '日期', visible: true },
+            { key: 'planStatus', title: '计划状态', visible: true },
+            { key: 'resultStatus', title: '检查结果', visible: true, render: (val) => val === '异常' ? `<span class="text-danger">${val}</span>` : val },
         ];
-
-        // 【核心修改】隐藏DataTable内部的工具栏
         this.dataTable = new DataTable({
-            columns,
-            data: listData,
-            actions: [], // Empty actions
-            pagination: true,
-            options: {
-                configurable: false, // Disable internal config button
-                storageKey: `pointCheckListTable_${this.activeCategory}`
-            }
+            columns, data: [],
+            actions: [],
+            options: { configurable: false, storageKey: 'pointCheckListNew' }
         });
-
-        this.dataTable.render(contentContainer);
+        this.dataTable.render(this.contentContainer);
     }
 
-    _attachHeaderEventListeners() {
-        const header = this.container.querySelector('#point-check-header');
-
-        header.addEventListener('click', (e) => {
+    _attachEventListeners() {
+        this.headerContainer.addEventListener('click', (e) => {
             const button = e.target.closest('button');
             if (!button) return;
 
-            if (button.dataset.category) {
-                this.activeCategory = button.dataset.category;
-                this.render(this.container);
-            } else if (button.dataset.view) {
-                this.currentView = button.dataset.view;
-                this.render(this.container);
+            if (button.dataset.view) {
+                this.currentPage = 1;
+                this.currentState.viewMode = button.dataset.view;
+                this.dataTable = null;
+                this._renderHeader();
+                this._updateView();
             } else if (button.id === 'query-btn') {
-                console.log(`Querying for category ${this.activeCategory} in view ${this.currentView}...`);
-                this.render(this.container);
-            } else if (button.id === 'configure-columns-btn') {
-                // 【核心修改】从外部调用DataTable的配置方法
-                if (this.currentView === 'list' && this.dataTable) {
-                    this.dataTable._showColumnConfigModal();
-                }
+                this.currentPage = 1;
+                this.currentState.category = this.headerContainer.querySelector('#category-filter').value;
+                const deptInput = this.headerContainer.querySelector('#department-filter');
+                const planStatusSelect = this.headerContainer.querySelector('#plan-status-filter');
+                const resultStatusSelect = this.headerContainer.querySelector('#result-status-filter');
+
+                this.currentState.department = deptInput ? deptInput.value : '';
+                this.currentState.planStatus = planStatusSelect ? planStatusSelect.value : 'all';
+                this.currentState.resultStatus = resultStatusSelect ? resultStatusSelect.value : 'all';
+                this._loadData();
+            } else if (button.id === 'configure-columns-btn' && this.dataTable) {
+                this.dataTable._showColumnConfigModal();
+            } else if (button.id === 'export-btn') {
+                // ... Export logic
             }
         });
 
-        header.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && e.target.matches('input')) {
+        this.contentContainer.addEventListener('click', (e) => {
+            const drillDownLink = e.target.closest('a.drill-down');
+            if (drillDownLink) {
                 e.preventDefault();
-                header.querySelector('#query-btn').click();
+                this.currentState.department = drillDownLink.dataset.department || '';
+                this.currentState.planStatus = drillDownLink.dataset.planStatus || 'all';
+                this.currentState.resultStatus = drillDownLink.dataset.resultStatus || 'all';
+
+                this.currentState.viewMode = 'list';
+                this.currentPage = 1;
+                this.dataTable = null;
+                this._renderHeader();
+                this._updateView();
             }
+        });
 
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-                e.preventDefault();
-                const focusable = Array.from(header.querySelectorAll('input, button'));
-                const currentIndex = focusable.indexOf(document.activeElement);
-
-                if (currentIndex === -1) {
-                    focusable[0]?.focus();
-                    return;
-                }
-
-                let nextIndex;
-                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                    nextIndex = (currentIndex + 1) % focusable.length;
-                } else {
-                    nextIndex = (currentIndex - 1 + focusable.length) % focusable.length;
-                }
-                focusable[nextIndex]?.focus();
+        this.contentContainer.addEventListener('pageChange', (e) => {
+            if (this.currentState.viewMode === 'list') {
+                this.currentPage = e.detail.pageNum;
+                this._loadData();
             }
         });
     }

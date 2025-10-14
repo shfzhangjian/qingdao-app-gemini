@@ -27,7 +27,7 @@ import java.util.Map;
  * 计量管理模块的统一Controller
  */
 @RestController
-@RequestMapping("/api/metrology")
+@RequestMapping("/api/metrology2")
 public class MetrologyController {
 
     private static final Logger log = LoggerFactory.getLogger(MetrologyController.class);
@@ -97,7 +97,7 @@ public class MetrologyController {
         }
 
         // 3. 调用工具类执行导出
-        ExcelExportUtil.exportLedger(response, columnsToExport, dataToExport);
+        //ExcelExportUtil.exportLedger(response, columnsToExport, dataToExport);
     }
 
     /**
