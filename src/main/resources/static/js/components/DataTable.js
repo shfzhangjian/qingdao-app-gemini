@@ -1,51 +1,69 @@
 /**
  * 源码路径: js/components/DataTable.js
  * 功能说明: 一个功能强大的数据表格组件
- * - 支持通过配置动态生成
- * - 支持列的显示/隐藏/排序/宽度调整/锁定，并能本地持久化
- * - 集成了统一的工具栏和底部分页
- * - 通过Flexbox完美解决滚动条高度自适应问题
- * - 原生支持单选和多选（带全选）功能
+ * - 支持动态生成、列配置持久化、分页、单选/多选等。
  * 版本变动:
- * v2.8.2 - 2025-10-13: 修复了因不正确的深拷贝导致列的render函数丢失的bug。
+ * v2.9.6 - 2025-10-14: 优化了配置列过滤功能，使用CSS类替代行内样式，修复了相关bug。
  */
 
 import Modal from './Modal.js';
 import QueryForm from './QueryForm.js';
 
-
 export default class DataTable {
-    constructor({ columns = [], data = [], actions = [], filters = [], pagination = true, options = {} }) {
-        // 使用 function-safe 的方式复制列配置，避免 render 函数丢失
-        this.originalColumns = columns.map(c => ({...c, width: c.width || null, frozen: c.frozen || false }));
-        this.data = data;
+    constructor({ columns = [], data = [], actions = [], filters = [], options = {} }) {
+        // 保证 originalColumns 包含所有原始信息，且 frozen 有默认值
+        this.originalColumns = columns.map(c => ({...c, width: c.width || null, frozen: c.frozen || false, visible: c.visible !== false }));
+        this.data = data || [];
         this.actions = actions;
         this.filters = filters;
-        this.pagination = pagination;
-        this.options = { resizable: true, defaultColumnWidth: 150, getRowClass: null, ...options };
+        this.paginationInfo = null;
+        this.options = {
+            resizable: true,
+            defaultColumnWidth: 150,
+            getRowClass: null,
+            pagination: true,
+            ...options
+        };
         this.container = null;
+        // 构造时即加载配置，如果失败则使用原始配置
         this.columns = this._loadConfig() || this.originalColumns;
     }
 
+    /**
+     * 【已修复】重构加载逻辑，优先使用缓存的列顺序、可见性和锁定状态，
+     * 仅从原始配置中补充 render 函数等不可序列化的属性。
+     */
     _loadConfig() {
         if (!this.options.storageKey) return null;
         try {
             const savedConfig = localStorage.getItem(this.options.storageKey);
             if (savedConfig) {
-                let parsedConfig = JSON.parse(savedConfig);
-                const loadedKeys = new Set(parsedConfig.map(c => c.key));
+                console.log("[DataTable] 从缓存加载列配置...");
+                const parsedConfig = JSON.parse(savedConfig);
+                const originalColsMap = new Map(this.originalColumns.map(c => [c.key, c]));
 
-                const newColumns = this.originalColumns.filter(c => !loadedKeys.has(c.key));
-                parsedConfig.push(...newColumns);
+                // 1. 基于缓存的顺序和属性，恢复 render 函数
+                const loadedColumns = parsedConfig.map(savedCol => {
+                    const originalCol = originalColsMap.get(savedCol.key);
+                    if (originalCol) {
+                        // 以保存的列为基础，只补充 render 函数
+                        return { ...originalCol, ...savedCol };
+                    }
+                    return null; // 如果原始列已不存在，则忽略
+                }).filter(Boolean);
 
-                // Re-apply render functions from original config to the loaded config
-                return parsedConfig.map(savedCol => {
-                    const originalCol = this.originalColumns.find(c => c.key === savedCol.key);
-                    return { ...originalCol, ...savedCol };
+                // 2. 添加代码中新增的、缓存里没有的列
+                const loadedKeys = new Set(loadedColumns.map(c => c.key));
+                this.originalColumns.forEach(originalCol => {
+                    if (!loadedKeys.has(originalCol.key)) {
+                        loadedColumns.push(originalCol);
+                    }
                 });
+
+                return loadedColumns;
             }
         } catch (error) {
-            console.error("Failed to load table configuration:", error);
+            console.error("加载表格配置失败:", error);
         }
         return null;
     }
@@ -53,11 +71,12 @@ export default class DataTable {
     _saveConfig() {
         if (!this.options.storageKey) return;
         try {
-            // Only save serializable properties
+            // 只保存可序列化的关键属性
             const configToSave = this.columns.map(({ key, title, visible, width, frozen }) => ({ key, title, visible, width, frozen }));
             localStorage.setItem(this.options.storageKey, JSON.stringify(configToSave));
+            console.log("[DataTable] 列配置已保存到缓存。");
         } catch (error) {
-            console.error("Failed to save table configuration:", error);
+            console.error("保存表格配置失败:", error);
         }
     }
 
@@ -78,13 +97,13 @@ export default class DataTable {
     render(container) {
         if (!container) return;
         this.container = container;
+        console.log(`[DataTable] 正在渲染表格...`);
 
         const visibleColumns = this._getVisibleColumns();
-
-        let leftOffset = 0;
-        let rightOffset = 0;
         const processedColumns = visibleColumns.map(col => ({ ...col, style: '', classes: '' }));
 
+        // 【已修复】分别计算左侧和右侧锁定的偏移量
+        let leftOffset = 0;
         processedColumns.forEach(col => {
             if (col.frozen === 'left') {
                 col.style = `left: ${leftOffset}px;`;
@@ -93,16 +112,18 @@ export default class DataTable {
             }
         });
 
-        [...processedColumns].reverse().forEach(col => {
+        let rightOffset = 0;
+        // 从后向前遍历，正确计算右侧偏移
+        for (let i = processedColumns.length - 1; i >= 0; i--) {
+            const col = processedColumns[i];
             if (col.frozen === 'right') {
                 col.style = `right: ${rightOffset}px;`;
                 col.classes = 'dt-cell-frozen-right';
                 rightOffset += col.width || this.options.defaultColumnWidth;
             }
-        });
+        }
 
         const totalWidth = visibleColumns.reduce((sum, col) => sum + (col.width || this.options.defaultColumnWidth), 0);
-        console.log(`[DataTable] Calculated table min-width: ${totalWidth}px`);
 
         this.container.innerHTML = `
             <div style="display: flex; flex-direction: column; height: 100%;">
@@ -121,15 +142,14 @@ export default class DataTable {
         this._attachEventListeners();
     }
 
+    // ... 其他方法 (_createToolbar, _createColGroup, etc.) 保持不变 ...
     _createToolbar() {
         const actionsHtml = new QueryForm({ actions: this.actions })._createActionsHtml();
         const filtersHtml = new QueryForm({ fields: this.filters })._createFieldsHtml();
-
         let configButtonHtml = '';
         if (this.options.configurable) {
             configButtonHtml = `<button class="btn btn-sm btn-outline-secondary" data-action="configure-columns"><i class="bi bi-gear"></i> 配置列</button>`;
         }
-
         return `<div class="d-flex justify-content-between align-items-center mb-3">
                     <div class="d-flex justify-content-start gap-2">${actionsHtml}</div>
                     <div class="d-flex align-items-center gap-4">${filtersHtml}${configButtonHtml}</div>
@@ -150,10 +170,9 @@ export default class DataTable {
     }
 
     _createBody(processedColumns) {
-        if (this.data.length === 0) {
+        if (!this.data || this.data.length === 0) {
             return `<tr><td colspan="${processedColumns.length || 1}" class="text-center p-4">没有数据</td></tr>`;
         }
-
         return this.data.map(row => {
             const rowClass = typeof this.options.getRowClass === 'function' ? this.options.getRowClass(row) : '';
             return `<tr data-row-id="${row.id || ''}" class="${rowClass}">
@@ -167,17 +186,63 @@ export default class DataTable {
     }
 
     _createFooter() {
-        if (!this.pagination) return '';
-        return `<nav class="d-flex justify-content-end pt-2 mt-auto" style="border-top: 1px solid var(--border-color);">
-                    <ul class="pagination pagination-sm mb-0">
-                        <li class="page-item disabled"><a class="page-link" href="#">&laquo;</a></li>
-                        <li class="page-item"><a class="page-link" href="#">1</a></li>
-                        <li class="page-item active"><a class="page-link" href="#">2</a></li>
-                        <li class="page-item"><a class="page-link" href="#">3</a></li>
-                        <li class="page-item"><a class="page-link" href="#">...</a></li>
-                        <li class="page-item"><a class="page-link" href="#">10</a></li>
-                        <li class="page-item"><a class="page-link" href="#">&raquo;</a></li>
-                    </ul>
+        if (!this.options.pagination) return '';
+
+        const { pageNum = 1, pages = 1, total = 0 } = this.paginationInfo || {};
+
+        let paginationHtml = '';
+        if (pages > 1) {
+            const createPageItem = (p, label, isDisabled = false, isActive = false) => {
+                const disabledClass = isDisabled ? 'disabled' : '';
+                const activeClass = isActive ? 'active' : '';
+                return `<li class="page-item ${disabledClass} ${activeClass}"><a class="page-link" href="#" data-page="${p}">${label}</a></li>`;
+            };
+
+            paginationHtml += createPageItem(pageNum - 1, '&laquo;', pageNum <= 1);
+
+            let startPage, endPage;
+            if (pages <= 7) {
+                startPage = 1;
+                endPage = pages;
+            } else {
+                if (pageNum <= 4) {
+                    startPage = 1;
+                    endPage = 5;
+                } else if (pageNum + 3 >= pages) {
+                    startPage = pages - 4;
+                    endPage = pages;
+                } else {
+                    startPage = pageNum - 2;
+                    endPage = pageNum + 2;
+                }
+            }
+
+            if (startPage > 1) {
+                paginationHtml += createPageItem(1, '1');
+                if (startPage > 2) {
+                    paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHtml += createPageItem(i, i, false, i === pageNum);
+            }
+
+            if (endPage < pages) {
+                if (endPage < pages - 1) {
+                    paginationHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+                paginationHtml += createPageItem(pages, pages);
+            }
+
+            paginationHtml += createPageItem(pageNum + 1, '&raquo;', pageNum >= pages);
+        }
+
+        const totalCountHtml = `<span class="text-secondary me-3">共 ${total} 条</span>`;
+
+        return `<nav class="d-flex justify-content-between align-items-center pt-2 mt-auto" style="border-top: 1px solid var(--border-color);">
+                    <div>${totalCountHtml}</div>
+                    <ul class="pagination pagination-sm mb-0">${paginationHtml}</ul>
                 </nav>`;
     }
 
@@ -190,7 +255,20 @@ export default class DataTable {
             });
         }
         this._attachSelectionListeners();
+        this._attachPaginationListeners();
         if (this.options.resizable) this._attachResizeListeners();
+    }
+
+    _attachPaginationListeners() {
+        this.container.addEventListener('click', e => {
+            const link = e.target.closest('.page-link[data-page]');
+            if (link && !link.parentElement.classList.contains('disabled')) {
+                e.preventDefault();
+                const pageNum = parseInt(link.dataset.page, 10);
+                const event = new CustomEvent('pageChange', { detail: { pageNum } });
+                this.container.dispatchEvent(event);
+            }
+        });
     }
 
     _attachResizeListeners() {
@@ -209,14 +287,11 @@ export default class DataTable {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = 'default';
-
             if (th && col) {
                 const colKey = th.dataset.colKey;
                 const targetColumn = this.columns.find(c => c.key === colKey);
-                const finalWidth = th.getBoundingClientRect().width;
-
                 if (targetColumn) {
-                    targetColumn.width = Math.round(finalWidth);
+                    targetColumn.width = Math.round(col.getBoundingClientRect().width);
                     this._saveConfig();
                     this.render(this.container);
                 }
@@ -229,7 +304,6 @@ export default class DataTable {
                 th = e.target.parentElement;
                 const colKey = th.dataset.colKey;
                 col = this.container.querySelector(`col[data-col-key="${colKey}"]`);
-
                 if (col) {
                     startX = e.clientX;
                     startWidth = col.offsetWidth;
@@ -260,7 +334,7 @@ export default class DataTable {
 
         table.querySelector('tbody')?.addEventListener('click', e => {
             const row = e.target.closest('tr');
-            if (!row || !row.parentElement) return;
+            if (!row || !row.parentElement || !row.dataset.rowId) return;
             if (e.target.closest('button')) return;
 
             if (this.options.selectable === 'single') {
@@ -276,17 +350,19 @@ export default class DataTable {
         });
     }
 
-
     _updateSelectAllState() {
         const selectAllCheckbox = this.container.querySelector('input[data-select="all"]');
         if (!selectAllCheckbox) return;
 
         const rowCheckboxes = Array.from(this.container.querySelectorAll('tbody input[data-row-id]'));
         const totalRows = rowCheckboxes.length;
-        if(totalRows === 0) return;
+        if(totalRows === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+            return;
+        }
 
         const checkedRows = rowCheckboxes.filter(cb => cb.checked).length;
-
         if (totalRows === checkedRows) {
             selectAllCheckbox.checked = true;
             selectAllCheckbox.indeterminate = false;
@@ -298,7 +374,6 @@ export default class DataTable {
             selectAllCheckbox.indeterminate = false;
         }
     }
-
 
 
     _showColumnConfigModal() {
@@ -326,12 +401,11 @@ export default class DataTable {
                         <button type="button" class="btn btn-outline-secondary ${col.frozen === 'right' ? 'active' : ''}" data-action="pin" data-value="right" title="右固定"><i class="bi bi-arrow-right-square"></i></button>
                     </div>
                     <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" ${col.visible !== false ? 'checked' : ''}>
+                        <input class="form-check-input" type="checkbox" role="switch" ${col.visible ? 'checked' : ''}>
                     </div>
                 </li>
             `).join('');
         };
-
         renderList(this.columns);
 
         const footer = `
@@ -341,63 +415,58 @@ export default class DataTable {
         `;
 
         const configModal = new Modal({ title: '列表字段设置', body: modalBody, footer: footer, size: 'lg' });
+        const modalElement = configModal.modalElement;
 
-        // Event Listeners
-        const filterInput = configModal.modalElement.querySelector('#column-config-filter');
-
-        filterInput.addEventListener('input', (e) => {
+        // 【已修复】1. 过滤功能 - 使用 classList.toggle
+        modalElement.querySelector('#column-config-filter').addEventListener('input', (e) => {
             const filterText = e.target.value.toLowerCase();
-            configModal.modalElement.querySelectorAll('#column-config-list li').forEach(item => {
+            modalElement.querySelectorAll('#column-config-list li').forEach(item => {
                 const title = item.querySelector('span').textContent.toLowerCase();
-                item.classList.toggle('d-none', !title.includes(filterText));
+                const isMatch = title.includes(filterText);
+                item.classList.toggle('d-none', !isMatch);
             });
         });
 
-        configModal.modalElement.querySelector('#column-config-select-all').addEventListener('click', () => {
-            configModal.modalElement.querySelectorAll('#column-config-list li:not(.d-none) input[type="checkbox"]').forEach(cb => cb.checked = true);
+        // 2. 锁定/Pin功能
+        modalElement.querySelector('#column-config-list').addEventListener('click', (e) => {
+            const pinButton = e.target.closest('button[data-action="pin"]');
+            if (pinButton) {
+                const group = pinButton.parentElement;
+                group.querySelector('.active')?.classList.remove('active');
+                pinButton.classList.add('active');
+            }
         });
 
-        configModal.modalElement.querySelector('#column-config-invert').addEventListener('click', () => {
-            configModal.modalElement.querySelectorAll('#column-config-list li:not(.d-none) input[type="checkbox"]').forEach(cb => cb.checked = !cb.checked);
+        // 3. 全选/反选/保存/恢复默认 功能
+        modalElement.querySelector('#column-config-select-all').addEventListener('click', () => {
+            modalElement.querySelectorAll('#column-config-list li:not(.d-none) input[type="checkbox"]').forEach(cb => cb.checked = true);
         });
-
-        configModal.modalElement.querySelector('#save-column-config').addEventListener('click', () => {
-            const finalColumns = [];
-            const modalListItems = configModal.modalElement.querySelectorAll('#column-config-list li');
-
-            modalListItems.forEach(item => {
+        modalElement.querySelector('#column-config-invert').addEventListener('click', () => {
+            modalElement.querySelectorAll('#column-config-list li:not(.d-none) input[type="checkbox"]').forEach(cb => cb.checked = !cb.checked);
+        });
+        modalElement.querySelector('#save-column-config').addEventListener('click', () => {
+            const newColumns = [];
+            // 基于DOM中的顺序来构建新的列数组
+            modalElement.querySelectorAll('#column-config-list li').forEach(item => {
                 const key = item.dataset.key;
-                const originalColumn = this.originalColumns.find(c => c.key === key);
-
-                if (originalColumn) {
-                    const visible = item.querySelector('input[type="checkbox"]').checked;
-                    const frozenValue = item.querySelector('.btn-group .active').dataset.value;
-                    const frozen = frozenValue === 'false' ? false : frozenValue;
-
-                    finalColumns.push({
-                        ...originalColumn,
-                        ...this.columns.find(c => c.key === key),
-                        visible,
-                        frozen,
-                    });
+                const currentColumn = this.columns.find(c => c.key === key);
+                if (currentColumn) {
+                    currentColumn.visible = item.querySelector('input[type="checkbox"]').checked;
+                    const frozenBtn = item.querySelector('.btn-group .active');
+                    currentColumn.frozen = frozenBtn ? (frozenBtn.dataset.value === 'false' ? false : frozenBtn.dataset.value) : false;
+                    newColumns.push(currentColumn);
                 }
             });
-
-            this.columns = finalColumns;
+            this.columns = newColumns;
             this._saveConfig();
             this.render(this.container);
             configModal.hide();
         });
-
-        // 【新增】恢复默认按钮事件
-        configModal.modalElement.querySelector('#reset-column-config').addEventListener('click', async () => {
+        modalElement.querySelector('#reset-column-config').addEventListener('click', async () => {
             const confirmed = await Modal.confirm('恢复默认设置', '您确定要将列的显示、排序、宽度和锁定状态恢复到初始默认设置吗？此操作不可撤销。');
             if (confirmed) {
-                if (this.options.storageKey) {
-                    localStorage.removeItem(this.options.storageKey);
-                }
-                // Create a fresh copy from original config
-                this.columns = this.originalColumns.map(c => ({...c}));
+                if (this.options.storageKey) localStorage.removeItem(this.options.storageKey);
+                this.columns = this.originalColumns.map(c => ({...c})); // 从原始配置重置
                 this.render(this.container);
                 configModal.hide();
             }
@@ -409,38 +478,71 @@ export default class DataTable {
 
     _attachDragAndDropHandlers(list) {
         let draggedItem = null;
-
         list.addEventListener('dragstart', e => {
-            draggedItem = e.target;
-            setTimeout(() => e.target.style.opacity = '0.5', 0);
+            if(e.target.tagName === 'LI') {
+                draggedItem = e.target;
+                setTimeout(() => e.target.classList.add('dragging'), 0);
+            }
         });
-
         list.addEventListener('dragend', e => {
-            setTimeout(() => e.target.style.opacity = '', 0);
-            draggedItem = null;
+            if(draggedItem) {
+                setTimeout(() => draggedItem.classList.remove('dragging'), 0);
+                draggedItem = null;
+            }
         });
-
         list.addEventListener('dragover', e => {
             e.preventDefault();
-            const afterElement = this._getDragAfterElement(list, e.clientY);
-            if (afterElement == null) {
-                list.appendChild(draggedItem);
-            } else {
-                list.insertBefore(draggedItem, afterElement);
+            const afterElement = [...list.querySelectorAll('li:not(.dragging)')].reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = e.clientY - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+
+            if (draggedItem) {
+                if (afterElement == null) {
+                    list.appendChild(draggedItem);
+                } else {
+                    list.insertBefore(draggedItem, afterElement);
+                }
             }
         });
     }
 
+    updateView(pageResult) {
+        if (!pageResult) {
+            console.error("[DataTable] updateView received invalid data:", pageResult);
+            this.data = [];
+            this.paginationInfo = { pageNum: 1, pages: 1, total: 0 };
+        } else {
+            this.data = Array.isArray(pageResult.list) ? pageResult.list : [];
+            this.paginationInfo = {
+                pageNum: pageResult.pageNum,
+                pages: pageResult.pages,
+                total: pageResult.total
+            };
+        }
 
-    updateData(newData) {
-        this.data = newData;
         if (this.container) {
             const tbody = this.container.querySelector('tbody');
             if (tbody) {
-                tbody.innerHTML = this._createBody();
-            } else {
-                this.render(this.container);
+                const visibleColumns = this._getVisibleColumns();
+                tbody.innerHTML = this._createBody(visibleColumns);
             }
+            const footer = this.container.querySelector('nav');
+            if (footer) {
+                const newFooter = document.createElement('div');
+                newFooter.innerHTML = this._createFooter();
+                if(newFooter.firstChild) {
+                    footer.replaceWith(newFooter.firstChild);
+                } else {
+                    footer.innerHTML = '';
+                }
+            }
+            this._updateSelectAllState();
         }
     }
 }

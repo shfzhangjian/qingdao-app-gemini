@@ -58,6 +58,7 @@
         <fastjson2.version>2.0.43</fastjson2.version>
         <hutool.version>5.8.22</hutool.version>
         <jjwt.version>0.11.5</jjwt.version>
+        <poi.version>5.2.3</poi.version>
     </properties>
 
     <dependencies>
@@ -187,6 +188,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
             <version>${spring-boot-starter-web.version}</version>
+        </dependency>
+
+        <!-- Apache POI for Excel Export -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
         </dependency>
 
     </dependencies>

@@ -1,44 +1,46 @@
 /**
  * 源码路径: js/views/MetrologyLedger.js
  * 功能说明: 计量台账页面的视图逻辑。
- * 负责组装QueryForm和DataTable组件来构建完整的页面。
+ * - 从后端API获取并展示分页数据。
+ * - 实现查询表单和表格筛选器的联合查询。
+ * - 监听分页事件，实现前后端分页联动。
  * 版本变动:
- * v1.9.1 - 2025-10-13: 为 "是否过期" 和 "台账挂接" 列的渲染函数添加调试日志。
+ * v2.5.0 - 2025-10-14: 采用“先渲染框架，后加载数据”模式，优化了加载体验和错误处理。
  */
 import DataTable from '../components/DataTable.js';
 import QueryForm from '../components/QueryForm.js';
 import Modal from '../components/Modal.js';
-
-function generateMetrologyLedgerData() {
-    const items = [
-        { expired: false, isLinked: true, sysId: 'SYS001', seq: 1, enterpriseId: '01200002', erpId: 'JL009219', deviceName: '电子台秤', model: 'TCS-B', factoryId: '1339744', range: '0-1000kg', location: '车间A-01', accuracy: 'III级', nextDate: '2026-08-22', status: '正常' },
-        { expired: true, isLinked: false, sysId: 'SYS002', seq: 2, enterpriseId: '01200003', erpId: 'JL009220', deviceName: '电子台秤', model: 'TCS-B', factoryId: '234422', range: '0.4kg-60kg', location: '仓库B-05', accuracy: 'III级', nextDate: '2025-01-10', status: '正常' },
-        { expired: false, isLinked: true, sysId: 'SYS003', seq: 3, enterpriseId: '01200004', erpId: 'JL009221', deviceName: '电子台秤', model: 'TCS-B', factoryId: '223421', range: '0-1000kg', location: '车间A-02', accuracy: 'III级', nextDate: '2026-08-20', status: '正常' },
-        { expired: false, isLinked: false, sysId: 'SYS004', seq: 4, enterpriseId: '01200005', erpId: 'JL009222', deviceName: '压力计', model: 'YK-100', factoryId: '5582910', range: '0-1.6MPa', location: '管道1', accuracy: '1.6级', nextDate: '2026-08-19', status: '维修中' },
-        { expired: false, isLinked: true, sysId: 'SYS005', seq: 5, enterpriseId: '01200006', erpId: 'JL009223', deviceName: '温度计', model: 'WSS-411', factoryId: '9821345', range: '-40-600℃', location: '锅炉3', accuracy: '1.5级', nextDate: '2026-08-18', status: '已报废' },
-    ];
-    // Add placeholder data for all columns
-    return items.map(item => ({...item, controlId: '-', gbAccuracy: '-', uncertainty: '-', resolution: '-', techParams: '-', parentDevice: '-', abc: 'A', controlType: '-', manufacturer: '-', mfgDate: '-', startDate: '-', owner: '-', funcUnit: '-', assetCode: '-', periodUnit: '-', confirmDate: '-', interval: '-', verificationType: '-', verificationUnit: '-', mandatory: '-', energyMgmt: '-', qcInstrument: '-', verifier: '-', validator: '-', notes: '-', deptId: '-', deptName: '-', createDate: '-', firstVerification: '-', reviewer: '-' }));
-}
+import { getMetrologyLedger, exportMetrologyLedger } from '../services/api.js';
 
 export default class MetrologyLedger {
     constructor() {
-        this.data = generateMetrologyLedgerData();
         this.dataTable = null;
         this.queryForm = null;
+        this.container = null;
+        this.currentPage = 1;
+        this.pageSize = 10;
+
+        this.currentFilters = {
+            deviceStatus: 'all',
+            abcCategory: 'all'
+        };
     }
 
     render(container) {
+        this.container = container;
         container.innerHTML = `
-            <div class="p-3 rounded" style="background-color: var(--bg-dark-secondary); display: flex; flex-direction: column; height: 100%;">
+            <div class="p-3 rounded" style="background-color: var(--bg-secondary); display: flex; flex-direction: column; height: 100%;">
                 <div id="query-form-container"></div>
                 <div id="data-table-container" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"></div>
             </div>
         `;
 
         this._renderQueryForm(container.querySelector('#query-form-container'));
+        // 【核心修改】1. 先完整渲染出表格的框架
         this._renderDataTable(container.querySelector('#data-table-container'));
 
+        // 【核心修改】2. 然后再去异步加载数据填充表格
+        this._loadData();
         this._attachEventListeners();
     }
 
@@ -49,65 +51,58 @@ export default class MetrologyLedger {
             { type: 'text', label: '出厂编号', name: 'factoryId', containerClass: 'col-md-4', labelWidth: '120px' },
             { type: 'text', label: '使用部门', name: 'department', containerClass: 'col-md-4', labelWidth: '120px' },
             { type: 'text', label: '安装位置/使用人', name: 'locationUser', containerClass: 'col-md-4', labelWidth: '120px' },
-            { type: 'text', label: '所属设备', name: 'parentDevice', containerClass: 'col-md-4', labelWidth: '120px', defaultValue: '46#ZB48' }
+            { type: 'text', label: '所属设备', name: 'parentDevice', containerClass: 'col-md-4', labelWidth: '120px', defaultValue: '' }
         ];
 
         this.queryForm = new QueryForm({ fields: formFields });
-        container.innerHTML = `<div class="p-3 rounded mb-3" style="background-color: var(--bg-dark-primary);"><div class="d-flex flex-wrap align-items-center row-gap-3">${this.queryForm._createFieldsHtml()}</div></div>`;
+        container.innerHTML = `<div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);"><div class="d-flex flex-wrap align-items-center row-gap-3">${this.queryForm._createFieldsHtml()}</div></div>`;
+        this.queryForm.container = container;
     }
 
     _renderDataTable(container) {
         const columns = [
-            { key: 'expired', title: '是否过期', visible: true, render: (val) => {
-                    console.log(`Rendering 'expired' column with value:`, val);
-                    return val ? '<i class="bi bi-check-circle-fill text-danger"></i>' : '<i class="bi bi-circle text-secondary"></i>';
-                }},
-            { key: 'isLinked', title: '台账挂接', visible: true, render: (val) => {
-                    console.log(`Rendering 'isLinked' column with value:`, val);
-                    return val ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-circle text-secondary"></i>';
-                }},
-            { key: 'sysId', title: '系统编号', visible: true },
-            { key: 'seq', title: '序号', visible: true },
-            { key: 'enterpriseId', title: '企业编号', visible: true },
-            { key: 'erpId', title: 'ERP编号', visible: true },
-            { key: 'deviceName', title: '设备名称', visible: true },
-            { key: 'model', title: '规格型号', visible: true },
-            { key: 'controlId', title: '中控编号', visible: true },
-            { key: 'location', title: '安装位置/使用人', visible: true },
-            { key: 'factoryId', title: '出厂编号', visible: true },
-            { key: 'range', title: '量程范围', visible: true },
-            { key: 'accuracy', title: '准确度等级/最大允许误差', visible: true },
+            // --- 核心显示字段 ---
+            { key: 'expired', title: '是否过期', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-danger"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
+            { key: 'isLinked', title: '台账挂接', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
+            { key: 'sysId', title: '系统编号', visible: true, width: 100 },
+            { key: 'enterpriseId', title: '企业编号', visible: true, width: 120 },
+            { key: 'deviceName', title: '设备名称', visible: true, width: 180 },
+            { key: 'model', title: '规格型号', visible: true, width: 120 },
+            { key: 'factoryId', title: '出厂编号', visible: true, width: 120 },
+            { key: 'location', title: '安装位置/使用人', visible: true, width: 150 },
+            { key: 'accuracy', title: '准确度等级', visible: true, width: 120 },
+            { key: 'status', title: '设备状态', visible: true, width: 90 },
+            { key: 'nextDate', title: '下次确认日期', visible: true, width: 120 },
+            { key: 'parentDevice', title: '所属设备', visible: true, width: 120 },
+            { key: 'department', title: '使用部门', visible: true, width: 120 },
+            { key: 'abc', title: 'ABC分类', visible: true, width: 90 },
+
+            // --- 默认隐藏字段 ---
+            { key: 'seq', title: '序号', visible: false },
+            { key: 'erpId', title: 'ERP编号', visible: false },
+            { key: 'range', title: '量程范围', visible: false },
+            { key: 'pointCheckStatus', title: '点检状态', visible: false },
+            { key: 'owner', title: '责任人', visible: false },
+            { key: 'verifier', title: '检定员', visible: false },
             { key: 'gbAccuracy', title: 'GB17167要求准确度', visible: false },
             { key: 'uncertainty', title: '不确定度', visible: false },
             { key: 'resolution', title: '分辨力/分度值', visible: false },
             { key: 'techParams', title: '技术参数', visible: false },
-            { key: 'parentDevice', title: '所属设备', visible: true },
-            { key: 'abc', title: 'ABC分类', visible: true },
-            { key: 'controlType', title: '管控类型', visible: false },
+            { key: 'classStandard', title: '分类标准', visible: false },
             { key: 'manufacturer', title: '制造单位', visible: false },
             { key: 'mfgDate', title: '出厂日期', visible: false },
             { key: 'startDate', title: '启用日期', visible: false },
-            { key: 'owner', title: '责任人', visible: false },
             { key: 'funcUnit', title: '设备或系统功能单元', visible: false },
             { key: 'assetCode', title: '固定资产编码', visible: false },
-            { key: 'periodUnit', title: '周期单位', visible: false },
-            { key: 'confirmDate', title: '确认日期', visible: false },
-            { key: 'nextDate', title: '下次确认日期', visible: true },
             { key: 'interval', title: '确认间隔', visible: false },
+            { key: 'confirmDate', title: '确认日期', visible: false },
             { key: 'verificationType', title: '检定类型', visible: false },
             { key: 'verificationUnit', title: '检定单位', visible: false },
             { key: 'mandatory', title: '强检标识', visible: false },
-            { key: 'energyMgmt', title: '能源管理分项', visible: false },
+            { key: 'energyClass', title: '能源分类', visible: false },
+            { key: 'energyToolType', title: '能源器具种类', visible: false },
             { key: 'qcInstrument', title: '质检仪器', visible: false },
-            { key: 'verifier', title: '检定员', visible: false },
-            { key: 'validator', title: '验证人', visible: false },
-            { key: 'notes', title: '备注', visible: false },
-            { key: 'status', title: '设备状态', visible: true },
-            { key: 'deptId', title: '使用部门ID', visible: false },
-            { key: 'deptName', title: '使用部门', visible: false },
-            { key: 'createDate', title: '创建日期', visible: false },
-            { key: 'firstVerification', title: '首次检定', visible: false },
-            { key: 'reviewer', title: '复核人', visible: false },
+            { key: 'description', title: '异常描述', visible: false },
         ];
 
         const actions = [
@@ -117,12 +112,11 @@ export default class MetrologyLedger {
 
         const filters = [
             { type: 'pills', label: '设备状态', name: 'deviceStatus', options: [{label: '全部', value: 'all', checked: true}, {label: '正常', value: 'normal'}, {label: '维修中', value: 'repair'}, {label: '已报废', value: 'scrapped'}] },
-            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: 'A', value: 'a', checked: true}, {label: 'B', value: 'b'}, {label: 'C', value: 'c'}] }
+            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'a'}, {label: 'B', 'value': 'b'}, {label: 'C', value: 'c'}] }
         ];
 
         this.dataTable = new DataTable({
             columns: columns,
-            data: this.data,
             actions: actions,
             filters: filters,
             options: {
@@ -135,24 +129,117 @@ export default class MetrologyLedger {
         this.dataTable.render(container);
     }
 
+    async _loadData() {
+        if (!this.dataTable || !this.dataTable.container) return;
+
+        const tbody = this.dataTable.container.querySelector('tbody');
+        if (!tbody) return;
+
+        // 【核心修改】在 tbody 中显示加载状态
+        const visibleColsCount = this.dataTable._getVisibleColumns().length;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="${visibleColsCount}" class="text-center p-4">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span class="ms-2">正在加载数据...</span>
+                </td>
+            </tr>
+        `;
+
+        try {
+            const queryValues = this.queryForm.getValues();
+
+            const params = {
+                ...queryValues,
+                pageNum: this.currentPage,
+                pageSize: this.pageSize,
+                deviceStatus: this.currentFilters.deviceStatus,
+                abcCategory: this.currentFilters.abcCategory
+            };
+
+            const pageResult = await getMetrologyLedger(params);
+
+            console.log("[DEBUG] Received from backend:", pageResult);
+
+            // 【核心修改】不再全量渲染，仅更新数据
+            this.dataTable.updateView(pageResult);
+
+        } catch (error) {
+            console.error("加载台账数据失败:", error);
+            Modal.alert(`加载台账数据失败: ${error.message}`);
+
+            // 【核心修改】在 tbody 中显示错误信息
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="${visibleColsCount}" class="text-center p-4 text-danger">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        数据加载失败，请检查网络或联系管理员。
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+
     _attachEventListeners() {
-        const tableContainer = document.getElementById('data-table-container');
+        const tableContainer = this.container.querySelector('#data-table-container');
         if (!tableContainer) return;
 
-        tableContainer.addEventListener('click', (e) => {
+        // Listen for clicks on action buttons (Search, Export)
+        tableContainer.addEventListener('click', async (e) => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
 
             const action = button.dataset.action;
-            if (action === 'search') {
-                const queryValues = this.queryForm.getValues();
-                const status = tableContainer.querySelector('input[name="deviceStatus"]:checked').value;
-                const category = tableContainer.querySelector('input[name="abcCategory"]:checked').value;
 
-                console.log('Searching with:', { ...queryValues, status, category });
-                Modal.alert('执行查询（模拟）');
+            if (action === 'search') {
+                this.currentPage = 1;
+                this._loadData();
+            } else if (action === 'export') {
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在导出...';
+
+                try {
+                    const queryValues = this.queryForm.getValues();
+
+                    const params = {
+                        ...queryValues,
+                        deviceStatus: this.currentFilters.deviceStatus,
+                        abcCategory: this.currentFilters.abcCategory,
+                        // Get current visible columns config from DataTable
+                        columns: this.dataTable.columns
+                            .filter(col => col.visible)
+                            .map(({ key, title }) => ({ key, title }))
+                    };
+
+                    await exportMetrologyLedger(params);
+
+                } catch (error) {
+                    console.error("导出失败:", error);
+                    Modal.alert(`导出失败: ${error.message}`);
+                } finally {
+                    button.disabled = false;
+                    button.innerHTML = '导出';
+                }
             }
+        });
+
+        // Listen for filter changes
+        tableContainer.addEventListener('change', (e) => {
+            const radio = e.target.closest('input[type="radio"]');
+            if (radio && (radio.name === 'deviceStatus' || radio.name === 'abcCategory')) {
+                this.currentFilters[radio.name] = radio.value;
+                this.currentPage = 1;
+                this._loadData();
+            }
+        });
+
+        // Listen for pagination changes
+        tableContainer.addEventListener('pageChange', (e) => {
+            this.currentPage = e.detail.pageNum;
+            this._loadData();
         });
     }
 }
-

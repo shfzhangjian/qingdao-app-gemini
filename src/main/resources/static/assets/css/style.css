@@ -236,13 +236,30 @@ body.theme-light .form-control::placeholder { color: #6c757d; }
 
 .table { table-layout: fixed; --bs-table-bg: var(--bg-secondary); --bs-table-color: var(--text-primary); --bs-table-border-color: var(--border-color); --bs-table-striped-bg: rgba(0,0,0,0.05); --bs-table-hover-bg: rgba(0,0,0,0.075); }
 .table thead th { position: sticky; top: 0; z-index: 1; background-color: var(--bg-secondary); border-bottom-width: 2px !important; white-space: nowrap; border-color: var(--border-color); border-width: 0 0 1px 1px; }
-/* 【核心修复】将规则限定在DataTable组件内部，避免影响其他表格 */
+
+/* --- 【核心修复】锁定列样式 --- */
+.table th.dt-cell-frozen-left, .table td.dt-cell-frozen-left {
+    position: sticky;
+    z-index: 2;
+    background-color: var(--bg-secondary);
+    border-right: 1px solid var(--border-color) !important;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+}
+.table th.dt-cell-frozen-right, .table td.dt-cell-frozen-right {
+    position: sticky;
+    z-index: 2;
+    background-color: var(--bg-secondary);
+    border-left: 1px solid var(--border-color) !important;
+    box-shadow: -2px 0 5px rgba(0,0,0,0.2);
+}
+.table thead th.dt-cell-frozen-left, .table thead th.dt-cell-frozen-right {
+    z-index: 3; /* 让表头锁定列在普通表头之上 */
+}
+/* ---------------------------------- */
+
 .datatable-wrapper .table thead th:first-child { border-left-width: 0; }
 body.theme-dark .table thead th { background-color: #343a40; }
 .table thead .resizer { position: absolute; top: 0; right: -2px; width: 5px; height: 100%; cursor: col-resize; z-index: 1; }
-.table th.dt-cell-frozen-left, .table td.dt-cell-frozen-left { position: sticky; z-index: 2; background-color: var(--bg-secondary); }
-.table th.dt-cell-frozen-right, .table td.dt-cell-frozen-right { position: sticky; z-index: 2; background-color: var(--bg-secondary); }
-.table thead th.dt-cell-frozen-left, .table thead th.dt-cell-frozen-right { z-index: 3; background-color: var(--bg-secondary); }
 body.theme-dark .table thead th.dt-cell-frozen-left, body.theme-dark .table thead th.dt-cell-frozen-right { background-color: #343a40; }
 .table tbody tr { cursor: pointer; }
 .table-active-custom { --bs-table-bg-state: var(--accent-color); --bs-table-color-state: #fff; background-color: var(--bs-table-bg-state) !important; color: var(--bs-table-color-state) !important; }
@@ -259,6 +276,32 @@ body.theme-dark .modal-header .btn-close, body.theme-dark .offcanvas-header .btn
 .dropdown-item { color: var(--text-primary); }
 .dropdown-item:hover, .dropdown-item:focus { background-color: rgba(0,0,0,0.1); color: var(--text-primary); }
 body.theme-dark .dropdown-item:hover, body.theme-dark .dropdown-item:focus { background-color: #3a3f44; }
+
+/* 【核心修复】1. 配置列对话框内容高度 */
+#column-config-list {
+    display: block;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* 【核心修复】2. 锁定列在 Hover 和 Active 状态下的背景色 */
+.table-hover > tbody > tr:hover > .dt-cell-frozen-left,
+.table-hover > tbody > tr:hover > .dt-cell-frozen-right {
+    background-color: var(--bs-table-hover-bg);
+}
+
+.table > tbody > tr.table-active-custom > .dt-cell-frozen-left,
+.table > tbody > tr.table-active-custom > .dt-cell-frozen-right {
+    background-color: var(--bs-table-bg-state);
+    color: var(--bs-table-color-state);
+}
+
+/* 改进拖拽时的视觉效果 */
+.list-group-item.dragging {
+    opacity: 0.5;
+    background-color: #444 !important;
+}
+
 
 .list-group-item { background-color: transparent; border-color: var(--border-color); color: var(--text-primary); }
 .list-group-item:hover { background-color: rgba(0,0,0,0.1); }
