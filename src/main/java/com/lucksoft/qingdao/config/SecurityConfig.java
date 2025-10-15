@@ -29,9 +29,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authz -> authz
                         // 允许所有用户访问根URL和主HTML文件
                         .antMatchers("/", "/index.html").permitAll()
-                        // 【更新】允许访问所有在 /assets/ 和 /js/ 目录下的静态资源
-                        .antMatchers("/assets/**", "/js/**","/libs/**","/api/metrology/**").permitAll()
+                        // 【核心修复】移除对 /api/metrology/** 的公开访问权限
+                        .antMatchers("/assets/**", "/js/**","/libs/**").permitAll()
                         .antMatchers("/assets/**", "/js/components/**","/js/views/**","/js/services/**").permitAll()
+                        // [新增] 允许匿名访问SSO所需的中转页、脚本和后台验证接口
+                        .antMatchers("/sso.html", "/js/sso.js", "/sso/**").permitAll()
+                        // [新增] 允许访问 Token 生成工具页面
+                        .antMatchers("/gen_token.html").permitAll()
                         // 保留您原有的其他公共端点
                         .antMatchers("/login.html", "/stomp.min.js", "/sockjs.min.js","/main.html","/query-template.html", "/simulate.html").permitAll()
                         .antMatchers("/my-websocket/**").permitAll()
@@ -51,3 +55,4 @@ public class SecurityConfig {
         return http.build();
     }
 }
+

@@ -3,9 +3,9 @@
  * 功能说明: 计量任务页面的视图逻辑。
  * - 功能完整，包含查询、分页、筛选、异常标记和Excel导出。
  * 版本变动:
- * v2.1.0 - 2025-10-14: 全面重构，对齐台账页面的所有功能。
+ * v3.3.0 - 2025-10-15: [UI重构] 将查询表单调整为响应式单行五列布局。
  */
-import DataTable from '../components/DataTable.js';
+import DataTable from '../components/Optimized_DataTable.js';
 import QueryForm from '../components/QueryForm.js';
 import Modal from '../components/Modal.js';
 import { getMetrologyTasks, exportMetrologyTasks } from '../services/api.js';
@@ -15,13 +15,6 @@ export default class MetrologyTasks {
         this.dataTable = null;
         this.queryForm = null;
         this.container = null;
-        this.currentPage = 1;
-        this.pageSize = 10;
-
-        this.currentFilters = {
-            taskStatus: 'unchecked',
-            abcCategory: 'all' // 默认显示所有分类
-        };
     }
 
     render(container) {
@@ -40,15 +33,21 @@ export default class MetrologyTasks {
         this._attachEventListeners();
     }
 
+    /**
+     * [核心修改] 将所有筛选条件统一到此查询表单中
+     */
     _renderQueryForm(container) {
-        this.queryForm = new QueryForm({
-            fields: [
-                { type: 'text', label: '设备名称', name: 'deviceName', style: 'width: 180px;' },
-                { type: 'text', label: '企业编号', name: 'enterpriseId', style: 'width: 180px;' },
-                { type: 'daterange', label: '时间范围', name: 'dateRange', style: 'width: 240px;' },
-            ]
-        });
-        container.innerHTML = `<div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 rounded" style="background-color: var(--bg-primary);">${this.queryForm._createFieldsHtml()}</div>`;
+        const formFields = [
+            { type: 'daterange', label: '时间范围', name: 'dateRange', containerClass: 'col-12 col-lg' },
+            { type: 'text', label: '设备名称', name: 'deviceName', containerClass: 'col-12 col-lg' },
+            { type: 'text', label: '企业编号', name: 'enterpriseId', containerClass: 'col-12 col-lg' },
+            { type: 'pills', label: '任务状态', name: 'taskStatus', options: [{label: '未检', value: 'unchecked', checked: true}, {label: '已检', value: 'checked'}, {label: '异常', value: 'abnormal'}, {label: '全部', value: 'all'}], containerClass: 'col-12 col-lg' },
+            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'a'}, {label: 'B', 'value': 'b'}, {label: 'C', value: 'c'}], containerClass: 'col-12 col-lg' }
+        ];
+
+        this.queryForm = new QueryForm({ fields: formFields });
+        // 使用 Bootstrap grid system 来实现灵活布局
+        container.innerHTML = `<div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);"><div class="row g-3 align-items-center">${this.queryForm._createFieldsHtml()}</div></div>`;
         this.queryForm.container = container;
         this.queryForm._initializeDatePickers();
     }
@@ -56,12 +55,12 @@ export default class MetrologyTasks {
     _renderDataTable(container) {
         const columns = [
             // --- 核心显示字段 ---
-            { key: 'date', title: '任务时间', visible: true, width: 120 },
+            { key: 'date', title: '任务时间', visible: true, width: 120, sortable: true },
             { key: 'pointCheckStatus', title: '点检状态', visible: true, width: 100 },
-            { key: 'enterpriseId', title: '企业编号', visible: true, width: 120 },
+            { key: 'enterpriseId', title: '企业编号', visible: true, width: 120, sortable: true },
             { key: 'deviceName', title: '设备名称', visible: true, width: 180 },
             { key: 'model', title: '规格型号', visible: true, width: 120 },
-            { key: 'factoryId', title: '出厂编号', visible: true, width: 120 },
+            { key: 'factoryId', title: '出厂编号', visible: true, width: 120, sortable: true },
             { key: 'location', title: '安装位置/使用人', visible: true, width: 150 },
             { key: 'accuracy', title: '准确度等级', visible: true, width: 120 },
             { key: 'status', title: '设备状态', visible: true, width: 90 },
@@ -79,10 +78,8 @@ export default class MetrologyTasks {
             { name: 'export', text: '导出', class: 'btn-outline-success' },
         ];
 
-        const filters = [
-            { type: 'pills', label: '任务状态', name: 'taskStatus', options: [{label: '未检', value: 'unchecked', checked: true}, {label: '已检', value: 'checked'}, {label: '异常', value: 'abnormal'}, {label: '全部', value: 'all'}] },
-            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'a'}, {label: 'B', value: 'b'}, {label: 'C', value: 'c'}] }
-        ];
+        // [核心修改] 移除表格内部的筛选器
+        const filters = [];
 
         this.dataTable = new DataTable({
             columns, actions, filters, data:[],
@@ -98,24 +95,28 @@ export default class MetrologyTasks {
     }
 
     async _loadData() {
-        const tbody = this.dataTable.container.querySelector('tbody');
-        if (!tbody) return;
-
-        const visibleCols = this.dataTable._getVisibleColumns().length;
-        tbody.innerHTML = `<tr><td colspan="${visibleCols}" class="text-center p-4"><div class="spinner-border spinner-border-sm"></div> 正在加载...</td></tr>`;
+        this.dataTable.toggleLoading(true);
 
         try {
+            // [核心修改] 所有查询参数现在都来自 queryForm
+            const formParams = this.queryForm.getValues();
+            const tableState = this.dataTable.state;
+
             const params = {
-                ...this.queryForm.getValues(),
-                ...this.currentFilters,
-                pageNum: this.currentPage,
-                pageSize: this.pageSize,
+                ...formParams,
+                pageNum: tableState.pageNum,
+                pageSize: tableState.pageSize,
+                sortBy: tableState.sortBy,
+                sortOrder: tableState.sortOrder,
             };
+
             const pageResult = await getMetrologyTasks(params);
             this.dataTable.updateView(pageResult);
         } catch (error) {
             console.error("加载计量任务失败:", error);
-            tbody.innerHTML = `<tr><td colspan="${visibleCols}" class="text-center p-4 text-danger">加载数据失败: ${error.message}</td></tr>`;
+            Modal.alert(`加载数据失败: ${error.message}`);
+        } finally {
+            this.dataTable.toggleLoading(false);
         }
     }
 
@@ -162,6 +163,9 @@ export default class MetrologyTasks {
         modal.show();
     }
 
+    /**
+     * [核心修改] 移除对表格内部筛选器 'change' 事件的监听
+     */
     _attachEventListeners() {
         const tableContainer = this.container.querySelector('#data-table-container');
         if (!tableContainer) return;
@@ -173,28 +177,34 @@ export default class MetrologyTasks {
             const action = button.dataset.action;
 
             if (action === 'search') {
-                this.currentPage = 1;
+                this.dataTable.state.pageNum = 1;
                 this._loadData();
             } else if (action === 'markAbnormal') {
-                const selectedRows = tableContainer.querySelectorAll('tbody tr.table-active-custom');
-                if (selectedRows.length !== 1) {
-                    Modal.alert(selectedRows.length > 1 ? '异常情况不支持批量提交' : '请选择一行以标记异常');
+                const selectedTrs = tableContainer.querySelectorAll('tbody tr.table-active-custom');
+                const selectedRowIds = [...new Set(Array.from(selectedTrs).map(tr => tr.dataset.rowId))];
+
+                if (selectedRowIds.length !== 1) {
+                    Modal.alert('请选择一行以标记异常');
                     return;
                 }
-                const selectedRowId = selectedRows[0].dataset.rowId;
-                const rowData = this.dataTable.data.find(item => item.id == selectedRowId);
+
+                const selectedRowId = selectedRowIds[0];
+                const rowData = this.dataTable.data.find(item => String(item.id) === selectedRowId);
+
                 if (rowData) {
                     this._showAbnormalWorkOrderModal(rowData);
                 } else {
                     Modal.alert('无法找到所选行的数据。');
                 }
+
             } else if (action === 'export') {
                 button.disabled = true;
                 button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 正在导出...';
                 try {
                     const params = {
                         ...this.queryForm.getValues(),
-                        ...this.currentFilters,
+                        sortBy: this.dataTable.state.sortBy,
+                        sortOrder: this.dataTable.state.sortOrder,
                         columns: this.dataTable.columns
                             .filter(col => col.visible)
                             .map(({ key, title }) => ({ key, title }))
@@ -210,17 +220,7 @@ export default class MetrologyTasks {
             }
         });
 
-        tableContainer.addEventListener('change', (e) => {
-            const radio = e.target.closest('input[type="radio"]');
-            if (radio && this.currentFilters.hasOwnProperty(radio.name)) {
-                this.currentFilters[radio.name] = radio.value;
-                this.currentPage = 1;
-                this._loadData();
-            }
-        });
-
-        tableContainer.addEventListener('pageChange', (e) => {
-            this.currentPage = e.detail.pageNum;
+        tableContainer.addEventListener('queryChange', () => {
             this._loadData();
         });
     }

@@ -1,7 +1,7 @@
 /**
  * 源码路径: js/components/Optimized_DataTable.js
  * 功能说明: 一个功能强大的数据表格组件
- * @version 3.2.0 - 2025-10-14: 补全所有方法实现，移除所有占位符，并添加了完整的中文注释。
+ * @version 3.5.0 - 2025-10-15: [新增] 首次加载时，若列总宽小于容器宽度，则自动拉伸以铺满。
  */
 import Modal from './Modal.js';
 
@@ -28,10 +28,9 @@ export default class DataTable {
             ...options
         };
         this.container = null;
-        this.isConfigModalOpen = false; // 防止重复打开“配置列”模态框的状态标志
-        this.scrollSyncAttached = false; // 防止重复绑定滚动同步事件的标志
+        this.isConfigModalOpen = false;
+        this.scrollSyncAttached = false;
 
-        // 表格的核心状态，管理分页、排序和筛选
         this.state = {
             pageNum: 1,
             pageSize: 10,
@@ -40,7 +39,10 @@ export default class DataTable {
             filters: this._getInitialFilters()
         };
 
-        this.columns = this._loadConfig() || this.originalColumns;
+        const loadedConfig = this._loadConfig();
+        this.columns = loadedConfig || this.originalColumns;
+        // [新增] 标记是否为首次加载（无本地配置）
+        this.isInitialLoad = !loadedConfig;
     }
 
     /**
@@ -71,11 +73,9 @@ export default class DataTable {
                 const originalColsMap = new Map(this.originalColumns.map(c => [c.key, c]));
                 const loadedColumns = parsedConfig.map(savedCol => {
                     const originalCol = originalColsMap.get(savedCol.key);
-                    // 以保存的配置为基础，并从原始配置中恢复 render 等函数属性
                     return originalCol ? { ...originalCol, ...savedCol } : null;
                 }).filter(Boolean);
                 const loadedKeys = new Set(loadedColumns.map(c => c.key));
-                // 将代码中新增的、但本地存储中没有的列追加到末尾
                 this.originalColumns.forEach(originalCol => {
                     if (!loadedKeys.has(originalCol.key)) loadedColumns.push(originalCol);
                 });
@@ -92,11 +92,46 @@ export default class DataTable {
     _saveConfig() {
         if (!this.options.storageKey) return;
         try {
-            // 只保存可序列化的关键属性
             const configToSave = this.columns.map(({ key, title, visible, width, frozen, sortable }) => ({ key, title, visible, width, frozen, sortable }));
             localStorage.setItem(this.options.storageKey, JSON.stringify(configToSave));
         } catch (error) { console.error("保存表格配置失败:", error); }
     }
+
+    /**
+     * [新增] 自动调整列宽以适应容器
+     * @private
+     */
+    _autoFitColumns(containerWidth) {
+        const visibleColumns = this._getVisibleColumns();
+        const currentTotalWidth = visibleColumns.reduce((sum, col) => sum + (col.width || this.options.defaultColumnWidth), 0);
+
+        if (currentTotalWidth >= containerWidth) {
+            return; // 如果当前宽度已足够或超出，则不作处理
+        }
+
+        const spaceToFill = containerWidth - currentTotalWidth;
+        const adaptableColumns = visibleColumns.filter(c => !c.frozen);
+        const adaptableWidth = adaptableColumns.reduce((sum, col) => sum + (col.width || this.options.defaultColumnWidth), 0);
+
+        if (adaptableWidth <= 0) {
+            return; // 没有可供调整的列
+        }
+
+        let totalAdjustedWidth = 0;
+        adaptableColumns.forEach(col => {
+            const currentWidth = col.width || this.options.defaultColumnWidth;
+            const adjustment = Math.floor(spaceToFill * (currentWidth / adaptableWidth));
+            col.width = currentWidth + adjustment;
+            totalAdjustedWidth += col.width;
+        });
+
+        // 将因取整导致的剩余像素加到最后一列
+        const remainingSpace = containerWidth - visibleColumns.reduce((sum, col) => sum + (col.width || this.options.defaultColumnWidth), 0);
+        if (remainingSpace > 0 && adaptableColumns.length > 0) {
+            adaptableColumns[adaptableColumns.length - 1].width += remainingSpace;
+        }
+    }
+
 
     /**
      * 获取当前所有可见的列，并根据需要添加“选择框”列
@@ -104,8 +139,15 @@ export default class DataTable {
      */
     _getVisibleColumns() {
         let visibleCols = this.columns.filter(col => col.visible !== false);
-        if (this.options.selectable === 'multiple') {
-            visibleCols.unshift({ key: '__selection', title: '<input type="checkbox" class="form-check-input" data-select="all">', render: (val, row) => `<input type="checkbox" class="form-check-input" data-row-id="${row.id || ''}">`, width: 40, frozen: 'left' });
+        if (this.options.selectable === 'multiple' || this.options.selectable === 'single') { // 同时支持单选和多选
+            const key = '__selection';
+            const title = this.options.selectable === 'multiple' ? '<input type="checkbox" class="form-check-input" data-select="all">' : '';
+            const render = (val, row) => {
+                const inputType = this.options.selectable === 'multiple' ? 'checkbox' : 'radio';
+                const name = this.options.selectable === 'single' ? 'dt-radio-selection' : '';
+                return `<input type="${inputType}" class="form-check-input" name="${name}" data-row-id="${row.id || ''}">`;
+            };
+            visibleCols.unshift({ key, title, render, width: 40, frozen: 'left' });
         }
         return visibleCols;
     }
@@ -118,6 +160,20 @@ export default class DataTable {
         if (!container) return;
         this.container = container;
         this.scrollSyncAttached = false;
+
+        // [新增] 在首次加载时执行列宽自适应
+        if (this.isInitialLoad) {
+            // 需要先让容器有宽度
+            requestAnimationFrame(() => {
+                const wrapper = this.container.querySelector('.datatable-main-wrapper');
+                if(wrapper) {
+                    this._autoFitColumns(wrapper.clientWidth);
+                    this.isInitialLoad = false; // 只执行一次
+                    this.render(container); // 重新渲染以应用新宽度
+                }
+            });
+        }
+
 
         const visibleColumns = this._getVisibleColumns();
         const leftFrozenCols = visibleColumns.filter(c => c.frozen === 'left');
@@ -140,11 +196,11 @@ export default class DataTable {
         `;
 
         this._attachEventListeners();
-        this._syncRowHeights();
+        // 确保在DOM更新后同步行高
+        requestAnimationFrame(() => {
+            this._syncRowHeights();
+        });
         this._attachScrollSync();
-
-        // 派发 'ready' 事件，通知外部组件可以加载数据了
-        setTimeout(() => this.container.dispatchEvent(new CustomEvent('ready', { bubbles: true })), 0);
     }
 
     /**
@@ -182,6 +238,12 @@ export default class DataTable {
             } return '';
         }).join('');
         const configBtn = this.options.configurable ? `<button class="btn btn-sm btn-outline-secondary" data-action="configure-columns"><i class="bi bi-gear"></i> 配置列</button>` : '';
+
+        // 当没有任何工具时，不渲染工具栏
+        if (!actionsHtml && !filtersHtml && !configBtn) {
+            return '';
+        }
+
         return `<div class="d-flex justify-content-between align-items-center mb-3">
                     <div class="d-flex justify-content-start gap-2">${actionsHtml}</div>
                     <div class="d-flex align-items-center gap-4">${filtersHtml}${configBtn}</div>
@@ -225,14 +287,14 @@ export default class DataTable {
         const fragment = document.createDocumentFragment();
         this.data.forEach(row => {
             const tr = document.createElement('tr');
-            tr.dataset.rowId = String(row.id || Math.random());
+            tr.dataset.rowId = String(row.id || Math.random().toString(36).substr(2, 9));
             const rowClass = typeof this.options.getRowClass === 'function' ? this.options.getRowClass(row) : '';
             if(rowClass) tr.className = rowClass;
 
             columns.forEach(col => {
                 const td = document.createElement('td');
                 const cellValue = row[col.key] !== undefined && row[col.key] !== null ? row[col.key] : '-';
-                td.innerHTML = typeof col.render === 'function' ? col.render(cellValue, row) : cellValue;
+                td.innerHTML = typeof col.render === 'function' ? col.render(cellValue, row) : String(cellValue);
                 tr.appendChild(td);
             });
             fragment.appendChild(tr);
@@ -316,16 +378,19 @@ export default class DataTable {
         if(scrollables.length < 2) return;
 
         let isSyncing = false;
-        scrollables.forEach(el => {
-            el.addEventListener('scroll', () => {
-                if (!isSyncing) {
-                    isSyncing = true;
-                    const scrollTop = el.scrollTop;
-                    scrollables.forEach(otherEl => { if (otherEl !== el) { otherEl.scrollTop = scrollTop; } });
-                    requestAnimationFrame(() => { isSyncing = false; });
+        const syncScroll = (e) => {
+            if (isSyncing) return;
+            isSyncing = true;
+            const source = e.currentTarget;
+            scrollables.forEach(target => {
+                if (target !== source && target.scrollTop !== source.scrollTop) {
+                    target.scrollTop = source.scrollTop;
                 }
             });
-        });
+            requestAnimationFrame(() => { isSyncing = false; });
+        };
+
+        scrollables.forEach(el => el.addEventListener('scroll', syncScroll));
         this.scrollSyncAttached = true;
     }
 
@@ -348,14 +413,51 @@ export default class DataTable {
                 const row = e.target.closest('tr');
                 if (!row || !row.dataset.rowId || e.target.closest('button')) return;
 
-                const allRows = this.container.querySelectorAll(`tr[data-row-id="${row.dataset.rowId}"]`);
+                const allRelatedRows = this.container.querySelectorAll(`tr[data-row-id="${row.dataset.rowId}"]`);
+                const checkbox = row.querySelector('input[type="checkbox"], input[type="radio"]');
+
                 if (this.options.selectable === 'single') {
-                    this.container.querySelectorAll('.table-active-custom').forEach(r => r.classList.remove('table-active-custom'));
-                    allRows.forEach(r => r.classList.add('table-active-custom'));
+                    this.container.querySelectorAll('tr.table-active-custom').forEach(r => r.classList.remove('table-active-custom'));
+                    this.container.querySelectorAll('input[type="radio"]').forEach(rb => rb.checked = false);
+                    allRelatedRows.forEach(r => r.classList.add('table-active-custom'));
+                    if (checkbox) checkbox.checked = true;
+                } else if (this.options.selectable === 'multiple') {
+                    // 如果点击的不是 checkbox，则反转其状态
+                    const isChecked = checkbox ? (e.target === checkbox ? checkbox.checked : !checkbox.checked) : false;
+                    if(e.target !== checkbox && checkbox) checkbox.checked = isChecked;
+                    allRelatedRows.forEach(r => r.classList.toggle('table-active-custom', isChecked));
+                    this._updateSelectAllState();
                 }
             });
         });
     }
+
+    _updateSelectAllState() {
+        if (this.options.selectable !== 'multiple') return;
+        const selectAllCheckbox = this.container.querySelector('input[data-select="all"]');
+        if (!selectAllCheckbox) return;
+
+        const rowCheckboxes = Array.from(this.container.querySelectorAll('#dt-table-left tbody input[data-row-id]'));
+        const totalRows = rowCheckboxes.length;
+        if(totalRows === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+            return;
+        }
+
+        const checkedRows = rowCheckboxes.filter(cb => cb.checked).length;
+        if (totalRows === checkedRows) {
+            selectAllCheckbox.checked = true;
+            selectAllCheckbox.indeterminate = false;
+        } else if (checkedRows > 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = true;
+        } else {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+        }
+    }
+
 
     /**
      * 绑定列宽拖拽功能
@@ -383,6 +485,7 @@ export default class DataTable {
                     if (targetColumn) {
                         targetColumn.width = Math.round(col.getBoundingClientRect().width);
                         this._saveConfig();
+                        this.isInitialLoad = false; // 用户手动调整后，不再触发自动调整
                         this.render(this.container);
                     }
                 }
@@ -408,34 +511,33 @@ export default class DataTable {
     }
 
     /**
-     * 同步所有表格的行高，确保对齐
+     * 同步所有表格的行高和表头高，确保对齐
      * @private
      */
     _syncRowHeights() {
-        const leftBody = this.container.querySelector('#dt-table-left tbody');
-        const scrollBody = this.container.querySelector('#dt-table-scroll tbody');
-        const rightBody = this.container.querySelector('#dt-table-right tbody');
+        const tables = Array.from(this.container.querySelectorAll('.datatable-main-wrapper table'));
+        if (tables.length < 2) return;
 
-        if (!scrollBody) return;
-        const scrollRows = scrollBody.rows;
-        if(scrollRows.length === 0) return;
+        const allRows = tables.map(t => Array.from(t.rows)).flat();
+        if (allRows.length === 0) return;
 
-        // 使用 requestAnimationFrame 确保在浏览器完成布局计算后执行
-        requestAnimationFrame(() => {
-            for (let i = 0; i < scrollRows.length; i++) {
-                const rowElements = [scrollRows[i], leftBody ? leftBody.rows[i] : null, rightBody ? rightBody.rows[i] : null].filter(Boolean);
-                if(rowElements.length < 2) continue;
+        // 提取所有唯一的行索引（包括 a 和 tbody）
+        const rowCount = Math.max(...tables.map(t => t.rows.length));
 
-                let maxHeight = 0;
-                // 先重置高度，以便获取自然高度
-                rowElements.forEach(r => { r.style.height = ''; });
-                // 获取最大自然高度
-                rowElements.forEach(r => { if(r.offsetHeight > maxHeight) maxHeight = r.offsetHeight; });
-                // 设置统一高度
-                rowElements.forEach(r => { r.style.height = `${maxHeight}px`; });
-            }
-        });
+        for (let i = 0; i < rowCount; i++) {
+            const rowElements = tables.map(t => t.rows[i]).filter(Boolean);
+            if (rowElements.length < 2) continue;
+
+            let maxHeight = 0;
+            // 先重置高度以便获取自然高度
+            rowElements.forEach(r => { r.style.height = ''; });
+            // 获取最大自然高度
+            rowElements.forEach(r => { if (r.offsetHeight > maxHeight) maxHeight = r.offsetHeight; });
+            // 设置统一高度
+            rowElements.forEach(r => { r.style.height = `${maxHeight}px`; });
+        }
     }
+
 
     /**
      * 使用新的数据更新表格视图
@@ -451,6 +553,7 @@ export default class DataTable {
      */
     toggleLoading(isLoading) {
         const overlay = this.container.querySelector('#dt-loading-overlay');
+        if (overlay) overlay.classList.toggle('d-flex', isLoading);
         if (overlay) overlay.classList.toggle('d-none', !isLoading);
     }
 
@@ -492,7 +595,7 @@ export default class DataTable {
                 </li>
             `).join('');
         };
-        renderList(this.columns);
+        renderList(this.columns.filter(c => c.key !== '__selection')); // 不显示选择列
 
         const footer = `
             <button type="button" class="btn btn-outline-secondary me-auto" id="reset-column-config">恢复默认</button>
@@ -541,6 +644,7 @@ export default class DataTable {
             });
             this.columns = newColumns;
             this._saveConfig();
+            this.isInitialLoad = false; // 用户手动保存后，不再触发自动调整
             shouldRerender = true;
             configModal.hide();
         });
@@ -550,6 +654,7 @@ export default class DataTable {
             if (confirmed) {
                 if (this.options.storageKey) localStorage.removeItem(this.options.storageKey);
                 this.columns = this.originalColumns.map(c => ({...c}));
+                this.isInitialLoad = true; // 恢复默认后，下次加载时应重新自适应
                 shouldRerender = true;
                 configModal.hide();
             }
@@ -558,7 +663,7 @@ export default class DataTable {
         modalElement.addEventListener('hidden.bs.modal', () => {
             this.isConfigModalOpen = false;
             if (shouldRerender) {
-                setTimeout(() => this.render(this.container), 50);
+                this.render(this.container);
             }
         }, { once: true });
 

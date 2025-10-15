@@ -5,8 +5,8 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -22,13 +22,20 @@ import javax.sql.DataSource;
 public class QdjlDataSourceConfig {
 
     /**
-     * 创建 qdjl 数据源 Bean.
-     * @ConfigurationProperties 会自动从 application.properties 中读取 "spring.datasource.qdjl" 前缀的配置。
+     * 步骤 1: 创建一个专门用于绑定 "spring.datasource.qdjl" 属性的 Bean.
+     */
+    @Bean(name = "qdjlDataSourceProperties")
+    @ConfigurationProperties(prefix = "spring.datasource.qdjl")
+    public DataSourceProperties qdjlDataSourceProperties() {
+        return new DataSourceProperties();
+    }
+
+    /**
+     * 步骤 2: 使用上面配置好的 properties Bean 来创建真正的数据源 DataSource.
      */
     @Bean(name = "qdjlDataSource")
-    @ConfigurationProperties(prefix = "spring.datasource.qdjl")
-    public DataSource qdjlDataSource() {
-        return DataSourceBuilder.create().type(HikariDataSource.class).build();
+    public DataSource qdjlDataSource(@Qualifier("qdjlDataSourceProperties") DataSourceProperties properties) {
+        return properties.initializeDataSourceBuilder().type(HikariDataSource.class).build();
     }
 
     /**
@@ -39,8 +46,6 @@ public class QdjlDataSourceConfig {
     public SqlSessionFactory qdjlSqlSessionFactory(@Qualifier("qdjlDataSource") DataSource dataSource) throws Exception {
         SqlSessionFactoryBean bean = new SqlSessionFactoryBean();
         bean.setDataSource(dataSource);
-        // 如果您有XML映射文件，可以在这里指定它们的位置
-        // bean.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath:mapper/qdjl/*.xml"));
         return bean.getObject();
     }
 

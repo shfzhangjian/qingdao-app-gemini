@@ -1,0 +1,111 @@
+/* * ===================================================================
+ * Optimized_DataTable 专用样式
+ * ===================================================================
+ */
+
+/* --- 表格基础样式覆盖 --- */
+.table {
+    --bs-table-bg: var(--bg-secondary);
+    --bs-table-color: var(--text-primary);
+    --bs-table-border-color: var(--border-color);
+    --bs-table-striped-bg: rgba(0,0,0,0.05);
+    --bs-table-hover-bg: rgba(0,0,0,0.075);
+}
+.table-active-custom {
+    --bs-table-bg-state: var(--accent-color);
+    --bs-table-color-state: #fff;
+    background-color: var(--bs-table-bg-state) !important;
+    color: var(--bs-table-color-state) !important;
+}
+.table-row-abnormal td {
+    background-color: rgba(217, 83, 79, 0.15) !important;
+}
+.table-hover > tbody > .table-row-abnormal:hover > * {
+    --bs-table-hover-bg: rgba(217, 83, 79, 0.25);
+}
+.table thead .resizer {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    width: 5px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 1;
+}
+
+/* --- 【结构性锁定】三窗格表格布局样式 --- */
+.datatable-main-wrapper {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    overflow: hidden;
+    flex-grow: 1;
+    border: 1px solid var(--border-color);
+    border-radius: .25rem;
+}
+.datatable-frozen-pane-left, .datatable-frozen-pane-right {
+    flex-shrink: 0;
+    overflow-y: scroll;
+    overflow-x: hidden;
+    position: relative;
+}
+.datatable-frozen-pane-left::-webkit-scrollbar, .datatable-frozen-pane-right::-webkit-scrollbar {
+    display: none;
+}
+.datatable-frozen-pane-left, .datatable-frozen-pane-right {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.datatable-scrollable-pane {
+    flex-grow: 1;
+    overflow: auto;
+}
+.datatable-main-wrapper table {
+    table-layout: fixed;
+    border: none;
+    margin-bottom: 0;
+}
+.datatable-main-wrapper thead th {
+    background-color: var(--bg-secondary);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.datatable-frozen-pane-left table, .datatable-scrollable-pane table {
+    border-right: none;
+}
+.datatable-frozen-pane-left {
+    box-shadow: 2px 0 5px rgba(0,0,0,0.15);
+    z-index: 1;
+}
+.datatable-frozen-pane-right {
+    box-shadow: -2px 0 5px rgba(0,0,0,0.15);
+    z-index: 1;
+}
+
+/* --- 行悬停与选中样式 --- */
+.table-hover-custom {
+    --bs-table-hover-bg: rgba(0,0,0,0.075);
+    background-color: var(--bs-table-hover-bg);
+}
+body.theme-light .table-hover-custom {
+    --bs-table-hover-bg: #f5f5f5;
+}
+
+/* [修复] 暗色主题下，悬停和选中行字体颜色修复 */
+body.theme-dark .table-hover-custom td,
+body.theme-dark .table-active-custom td {
+    color: var(--text-primary) !important;
+}
+
+/* --- [新增] 点检统计 - 统计视图表格交叉高亮 --- */
+.stats-table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05); /* 细微的整行高亮 */
+}
+.stats-table-hover .cell-highlight {
+    background-color: rgba(0, 122, 204, 0.2) !important; /* 用于交叉高亮的强调色 */
+}
+body.theme-light .stats-table-hover .cell-highlight {
+    background-color: rgba(0, 122, 204, 0.1) !important;
+}
+

@@ -58,11 +58,14 @@ class App {
         if (logoutBtn) {
             logoutBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
-                const confirmed = await Modal.confirm('退出系统', '您确定要退出当前系统吗？');
+                const confirmed = await Modal.confirm('您确定要退出当前系统吗？', '退出系统');
                 if (confirmed) {
-                    console.log("用户确认退出。正在跳转到登录页(模拟)...");
+                    console.log("用户确认退出。正在清除本地认证信息...");
+                    // [新增] 退出时，必须从localStorage中移除Token
+                    localStorage.removeItem('jwt_token');
                     Modal.alert('您已成功退出。');
-                    // In a real app: window.location.href = '/login.html';
+                    // 在实际应用中，可以取消下面的注释以跳转到登录页
+                    // window.location.href = '/login.html';
                 }
             });
         }

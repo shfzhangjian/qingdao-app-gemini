@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSO Token 生成工具</title>
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #1c1c1c;
+            color: #e9ecef;
+        }
+        .card {
+            background-color: #252526;
+            border-color: #3e3e42;
+        }
+        .form-control {
+            background-color: #1c1c1c;
+            border-color: #3e3e42;
+            color: #e9ecef;
+        }
+        .form-control:focus {
+            background-color: #1c1c1c;
+            border-color: #007acc;
+            box-shadow: 0 0 0 0.25rem rgba(0, 122, 204, 0.25);
+            color: #e9ecef;
+        }
+        .result-link {
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">生成单点登录 (SSO) 链接</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-secondary">输入用户的凭据以生成一个包含JWT Token的SSO跳转链接。</p>
+                    <form id="token-form">
+                        <div class="mb-3">
+                            <label for="loginid" class="form-label">登录账号</label>
+                            <input type="text" class="form-control" id="loginid" value="admin" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">密码</label>
+                            <input type="password" class="form-control" id="password" value="123456" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" id="generate-btn">
+                            <i class="bi bi-link-45deg"></i> 生成链接
+                        </button>
+                    </form>
+
+                    <div id="result-area" class="mt-4 d-none">
+                        <h5>生成的链接:</h5>
+                        <div class="input-group">
+                            <textarea id="result-link" class="form-control" rows="3" readonly></textarea>
+                            <button class="btn btn-outline-secondary" type="button" id="copy-btn" title="复制链接">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <a href="#" id="open-link-btn" target="_blank" class="btn btn-success mt-2">在新标签页中打开</a>
+                    </div>
+
+                    <div id="error-alert" class="alert alert-danger mt-4 d-none" role="alert"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('token-form');
+    const generateBtn = document.getElementById('generate-btn');
+    const resultArea = document.getElementById('result-area');
+    const resultLinkEl = document.getElementById('result-link');
+    const openLinkBtn = document.getElementById('open-link-btn');
+    const copyBtn = document.getElementById('copy-btn');
+    const errorAlert = document.getElementById('error-alert');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const loginid = document.getElementById('loginid').value;
+        const password = document.getElementById('password').value;
+
+        // UI feedback
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在生成...';
+        errorAlert.classList.add('d-none');
+        resultArea.classList.add('d-none');
+
+        try {
+            const response = await fetch('/api/system/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ loginid, password })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || `登录失败 (状态码: ${response.status})`);
+            }
+
+            const data = await response.json();
+            const token = data.token;
+
+            // 构建完整的SSO URL
+            const ssoUrl = `${window.location.origin}/sso.html#${token}`;
+
+            resultLinkEl.value = ssoUrl;
+            openLinkBtn.href = ssoUrl;
+            resultArea.classList.remove('d-none');
+
+        } catch (error) {
+            console.error('生成Token时出错:', error);
+            errorAlert.textContent = `错误: ${error.message}`;
+            errorAlert.classList.remove('d-none');
+        } finally {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="bi bi-link-45deg"></i> 生成链接';
+        }
+    });
+
+    copyBtn.addEventListener('click', () => {
+        resultLinkEl.select();
+        document.execCommand('copy');
+
+        const originalIcon = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="bi bi-check-lg"></i>';
+        setTimeout(() => {
+            copyBtn.innerHTML = originalIcon;
+        }, 1500);
+    });
+
+</script>
+</body>
+</html>

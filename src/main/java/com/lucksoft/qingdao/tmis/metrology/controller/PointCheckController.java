@@ -1,13 +1,18 @@
 package com.lucksoft.qingdao.tmis.metrology.controller;
 
 import com.lucksoft.qingdao.tmis.dto.PageResult;
+import com.lucksoft.qingdao.tmis.metrology.ExportColumn;
 import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckListDTO;
 import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckQuery;
+import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckStatsDTO;
+import com.lucksoft.qingdao.tmis.util.ExcelExportUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -91,61 +96,70 @@ public class PointCheckController {
         return stream;
     }
 
-    @GetMapping("/statistics")
-    public ResponseEntity<List<Map<String, Object>>> getStatistics(PointCheckQuery query) {
-        log.info("接收到点检统计查询: {}", query);
-
+    private List<PointCheckStatsDTO> calculateStatistics(PointCheckQuery query) {
         List<PointCheckListDTO> filteredData = getFilteredStream(query).collect(Collectors.toList());
 
         Map<String, List<PointCheckListDTO>> groupedByDept = filteredData.stream()
                 .collect(Collectors.groupingBy(PointCheckListDTO::getDepartment));
 
-        List<Map<String, Object>> result = new ArrayList<>();
+        List<PointCheckStatsDTO> result = new ArrayList<>();
 
         for (String dept : groupedByDept.keySet()) {
             List<PointCheckListDTO> items = groupedByDept.get(dept);
-            Map<String, Object> deptStats = new LinkedHashMap<>();
-            deptStats.put("dept", dept);
-
-            // 【核心修复】按月份分区，分别计算上半年和下半年
             Map<Boolean, List<PointCheckListDTO>> partitionedByHalf = items.stream()
                     .collect(Collectors.partitioningBy(item -> LocalDate.parse(item.getCheckDate()).getMonthValue() <= 6));
 
             List<PointCheckListDTO> h1Items = partitionedByHalf.get(true);
             List<PointCheckListDTO> h2Items = partitionedByHalf.get(false);
 
-            // 上半年统计
             long yingJian1 = h1Items.size();
             long yiJian1 = h1Items.stream().filter(i -> "已检".equals(i.getPlanStatus())).count();
-            long weiJian1 = yingJian1 - yiJian1;
             String zhiXingLv1 = yingJian1 > 0 ? String.format("%.0f%%", (double) yiJian1 * 100 / yingJian1) : "0%";
             long zhengChang1 = h1Items.stream().filter(i -> "正常".equals(i.getResultStatus())).count();
-            long yiChang1 = h1Items.stream().filter(i -> "异常".equals(i.getResultStatus())).count();
-            deptStats.put("yingJianShu1", yingJian1);
-            deptStats.put("yiJianShu1", yiJian1);
-            deptStats.put("weiJianShu1", weiJian1);
-            deptStats.put("zhiXingLv1", zhiXingLv1);
-            deptStats.put("zhengChangShu1", zhengChang1);
-            deptStats.put("yiChangShu1", yiChang1);
+            long yiChang1 = yiJian1 - zhengChang1;
 
-            // 下半年统计
+
             long yingJian2 = h2Items.size();
             long yiJian2 = h2Items.stream().filter(i -> "已检".equals(i.getPlanStatus())).count();
-            long weiJian2 = yingJian2 - yiJian2;
             String zhiXingLv2 = yingJian2 > 0 ? String.format("%.0f%%", (double) yiJian2 * 100 / yingJian2) : "0%";
             long zhengChang2 = h2Items.stream().filter(i -> "正常".equals(i.getResultStatus())).count();
-            long yiChang2 = h2Items.stream().filter(i -> "异常".equals(i.getResultStatus())).count();
-            deptStats.put("yingJianShu2", yingJian2);
-            deptStats.put("yiJianShu2", yiJian2);
-            deptStats.put("weiJianShu2", weiJian2);
-            deptStats.put("zhiXingLv2", zhiXingLv2);
-            deptStats.put("zhengChangShu2", zhengChang2);
-            deptStats.put("yiChangShu2", yiChang2);
+            long yiChang2 = yiJian2 - zhengChang2;
 
-            result.add(deptStats);
+
+            result.add(new PointCheckStatsDTO(
+                    dept,
+                    yingJian1, yiJian1, yingJian1 - yiJian1, zhiXingLv1, zhengChang1, yiChang1,
+                    yingJian2, yiJian2, yingJian2 - yiJian2, zhiXingLv2, zhengChang2, yiChang2
+            ));
         }
+        result.sort(Comparator.comparing(PointCheckStatsDTO::getDept));
+        return result;
+    }
 
-        result.sort(Comparator.comparing(m -> (String) m.get("dept")));
+
+    @GetMapping("/statistics")
+    public ResponseEntity<List<Map<String, Object>>> getStatistics(PointCheckQuery query) {
+        log.info("接收到点检统计查询: {}", query);
+        List<PointCheckStatsDTO> stats = calculateStatistics(query);
+        // 为了保持与旧版接口的兼容性，这里将 DTO 转换为 Map
+        List<Map<String, Object>> result = stats.stream().map(s -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("dept", s.getDept());
+            map.put("yingJianShu1", s.getYingJianShu1());
+            map.put("yiJianShu1", s.getYiJianShu1());
+            map.put("weiJianShu1", s.getWeiJianShu1());
+            map.put("zhiXingLv1", s.getZhiXingLv1());
+            map.put("zhengChangShu1", s.getZhengChangShu1());
+            map.put("yiChangShu1", s.getYiChangShu1());
+            map.put("yingJianShu2", s.getYingJianShu2());
+            map.put("yiJianShu2", s.getYiJianShu2());
+            map.put("weiJianShu2", s.getWeiJianShu2());
+            map.put("zhiXingLv2", s.getZhiXingLv2());
+            map.put("zhengChangShu2", s.getZhengChangShu2());
+            map.put("yiChangShu2", s.getYiChangShu2());
+            return map;
+        }).collect(Collectors.toList());
+
         return ResponseEntity.ok(result);
     }
 
@@ -164,5 +178,44 @@ public class PointCheckController {
 
         return ResponseEntity.ok(new PageResult<>(pagedList, pageNum, pageSize, total, pages));
     }
-}
 
+    @PostMapping("/export")
+    public void exportPointCheck(@RequestBody PointCheckQuery query, HttpServletResponse response) throws IOException {
+        log.info("接收到点检导出请求: {}", query);
+
+        String viewMode = query.getViewMode();
+
+        if ("list".equals(viewMode)) {
+            // --- 导出列表 ---
+            List<PointCheckListDTO> dataToExport = getFilteredStream(query).collect(Collectors.toList());
+            ExcelExportUtil.export(response, "点检列表", query.getColumns(), dataToExport, PointCheckListDTO.class);
+        } else {
+            // --- 导出统计 (默认) ---
+            List<PointCheckStatsDTO> statsData = calculateStatistics(query);
+            // 为统计报表创建固定的列定义
+            List<ExportColumn> statsColumns = new ArrayList<>();
+            statsColumns.add(createColumn("dept", "部门名称"));
+            statsColumns.add(createColumn("yingJianShu1", "上半年应检数量"));
+            statsColumns.add(createColumn("yiJianShu1", "上半年已检数量"));
+            statsColumns.add(createColumn("weiJianShu1", "上半年未检数量"));
+            statsColumns.add(createColumn("zhiXingLv1", "上半年执行率"));
+            statsColumns.add(createColumn("zhengChangShu1", "上半年正常数量"));
+            statsColumns.add(createColumn("yiChangShu1", "上半年异常数量"));
+            statsColumns.add(createColumn("yingJianShu2", "下半年应检数量"));
+            statsColumns.add(createColumn("yiJianShu2", "下半年已检数量"));
+            statsColumns.add(createColumn("weiJianShu2", "下半年未检数量"));
+            statsColumns.add(createColumn("zhiXingLv2", "下半年执行率"));
+            statsColumns.add(createColumn("zhengChangShu2", "下半年正常数量"));
+            statsColumns.add(createColumn("yiChangShu2", "下半年异常数量"));
+
+            ExcelExportUtil.export(response, "点检统计", statsColumns, statsData, PointCheckStatsDTO.class);
+        }
+    }
+
+    private ExportColumn createColumn(String key, String title) {
+        ExportColumn col = new ExportColumn();
+        col.setKey(key);
+        col.setTitle(title);
+        return col;
+    }
+}
