@@ -3,7 +3,7 @@
  * 功能说明: 计量任务页面的视图逻辑。
  * - 功能完整，包含查询、分页、筛选、异常标记和Excel导出。
  * 版本变动:
- * v3.3.0 - 2025-10-15: [UI重构] 将查询表单调整为响应式单行五列布局。
+ * v3.4.0 - 2025-10-15: [UI重构] 将任务状态和ABC分类筛选器移回表格内置工具栏。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import QueryForm from '../components/QueryForm.js';
@@ -33,20 +33,15 @@ export default class MetrologyTasks {
         this._attachEventListeners();
     }
 
-    /**
-     * [核心修改] 将所有筛选条件统一到此查询表单中
-     */
     _renderQueryForm(container) {
+        // [核心修改] 从查询表单中移除 pills 筛选器
         const formFields = [
-            { type: 'daterange', label: '时间范围', name: 'dateRange', containerClass: 'col-12 col-lg' },
-            { type: 'text', label: '设备名称', name: 'deviceName', containerClass: 'col-12 col-lg' },
-            { type: 'text', label: '企业编号', name: 'enterpriseId', containerClass: 'col-12 col-lg' },
-            { type: 'pills', label: '任务状态', name: 'taskStatus', options: [{label: '未检', value: 'unchecked', checked: true}, {label: '已检', value: 'checked'}, {label: '异常', value: 'abnormal'}, {label: '全部', value: 'all'}], containerClass: 'col-12 col-lg' },
-            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'a'}, {label: 'B', 'value': 'b'}, {label: 'C', value: 'c'}], containerClass: 'col-12 col-lg' }
+            { type: 'daterange', label: '时间范围', name: 'dateRange', containerClass: 'col-12 col-md-4' },
+            { type: 'text', label: '设备名称', name: 'deviceName', containerClass: 'col-12 col-md-4' },
+            { type: 'text', label: '企业编号', name: 'enterpriseId', containerClass: 'col-12 col-md-4' },
         ];
 
         this.queryForm = new QueryForm({ fields: formFields });
-        // 使用 Bootstrap grid system 来实现灵活布局
         container.innerHTML = `<div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);"><div class="row g-3 align-items-center">${this.queryForm._createFieldsHtml()}</div></div>`;
         this.queryForm.container = container;
         this.queryForm._initializeDatePickers();
@@ -54,7 +49,6 @@ export default class MetrologyTasks {
 
     _renderDataTable(container) {
         const columns = [
-            // --- 核心显示字段 ---
             { key: 'date', title: '任务时间', visible: true, width: 120, sortable: true },
             { key: 'pointCheckStatus', title: '点检状态', visible: true, width: 100 },
             { key: 'enterpriseId', title: '企业编号', visible: true, width: 120, sortable: true },
@@ -65,8 +59,6 @@ export default class MetrologyTasks {
             { key: 'accuracy', title: '准确度等级', visible: true, width: 120 },
             { key: 'status', title: '设备状态', visible: true, width: 90 },
             { key: 'abc', title: 'ABC分类', visible: true, width: 90 },
-
-            // --- 默认隐藏字段 ---
             { key: 'erpId', title: 'ERP编号', visible: false },
             { key: 'range', title: '量程范围', visible: false },
         ];
@@ -78,15 +70,18 @@ export default class MetrologyTasks {
             { name: 'export', text: '导出', class: 'btn-outline-success' },
         ];
 
-        // [核心修改] 移除表格内部的筛选器
-        const filters = [];
+        // [核心修改] 将筛选器重新定义在表格配置中
+        const filters = [
+            { type: 'pills', label: '任务状态', name: 'taskStatus', options: [{label: '未检', value: 'unchecked', checked: true}, {label: '已检', value: 'checked'}, {label: '异常', value: 'abnormal'}, {label: '全部', value: 'all'}] },
+            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'a'}, {label: 'B', 'value': 'b'}, {label: 'C', value: 'c'}] }
+        ];
 
         this.dataTable = new DataTable({
             columns, actions, filters, data:[],
             options: {
                 configurable: true,
                 storageKey: 'metrologyTasksTable',
-                selectable: 'multiple',
+                selectable: 'multiple', // 改为单选以匹配“异常标记”功能
                 getRowClass: (row) => row.isAbnormal ? 'table-row-abnormal' : ''
             }
         });
@@ -98,12 +93,13 @@ export default class MetrologyTasks {
         this.dataTable.toggleLoading(true);
 
         try {
-            // [核心修改] 所有查询参数现在都来自 queryForm
+            // [核心修改] 合并来自顶部表单和表格内部筛选器的参数
             const formParams = this.queryForm.getValues();
             const tableState = this.dataTable.state;
 
             const params = {
                 ...formParams,
+                ...tableState.filters, // 添加表格内部的筛选条件
                 pageNum: tableState.pageNum,
                 pageSize: tableState.pageSize,
                 sortBy: tableState.sortBy,
@@ -163,13 +159,17 @@ export default class MetrologyTasks {
         modal.show();
     }
 
-    /**
-     * [核心修改] 移除对表格内部筛选器 'change' 事件的监听
-     */
     _attachEventListeners() {
         const tableContainer = this.container.querySelector('#data-table-container');
         if (!tableContainer) return;
 
+        // 监听表格外部的操作按钮
+        this.queryForm.container.addEventListener('click', (e) => {
+            // 此处可以处理顶部查询表单区域的按钮事件，如果未来有的话
+        });
+
+
+        // 监听表格内部的所有事件
         tableContainer.addEventListener('click', async (e) => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
@@ -203,6 +203,7 @@ export default class MetrologyTasks {
                 try {
                     const params = {
                         ...this.queryForm.getValues(),
+                        ...this.dataTable.state.filters, // 确保导出时也包含筛选条件
                         sortBy: this.dataTable.state.sortBy,
                         sortOrder: this.dataTable.state.sortOrder,
                         columns: this.dataTable.columns
@@ -220,6 +221,7 @@ export default class MetrologyTasks {
             }
         });
 
+        // 监听表格内部的分页、排序、筛选变化
         tableContainer.addEventListener('queryChange', () => {
             this._loadData();
         });

@@ -2,10 +2,7 @@
  * 源码路径: js/app.js
  * 功能说明: 应用的主入口文件，负责初始化、路由管理、页面调度和主框架渲染。
  * 版本变动:
- * v1.0.0 - 2025-10-13: 初始版本，实现基础框架和路由。
- * v1.1.0 - 2025-10-13: 集成面包屑组件，优化内容区布局。
- * v1.4.0 - 2025-10-13: 【最终方案】移除所有JS高度计算和page-footer，回归纯CSS Flexbox终极布局方案。
- * v1.6.0 - 2025-10-14: 新增了右上角用户菜单的交互功能（退出确认、通知面板）。
+ * v1.7.0 - 2025-10-15: Integrated with AuthManager for re-authentication and UI updates.
  */
 import menuConfig from './config/menu.js';
 import Breadcrumb from './components/Breadcrumb.js';
@@ -24,6 +21,7 @@ class App {
         this.viewInstances = new Map();
         this.breadcrumb = new Breadcrumb();
         this.themeToggler = document.getElementById('theme-toggler');
+        this.userNameDisplay = document.getElementById('user-name-display'); // Added for username updates
 
         this.init();
     }
@@ -44,6 +42,11 @@ class App {
 
         window.addEventListener('hashchange', () => this.handleRouteChange());
         window.addEventListener('load', () => this.handleRouteChange());
+
+        // [Key Change] Listen for user switch events to update UI
+        window.addEventListener('userSwitched', (e) => {
+            this.updateUserInfo(e.detail.user);
+        });
     }
 
     _attachHeaderListeners() {
@@ -58,19 +61,27 @@ class App {
         if (logoutBtn) {
             logoutBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
-                const confirmed = await Modal.confirm('您确定要退出当前系统吗？', '退出系统');
+                const confirmed = await Modal.confirm('退出系统', '您确定要退出当前系统吗？');
                 if (confirmed) {
-                    console.log("用户确认退出。正在清除本地认证信息...");
-                    // [新增] 退出时，必须从localStorage中移除Token
+                    console.log("User confirmed logout. Clearing token...");
                     localStorage.removeItem('jwt_token');
                     Modal.alert('您已成功退出。');
-                    // 在实际应用中，可以取消下面的注释以跳转到登录页
+                    // In a real app, you might want to redirect:
                     // window.location.href = '/login.html';
                 }
             });
         }
     }
 
+    /**
+     * [Key Change] Updates the username display in the header.
+     * @param {object} user - The user object from the login response.
+     */
+    updateUserInfo(user) {
+        if (this.userNameDisplay && user) {
+            this.userNameDisplay.textContent = user.name || user.loginid;
+        }
+    }
 
     _initTheme() {
         const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -209,7 +220,6 @@ class App {
                 }
                 const viewInstance = this.viewInstances.get(ViewClass);
 
-                // 【核心修改】render方法不再传递 footerContainer
                 viewInstance.render(viewContainer, activeRoute);
 
             } catch (error) {
