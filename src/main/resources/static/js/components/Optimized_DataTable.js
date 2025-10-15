@@ -1,7 +1,7 @@
 /**
  * 源码路径: js/components/Optimized_DataTable.js
  * 功能说明: 一个功能强大的数据表格组件
- * @version 3.5.0 - 2025-10-15: [新增] 首次加载时，若列总宽小于容器宽度，则自动拉伸以铺满。
+ * @version 3.5.5 - 2025-10-15: [修复] 无数据时锁定区域保持边框一致，添加空行以匹配高度。
  */
 import Modal from './Modal.js';
 
@@ -30,6 +30,12 @@ export default class DataTable {
         this.container = null;
         this.isConfigModalOpen = false;
         this.scrollSyncAttached = false;
+
+        // [新增] 选中状态管理
+        if (this.options.selectable) {
+            this.selectedRowId = null;
+            this.selectedRows = new Set();
+        }
 
         this.state = {
             pageNum: 1,
@@ -153,6 +159,24 @@ export default class DataTable {
     }
 
     /**
+     * [新增] 恢复选中行的样式类
+     * @private
+     */
+    _restoreSelectionClasses() {
+        if (!this.options.selectable || !this.rowIdMap) return;
+        const isSingle = this.options.selectable === 'single';
+        const selectedId = isSingle ? this.selectedRowId : null;
+        this.data.forEach(row => {
+            const rowId = this.rowIdMap.get(row);
+            if (!rowId) return;
+            const isSelected = isSingle ? (selectedId === rowId) : this.selectedRows.has(rowId);
+            this.container.querySelectorAll(`tr[data-row-id="${rowId}"]`).forEach(r => {
+                r.classList.toggle('table-active-custom', isSelected);
+            });
+        });
+    }
+
+    /**
      * 核心渲染方法，构建表格的 DOM 结构
      * @param {HTMLElement} container - 渲染表格的目标容器
      */
@@ -174,11 +198,19 @@ export default class DataTable {
             });
         }
 
-
         const visibleColumns = this._getVisibleColumns();
         const leftFrozenCols = visibleColumns.filter(c => c.frozen === 'left');
         const rightFrozenCols = visibleColumns.filter(c => c.frozen === 'right');
         const scrollableCols = visibleColumns.filter(c => !c.frozen);
+
+        // [新增] 预计算一致的行ID映射，确保跨窗格rowId一致
+        this.rowIdMap = new Map();
+        this.data.forEach(row => {
+            if (!this.rowIdMap.has(row)) {
+                const rowId = String(row.id || Math.random().toString(36).substr(2, 9));
+                this.rowIdMap.set(row, rowId);
+            }
+        });
 
         this.container.innerHTML = `
             <div style="display: flex; flex-direction: column; height: 100%;" class="position-relative">
@@ -196,9 +228,13 @@ export default class DataTable {
         `;
 
         this._attachEventListeners();
-        // 确保在DOM更新后同步行高
+        // 确保在DOM更新后同步行高，并恢复选中状态
         requestAnimationFrame(() => {
             this._syncRowHeights();
+            this._restoreSelectionClasses();
+            if (this.options.selectable === 'multiple') {
+                this._updateSelectAllState();
+            }
         });
         this._attachScrollSync();
     }
@@ -219,7 +255,7 @@ export default class DataTable {
                  <table class="table table-bordered table-sm text-center table-hover" id="${tableId}" style="width: ${totalWidth}px; min-width: ${totalWidth}px;">
                     <colgroup>${this._createColGroup(columns)}</colgroup>
                     <thead>${this._createHeader(columns)}</thead>
-                    <tbody>${this._createBody(columns)}</tbody>
+                    <tbody>${this._createBody(columns, type)}</tbody>
                 </table>
             </div>
         `;
@@ -279,22 +315,44 @@ export default class DataTable {
     /**
      * 创建表格的 <tbody>
      * @private
+     * @param {Array} columns - 列定义
+     * @param {string} paneType - 窗格类型（'left', 'scroll', 'right'）
      */
-    _createBody(columns) {
+    _createBody(columns, paneType) {
         if (!this.data || this.data.length === 0) {
-            return `<tr><td colspan="${columns.length || 1}" class="text-center p-4">没有数据</td></tr>`;
+            // [修改] 无数据时，滚动区域显示提示，锁定区域添加空行以保持边框和高度一致
+            if (paneType === 'scroll') {
+                return `<tr><td colspan="${columns.length || 1}" class="text-center p-4">没有数据</td></tr>`;
+            } else {
+                return `<tr><td colspan="${columns.length || 1}" class="text-center p-4" style="visibility: hidden;">没有数据</td></tr>`;
+            }
         }
         const fragment = document.createDocumentFragment();
         this.data.forEach(row => {
+            const rowId = this.rowIdMap.get(row);
             const tr = document.createElement('tr');
-            tr.dataset.rowId = String(row.id || Math.random().toString(36).substr(2, 9));
+            tr.dataset.rowId = rowId;
             const rowClass = typeof this.options.getRowClass === 'function' ? this.options.getRowClass(row) : '';
             if(rowClass) tr.className = rowClass;
 
             columns.forEach(col => {
                 const td = document.createElement('td');
-                const cellValue = row[col.key] !== undefined && row[col.key] !== null ? row[col.key] : '-';
-                td.innerHTML = typeof col.render === 'function' ? col.render(cellValue, row) : String(cellValue);
+                let cellHtml;
+                if (col.key === '__selection' && this.options.selectable) {
+                    const inputType = this.options.selectable === 'multiple' ? 'checkbox' : 'radio';
+                    const name = this.options.selectable === 'single' ? 'dt-radio-selection' : '';
+                    let checkedAttr = '';
+                    if (this.options.selectable === 'multiple') {
+                        checkedAttr = this.selectedRows.has(rowId) ? 'checked' : '';
+                    } else if (this.options.selectable === 'single') {
+                        checkedAttr = (this.selectedRowId === rowId) ? 'checked' : '';
+                    }
+                    cellHtml = `<input type="${inputType}" class="form-check-input" name="${name}" data-row-id="${rowId}" ${checkedAttr}>`;
+                } else {
+                    const cellValue = row[col.key] !== undefined && row[col.key] !== null ? row[col.key] : '-';
+                    cellHtml = typeof col.render === 'function' ? col.render(cellValue, row) : String(cellValue);
+                }
+                td.innerHTML = cellHtml;
                 tr.appendChild(td);
             });
             fragment.appendChild(tr);
@@ -414,18 +472,77 @@ export default class DataTable {
                 if (!row || !row.dataset.rowId || e.target.closest('button')) return;
 
                 const allRelatedRows = this.container.querySelectorAll(`tr[data-row-id="${row.dataset.rowId}"]`);
-                const checkbox = row.querySelector('input[type="checkbox"], input[type="radio"]');
+                const rowId = row.dataset.rowId;
+                const checkboxOrRadio = row.querySelector('input[type="checkbox"], input[type="radio"]');
 
                 if (this.options.selectable === 'single') {
+                    // 清除所有旧的选中状态
                     this.container.querySelectorAll('tr.table-active-custom').forEach(r => r.classList.remove('table-active-custom'));
-                    this.container.querySelectorAll('input[type="radio"]').forEach(rb => rb.checked = false);
+
+                    // 高亮所有相关的行（左、中、右）
                     allRelatedRows.forEach(r => r.classList.add('table-active-custom'));
-                    if (checkbox) checkbox.checked = true;
+
+                    // 根据行ID在整个组件内查找并选中对应的单选按钮，并更新状态
+                    const radioForThisRow = this.container.querySelector(`input[data-row-id="${rowId}"][name="dt-radio-selection"]`);
+                    if (radioForThisRow) {
+                        radioForThisRow.checked = true;
+                        this.selectedRowId = rowId;
+                    }
                 } else if (this.options.selectable === 'multiple') {
                     // 如果点击的不是 checkbox，则反转其状态
-                    const isChecked = checkbox ? (e.target === checkbox ? checkbox.checked : !checkbox.checked) : false;
-                    if(e.target !== checkbox && checkbox) checkbox.checked = isChecked;
-                    allRelatedRows.forEach(r => r.classList.toggle('table-active-custom', isChecked));
+                    if (checkboxOrRadio && e.target !== checkboxOrRadio) {
+                        const newChecked = !checkboxOrRadio.checked;
+                        checkboxOrRadio.checked = newChecked;
+                        // 手动更新状态和样式（因为程序化设置 checked 不触发 change 事件）
+                        if (newChecked) {
+                            this.selectedRows.add(rowId);
+                        } else {
+                            this.selectedRows.delete(rowId);
+                        }
+                        allRelatedRows.forEach(r => r.classList.toggle('table-active-custom', newChecked));
+                        this._updateSelectAllState();
+                    }
+                }
+            });
+            // [新增] 绑定选择框 change 事件处理联动
+            table.addEventListener('change', e => {
+                const input = e.target;
+                if (input.type !== 'checkbox' && input.type !== 'radio') return;
+                if (!input.dataset.rowId && input.dataset.select !== 'all') return;
+                const rowId = input.dataset.rowId;
+                if (input.dataset.select === 'all') {
+                    // 全选/全不选处理
+                    const checked = input.checked;
+                    this.data.forEach(row => {
+                        const rid = this.rowIdMap.get(row);
+                        if (checked) {
+                            this.selectedRows.add(rid);
+                        } else {
+                            this.selectedRows.delete(rid);
+                        }
+                    });
+                    // 更新所有行 checkbox 和样式
+                    this.data.forEach(row => {
+                        const rid = this.rowIdMap.get(row);
+                        const cb = this.container.querySelector(`input[type="checkbox"][data-row-id="${rid}"]`);
+                        if (cb) cb.checked = checked;
+                        this.container.querySelectorAll(`tr[data-row-id="${rid}"]`).forEach(r => r.classList.toggle('table-active-custom', checked));
+                    });
+                } else if (input.type === 'radio') {
+                    // 单选处理
+                    if (input.checked) {
+                        this.selectedRowId = rowId;
+                        this.container.querySelectorAll('tr.table-active-custom').forEach(r => r.classList.remove('table-active-custom'));
+                        this.container.querySelectorAll(`tr[data-row-id="${rowId}"]`).forEach(r => r.classList.add('table-active-custom'));
+                    }
+                } else {
+                    // 行 checkbox 处理
+                    if (input.checked) {
+                        this.selectedRows.add(rowId);
+                    } else {
+                        this.selectedRows.delete(rowId);
+                    }
+                    this.container.querySelectorAll(`tr[data-row-id="${rowId}"]`).forEach(r => r.classList.toggle('table-active-custom', input.checked));
                     this._updateSelectAllState();
                 }
             });
@@ -707,4 +824,3 @@ export default class DataTable {
         });
     }
 }
-
