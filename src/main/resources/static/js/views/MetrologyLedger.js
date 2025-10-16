@@ -1,28 +1,49 @@
 /**
- * 源码路径: js/views/MetrologyLedger_Updated.js
- * 功能说明: 这是 MetrologyLedger.js 的更新版本，展示了如何使用 Optimized_DataTable.js 组件。
+ * 源码路径: js/views/MetrologyLedger.js
+ * 功能说明: 计量台账页面视图逻辑 (已适配真实后端数据)
  *
  * --- 主要变化 ---
- * 1.  **组件引用**: 导入了 Optimized_DataTable.js。
- * 2.  **状态简化**: 移除了视图层中对 currentPage 和 currentFilters 的管理，这些状态已移入新表格组件内部。
- * 3.  **事件统一**: 废弃了对 'pageChange' 和筛选器 'change' 的单独监听，改为统一监听表格派发的 'queryChange' 事件。
- * 4.  **开启排序**: 在列定义中，为 'sysId', 'enterpriseId', 'nextDate' 添加了 `sortable: true` 属性。
- * 5.  **加载逻辑**: `_loadData` 方法现在接收所有查询参数，并使用新表格的 `toggleLoading` 方法来显示加载状态。
+ * 1.  **移除模拟数据**: _renderDataTable 方法不再生成任何模拟数据。
+ * 2.  **适配真实列**: 列定义（columns）已根据 V_JL_EQUIP 视图和字段字典进行精确配置。
+ * 3.  **日期格式化**: 为日期字段添加了 render 函数，以提供更友好的显示。
+ * 4.  **主键适配**: 确保表格行的 id 绑定到从后端获取的 `indocno` 主键。
  *
- * @version 3.2.0 - 2025-10-14 (修复了 'pageNum=undefined' 的bug)
+ * @version 4.1.0 - 2025-10-15 (修复日期显示问题)
  */
-// 变化1: 导入优化后的组件
 import DataTable from '../components/Optimized_DataTable.js';
 import QueryForm from '../components/QueryForm.js';
 import Modal from '../components/Modal.js';
 import { getMetrologyLedger, exportMetrologyLedger } from '../services/api.js';
 
-export default class MetrologyLedgerUpdated {
+/**
+ * [新增] 一个健壮的日期格式化函数，用于防止 "Invalid Date" 的显示
+ * @param {string} dateString - 从后端接收的日期字符串或时间戳
+ * @returns {string} 格式化后的 'YYYY-MM-DD' 字符串或 '-'
+ */
+const formatDate = (dateString) => {
+    if (!dateString) {
+        return '-';
+    }
+    const date = new Date(dateString);
+    // 检查日期对象是否有效
+    if (isNaN(date.getTime())) {
+        return '-'; // 如果解析失败，返回一个占位符
+    }
+
+    // 手动格式化为 YYYY-MM-DD 以避免不同环境下的显示差异
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+};
+
+
+export default class MetrologyLedger {
     constructor() {
         this.dataTable = null;
         this.queryForm = null;
         this.container = null;
-        // 变化2: 移除 currentPage, pageSize, currentFilters，这些状态由 DataTable 内部管理
     }
 
     render(container) {
@@ -58,11 +79,12 @@ export default class MetrologyLedgerUpdated {
     }
 
     _renderDataTable(container) {
+        // --- [核心修改] 根据数据库字典和DTO重新定义列 ---
         const columns = [
             // --- 默认显示列 ---
-            { key: 'expired', title: '是否过期', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-danger"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
+            { key: 'expired', title: '是否过期', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-exclamation-triangle-fill text-danger"></i>' : '<i class="bi bi-shield-check-fill text-success"></i>' },
             { key: 'isLinked', title: '台账挂接', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
-            { key: 'sysId', title: '系统编号', visible: true, width: 100, sortable: true },
+            { key: 'sysId', title: '系统编号', visible: true, width: 120, sortable: true },
             { key: 'enterpriseId', title: '企业编号', visible: true, width: 120, sortable: true },
             { key: 'deviceName', title: '设备名称', visible: true, width: 180 },
             { key: 'model', title: '规格型号', visible: true, width: 120 },
@@ -70,37 +92,25 @@ export default class MetrologyLedgerUpdated {
             { key: 'location', title: '安装位置/使用人', visible: true, width: 150 },
             { key: 'accuracy', title: '准确度等级', visible: true, width: 120 },
             { key: 'status', title: '设备状态', visible: true, width: 90 },
-            { key: 'nextDate', title: '下次确认日期', visible: true, width: 120, sortable: true },
+            { key: 'nextDate', title: '下次确认日期', visible: true, width: 120, sortable: true, render: formatDate },
             { key: 'parentDevice', title: '所属设备', visible: true, width: 120 },
             { key: 'department', title: '使用部门', visible: true, width: 120 },
             { key: 'abc', title: 'ABC分类', visible: true, width: 90 },
 
-            // --- 默认隐藏列 (已补全) ---
-            { key: 'seq', title: '序号', visible: false },
-            { key: 'erpId', title: 'ERP编号', visible: false },
-            { key: 'range', title: '量程范围', visible: false },
-            { key: 'pointCheckStatus', title: '点检状态', visible: false },
-            { key: 'owner', title: '责任人', visible: false },
-            { key: 'verifier', title: '检定员', visible: false },
-            { key: 'gbAccuracy', title: 'GB17167要求准确度', visible: false },
-            { key: 'uncertainty', title: '不确定度', visible: false },
-            { key: 'resolution', title: '分辨力/分度值', visible: false },
-            { key: 'techParams', title: '技术参数', visible: false },
-            { key: 'classStandard', title: '分类标准', visible: false },
-            { key: 'manufacturer', title: '制造单位', visible: false },
-            { key: 'mfgDate', title: '出厂日期', visible: false },
-            { key: 'startDate', title: '启用日期', visible: false },
-            { key: 'funcUnit', title: '设备或系统功能单元', visible: false },
-            { key: 'assetCode', title: '固定资产编码', visible: false },
-            { key: 'interval', title: '确认间隔', visible: false },
-            { key: 'confirmDate', title: '确认日期', visible: false },
-            { key: 'verificationType', title: '检定类型', visible: false },
-            { key: 'verificationUnit', title: '检定单位', visible: false },
-            { key: 'mandatory', title: '强检标识', visible: false },
-            { key: 'energyClass', title: '能源分类', visible: false },
-            { key: 'energyToolType', title: '能源器具种类', visible: false },
-            { key: 'qcInstrument', title: '质检仪器', visible: false },
-            { key: 'description', title: '异常描述', visible: false },
+            // --- 默认隐藏列 (根据字典配置) ---
+            { key: 'iqj', title: '强检标识', visible: false },
+            { key: 'izj', title: '质检仪器', visible: false },
+            { key: 'slc', title: '量程范围', visible: false },
+            { key: 'sproduct', title: '制造单位', visible: false },
+            { key: 'dfactory', title: '出厂时间', visible: false, render: formatDate },
+            { key: 'suser', title: '责任人', visible: false },
+            { key: 'sverifier', title: '检定员', visible: false },
+            { key: 'sdefine1', title: '确认方式', visible: false },
+            { key: 'scertificate', title: '证书编号', visible: false },
+            { key: 'sbuytype', title: '购置形式', visible: false },
+            { key: 'dcheck', title: '本次确认日期', visible: false, render: formatDate },
+            { key: 'sconfirmbasis', title: '确认依据', visible: false },
+            { key: 'snotes', title: '备注', visible: false },
         ];
 
         const actions = [
@@ -109,17 +119,17 @@ export default class MetrologyLedgerUpdated {
         ];
 
         const filters = [
-            { type: 'pills', label: '设备状态', name: 'deviceStatus', options: [{label: '全部', value: 'all', checked: true}, {label: '正常', value: 'normal'}, {label: '维修中', value: 'repair'}, {label: '已报废', value: 'scrapped'}] },
-            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'a'}, {label: 'B', 'value': 'b'}, {label: 'C', value: 'c'}] }
+            { type: 'pills', label: '设备状态', name: 'deviceStatus', options: [{label: '全部', value: 'all', checked: true}, {label: '在用', value: 'normal'}, {label: '维修', value: 'repair'}, {label: '报废', value: 'scrapped'}] },
+            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'A'}, {label: 'B', 'value': 'B'}, {label: 'C', value: 'C'}] }
         ];
 
-        this.dataTable = new DataTable({ // 使用优化后的 DataTable
+        this.dataTable = new DataTable({
             columns, actions, filters, data: [],
             options: {
                 configurable: true,
-                storageKey: 'metrologyLedgerTable',
+                uniformRowHeight: true,
+                storageKey: 'metrologyLedgerTable_v2', // Use a new key for the new config
                 selectable: 'single',
-                // 可以设置默认排序
                 defaultSortBy: 'sysId',
                 defaultSortOrder: 'desc'
             }
@@ -127,17 +137,13 @@ export default class MetrologyLedgerUpdated {
         this.dataTable.render(container);
     }
 
-    /**
-     * [已修复] _loadData 方法不再接收参数，而是直接从组件状态中获取所有查询条件，逻辑更健壮。
-     */
     async _loadData() {
-        this.dataTable.toggleLoading(true); // 显示加载动画
+        this.dataTable.toggleLoading(true);
 
         try {
             const formParams = this.queryForm.getValues();
-            const tableState = this.dataTable.state; // 直接从 DataTable 实例获取当前状态
+            const tableState = this.dataTable.state;
 
-            // 合并来自查询表单和表格内部状态（分页、排序、筛选）的参数
             const params = {
                 ...formParams,
                 ...tableState.filters,
@@ -147,43 +153,37 @@ export default class MetrologyLedgerUpdated {
                 sortOrder: tableState.sortOrder,
             };
 
-            // 清理无效参数
-            if (!params.sortBy) {
-                delete params.sortBy;
-                delete params.sortOrder;
-            }
-
+            // [重要] 后端 DTO 的 id 字段是 indocno，确保行ID正确绑定
             const pageResult = await getMetrologyLedger(params);
+            pageResult.list.forEach(item => {
+                item.id = item.indocno; // 将 indocno 赋值给 id，以便表格组件正确识别
+            });
+
             this.dataTable.updateView(pageResult);
         } catch (error) {
             console.error("加载台账数据失败:", error);
             Modal.alert(`加载数据失败: ${error.message}`);
         } finally {
-            this.dataTable.toggleLoading(false); // 隐藏加载动画
+            this.dataTable.toggleLoading(false);
         }
     }
 
-    /**
-     * [已修复] 简化事件监听逻辑，统一处理
-     */
     _attachEventListeners() {
         const tableContainer = this.container.querySelector('#data-table-container');
         if (!tableContainer) return;
 
-        // 监听工具栏的 "查询" 和 "导出" 按钮
         tableContainer.addEventListener('click', async (e) => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
 
             const action = button.dataset.action;
             if (action === 'search') {
-                this.dataTable.state.pageNum = 1; // 点击查询按钮，重置到第一页
+                this.dataTable.state.pageNum = 1;
                 this._loadData();
             } else if (action === 'export') {
                 button.disabled = true;
                 button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 正在导出...';
                 try {
-                    // 导出时也直接从组件状态获取最新参数
                     const params = {
                         ...this.queryForm.getValues(),
                         ...this.dataTable.state.filters,
@@ -202,7 +202,6 @@ export default class MetrologyLedgerUpdated {
             }
         });
 
-        // [已修复] 统一监听表格内部状态变化（分页、排序、筛选），触发数据重新加载
         tableContainer.addEventListener('queryChange', () => {
             this._loadData();
         });

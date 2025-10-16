@@ -52,6 +52,15 @@ async function apiFetch(url, options = {}, isRetry = false) {
     return text ? JSON.parse(text) : {};
 }
 
+/**
+ * [新增] 更新计量任务状态
+ */
+export async function updateMetrologyTasks(payload) {
+    return apiFetch('/api/metrology/task/update', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    });
+}
 
 
 // --- 计量台账 ---

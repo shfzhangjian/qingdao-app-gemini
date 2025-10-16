@@ -1,7 +1,7 @@
 /**
  * 源码路径: js/components/Optimized_DataTable.js
  * 功能说明: 一个功能强大的数据表格组件
- * @version 3.5.5 - 2025-10-15: [修复] 无数据时锁定区域保持边框一致，添加空行以匹配高度。
+ * @version 3.5.8 - 2025-10-15: [新增] uniformRowHeight 选项，可根据内容统一所有数据行的高度。
  */
 import Modal from './Modal.js';
 
@@ -25,12 +25,16 @@ export default class DataTable {
             defaultColumnWidth: 150,
             getRowClass: null,
             pagination: true,
+            // [新增] 增加 uniformRowHeight 选项，用于控制是否统一所有数据行的高度。
+            // 设置为 true 后，表格将计算所有可见数据行的最大高度，并将其应用到每一行，实现整齐划一的视觉效果。
+            // 默认为 false，保持原有的自适应行高。
+            uniformRowHeight: false,
             ...options
         };
         this.container = null;
         this.isConfigModalOpen = false;
         this.scrollSyncAttached = false;
-
+        this.listenersAttached = false;
         // [新增] 选中状态管理
         if (this.options.selectable) {
             this.selectedRowId = null;
@@ -50,6 +54,47 @@ export default class DataTable {
         // [新增] 标记是否为首次加载（无本地配置）
         this.isInitialLoad = !loadedConfig;
     }
+
+    /**
+     * [新增] 绑定持久化容器的事件监听器，此方法只应执行一次
+     * @private
+     */
+    _attachContainerEventListeners() {
+        // 监听：点击事件（分页、排序、操作按钮等）
+        this.container.addEventListener('click', e => {
+            const button = e.target.closest('button[data-action]');
+            if (button && button.dataset.action === 'configure-columns') this._showColumnConfigModal();
+
+            const pageLink = e.target.closest('.page-link[data-page]');
+            if (pageLink && !pageLink.parentElement.classList.contains('disabled')) {
+                e.preventDefault();
+                this.state.pageNum = parseInt(pageLink.dataset.page, 10);
+                this.container.dispatchEvent(new CustomEvent('queryChange', { detail: { pageNum: this.state.pageNum }, bubbles: true }));
+            }
+
+            const sortableHeader = e.target.closest('th.dt-sortable');
+            if (sortableHeader) {
+                const key = sortableHeader.dataset.colKey;
+                this.state.sortOrder = (this.state.sortBy === key && this.state.sortOrder === 'asc') ? 'desc' : 'asc';
+                this.state.sortBy = key;
+                this.state.pageNum = 1;
+                this.container.dispatchEvent(new CustomEvent('queryChange', { detail: { sortBy: this.state.sortBy, sortOrder: this.state.sortOrder }, bubbles: true }));
+            }
+        });
+
+        // 监听：变更事件（仅限工具栏筛选器）
+        this.container.addEventListener('change', e => {
+            const radio = e.target.closest('input[type="radio"][name]');
+
+            // [关键修复] 增加对父元素的检查，确保事件源是工具栏筛选器，而不是表格行
+            if (radio && radio.closest('.d-flex.align-items-center.gap-4')) {
+                this.state.filters[radio.name] = radio.value;
+                this.state.pageNum = 1;
+                this.container.dispatchEvent(new CustomEvent('queryChange', { detail: { filters: this.state.filters }, bubbles: true }));
+            }
+        });
+    }
+
 
     /**
      * 从筛选器配置中获取初始的筛选值
@@ -159,7 +204,7 @@ export default class DataTable {
     }
 
     /**
-     * [新增] 恢复选中行的样式类
+     * [修改] 恢复选中行的样式类，确保显式添加/移除类
      * @private
      */
     _restoreSelectionClasses() {
@@ -170,8 +215,13 @@ export default class DataTable {
             const rowId = this.rowIdMap.get(row);
             if (!rowId) return;
             const isSelected = isSingle ? (selectedId === rowId) : this.selectedRows.has(rowId);
-            this.container.querySelectorAll(`tr[data-row-id="${rowId}"]`).forEach(r => {
-                r.classList.toggle('table-active-custom', isSelected);
+            const rows = this.container.querySelectorAll(`tr[data-row-id="${rowId}"]`);
+            rows.forEach(r => {
+                if (isSelected) {
+                    r.classList.add('table-active-custom');
+                } else {
+                    r.classList.remove('table-active-custom');
+                }
             });
         });
     }
@@ -228,6 +278,13 @@ export default class DataTable {
         `;
 
         this._attachEventListeners();
+
+        // [关键修复] 使用标记确保容器监听器只附加一次
+        if (!this.listenersAttached) {
+            this._attachContainerEventListeners();
+            this.listenersAttached = true;
+        }
+
         // 确保在DOM更新后同步行高，并恢复选中状态
         requestAnimationFrame(() => {
             this._syncRowHeights();
@@ -392,36 +449,6 @@ export default class DataTable {
      * @private
      */
     _attachEventListeners() {
-        this.container.addEventListener('click', e => {
-            const button = e.target.closest('button[data-action]');
-            if (button && button.dataset.action === 'configure-columns') this._showColumnConfigModal();
-
-            const pageLink = e.target.closest('.page-link[data-page]');
-            if (pageLink && !pageLink.parentElement.classList.contains('disabled')) {
-                e.preventDefault();
-                this.state.pageNum = parseInt(pageLink.dataset.page, 10);
-                this.container.dispatchEvent(new CustomEvent('queryChange', { detail: { pageNum: this.state.pageNum }, bubbles: true }));
-            }
-
-            const sortableHeader = e.target.closest('th.dt-sortable');
-            if (sortableHeader) {
-                const key = sortableHeader.dataset.colKey;
-                this.state.sortOrder = (this.state.sortBy === key && this.state.sortOrder === 'asc') ? 'desc' : 'asc';
-                this.state.sortBy = key;
-                this.state.pageNum = 1;
-                this.container.dispatchEvent(new CustomEvent('queryChange', { detail: { sortBy: this.state.sortBy, sortOrder: this.state.sortOrder }, bubbles: true }));
-            }
-        });
-
-        this.container.addEventListener('change', e => {
-            const radio = e.target.closest('input[type="radio"][name]');
-            if (radio) {
-                this.state.filters[radio.name] = radio.value;
-                this.state.pageNum = 1;
-                this.container.dispatchEvent(new CustomEvent('queryChange', { detail: { filters: this.state.filters }, bubbles: true }));
-            }
-        });
-
         this._attachResizeListeners();
         this._attachSelectionAndHoverSync();
     }
@@ -453,7 +480,7 @@ export default class DataTable {
     }
 
     /**
-     * 绑定多表格之间的行高亮和选择同步事件
+     * [修改] 绑定多表格之间的行高亮和选择同步事件，避免选中操作触发 queryChange
      * @private
      */
     _attachSelectionAndHoverSync() {
@@ -468,6 +495,8 @@ export default class DataTable {
                 if (row && row.dataset.rowId) this.container.querySelectorAll(`tr[data-row-id="${row.dataset.rowId}"]`).forEach(r => r.classList.remove('table-hover-custom'));
             });
             table.addEventListener('click', e => {
+                // [新增] 停止事件冒泡，避免触发上层 queryChange（如排序或分页）
+                e.stopPropagation();
                 const row = e.target.closest('tr');
                 if (!row || !row.dataset.rowId || e.target.closest('button')) return;
 
@@ -487,6 +516,8 @@ export default class DataTable {
                     if (radioForThisRow) {
                         radioForThisRow.checked = true;
                         this.selectedRowId = rowId;
+                        // [新增] 手动触发 change 事件，确保同步（但不触发 queryChange，因为 name 不匹配过滤器）
+                        radioForThisRow.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                 } else if (this.options.selectable === 'multiple') {
                     // 如果点击的不是 checkbox，则反转其状态
@@ -628,30 +659,65 @@ export default class DataTable {
     }
 
     /**
-     * 同步所有表格的行高和表头高，确保对齐
+     * [重写] 同步所有表格的行高和表头高，确保对齐。
+     * 增加了对 `uniformRowHeight` 选项的支持，可以统一所有数据行的高度。
      * @private
      */
     _syncRowHeights() {
         const tables = Array.from(this.container.querySelectorAll('.datatable-main-wrapper table'));
-        if (tables.length < 2) return;
 
-        const allRows = tables.map(t => Array.from(t.rows)).flat();
-        if (allRows.length === 0) return;
+        // 如果只有一个表格（没有冻结列）并且未启用统一行高，则无需执行同步。
+        if (tables.length < 2 && !this.options.uniformRowHeight) {
+            return;
+        }
 
-        // 提取所有唯一的行索引（包括 a 和 tbody）
-        const rowCount = Math.max(...tables.map(t => t.rows.length));
+        // 如果找不到任何表格，也直接返回。
+        if (tables.length === 0) {
+            return;
+        }
 
-        for (let i = 0; i < rowCount; i++) {
-            const rowElements = tables.map(t => t.rows[i]).filter(Boolean);
-            if (rowElements.length < 2) continue;
+        // --- 步骤 1: 同步表头行高 ---
+        // 无论是否统一行高，只要存在冻结列（即多个table），表头行高就必须同步以保证对齐。
+        if (tables.length > 1) {
+            const headerRowCount = Math.max(...tables.map(t => t.tHead?.rows.length || 0));
+            for (let i = 0; i < headerRowCount; i++) {
+                const rowElements = tables.map(t => t.tHead?.rows[i]).filter(Boolean);
+                if (rowElements.length < 2) continue;
 
-            let maxHeight = 0;
-            // 先重置高度以便获取自然高度
-            rowElements.forEach(r => { r.style.height = ''; });
-            // 获取最大自然高度
-            rowElements.forEach(r => { if (r.offsetHeight > maxHeight) maxHeight = r.offsetHeight; });
-            // 设置统一高度
-            rowElements.forEach(r => { r.style.height = `${maxHeight}px`; });
+                let maxHeight = 0;
+                rowElements.forEach(r => { r.style.height = ''; });
+                rowElements.forEach(r => { if (r.offsetHeight > maxHeight) maxHeight = r.offsetHeight; });
+                rowElements.forEach(r => { r.style.height = `${maxHeight}px`; });
+            }
+        }
+
+        // --- 步骤 2: 根据选项处理数据行（tbody） ---
+        if (this.options.uniformRowHeight) {
+            // [新功能] 模式：统一所有数据行的高度。
+            const allBodyRows = tables.map(t => Array.from(t.tBodies[0]?.rows || [])).flat();
+            if (allBodyRows.length > 0) {
+                let maxOverallHeight = 0;
+                // a. 先重置所有行的高度，以测量其内容的自然高度。
+                allBodyRows.forEach(r => { r.style.height = ''; });
+                // b. 遍历所有数据行，找到一个全局的最大高度。
+                allBodyRows.forEach(r => { if (r.offsetHeight > maxOverallHeight) maxOverallHeight = r.offsetHeight; });
+                // c. 将这个全局最大高度应用到每一行。
+                allBodyRows.forEach(r => { r.style.height = `${maxOverallHeight}px`; });
+            }
+        } else {
+            // [原功能] 模式：逐行同步数据行高度（仅在有冻结列时需要）。
+            if (tables.length > 1) {
+                const bodyRowCount = Math.max(...tables.map(t => t.tBodies[0]?.rows.length || 0));
+                for (let i = 0; i < bodyRowCount; i++) {
+                    const rowElements = tables.map(t => t.tBodies[0]?.rows[i]).filter(Boolean);
+                    if (rowElements.length < 2) continue;
+
+                    let maxHeight = 0;
+                    rowElements.forEach(r => { r.style.height = ''; });
+                    rowElements.forEach(r => { if (r.offsetHeight > maxHeight) maxHeight = r.offsetHeight; });
+                    rowElements.forEach(r => { r.style.height = `${maxHeight}px`; });
+                }
+            }
         }
     }
 

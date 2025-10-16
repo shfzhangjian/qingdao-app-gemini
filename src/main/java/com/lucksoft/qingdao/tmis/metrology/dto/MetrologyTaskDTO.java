@@ -1,68 +1,185 @@
 package com.lucksoft.qingdao.tmis.metrology.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.Date;
+
+/**
+ * 计量点检任务数据 DTO (已更新以匹配 V_JL_EQUIP_DXJ 视图)
+ */
 public class MetrologyTaskDTO {
-    private int id;
-    private String date;
-    private String enterpriseId;
-    private String erpId;
-    private String deviceName;
-    private String model;
-    private String factoryId;
-    private String range;
-    private String location;
-    private String accuracy;
-    private String status;
-    private String pointCheckStatus;
+
+    @JsonProperty("id")
+    private Long indocno; // 主键
+
+    @JsonProperty("date")
+    private Date dupcheck; // 任务时间 (确认日期)
+
+    @JsonProperty("pointCheckStatus")
+    private String idjstate; // 点检状态
+
+    @JsonProperty("enterpriseId")
+    private String sjno; // 企业编号
+
+    @JsonProperty("deviceName")
+    private String sjname; // 设备名称
+
+    @JsonProperty("model")
+    private String sggxh; // 规格型号
+
+    @JsonProperty("factoryId")
+    private String sfactoryno; // 出厂编号
+
+    @JsonProperty("location")
+    private String splace; // 安装位置/使用人
+
+    @JsonProperty("accuracy")
+    private String slevel; // 准确度等级
+
+    @JsonProperty("status")
+    private String istate; // 设备状态
+
+    @JsonProperty("abc")
+    private String sabc; // ABC分类
+
+    // 根据 SCHECKRESULT 动态计算
+    @JsonProperty("isAbnormal")
     private boolean isAbnormal;
-    private String abc;
 
-    public MetrologyTaskDTO() {}
-
-    public MetrologyTaskDTO(int id, String date, String enterpriseId, String erpId, String deviceName, String model, String factoryId, String range, String location, String accuracy, String status, String pointCheckStatus, boolean isAbnormal, String abc) {
-        this.id = id;
-        this.date = date;
-        this.enterpriseId = enterpriseId;
-        this.erpId = erpId;
-        this.deviceName = deviceName;
-        this.model = model;
-        this.factoryId = factoryId;
-        this.range = range;
-        this.location = location;
-        this.accuracy = accuracy;
-        this.status = status;
-        this.pointCheckStatus = pointCheckStatus;
-        this.isAbnormal = isAbnormal;
-        this.abc = abc;
-    }
+    // --- 隐藏字段 ---
+    private String scheckresult; // 检查结果 (用于计算 isAbnormal)
+    private String scheckremark; // 检查备注 (异常描述)
+    private String susedept; // 使用部门
+    private String erpId; // ERP 编号 (V_JL_EQUIP_DXJ 中没有，设为空)
+    private String range; // 量程范围 (V_JL_EQUIP_DXJ 中为 slc)
+    private String slc;
 
     // Getters and Setters
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
-    public String getDate() { return date; }
-    public void setDate(String date) { this.date = date; }
-    public String getEnterpriseId() { return enterpriseId; }
-    public void setEnterpriseId(String enterpriseId) { this.enterpriseId = enterpriseId; }
+    public Long getIndocno() {
+        return indocno;
+    }
+
+    public void setIndocno(Long indocno) {
+        this.indocno = indocno;
+    }
+
+    public Date getDupcheck() {
+        return dupcheck;
+    }
+
+    public void setDupcheck(Date dupcheck) {
+        this.dupcheck = dupcheck;
+    }
+
+    public String getIdjstate() {
+        return idjstate;
+    }
+
+    public void setIdjstate(String idjstate) {
+        this.idjstate = idjstate;
+    }
+
+    public String getSjno() {
+        return sjno;
+    }
+
+    public void setSjno(String sjno) {
+        this.sjno = sjno;
+    }
+
+    public String getSjname() {
+        return sjname;
+    }
+
+    public void setSjname(String sjname) {
+        this.sjname = sjname;
+    }
+
+    public String getSggxh() {
+        return sggxh;
+    }
+
+    public void setSggxh(String sggxh) {
+        this.sggxh = sggxh;
+    }
+
+    public String getSfactoryno() {
+        return sfactoryno;
+    }
+
+    public void setSfactoryno(String sfactoryno) {
+        this.sfactoryno = sfactoryno;
+    }
+
+    public String getSplace() {
+        return splace;
+    }
+
+    public void setSplace(String splace) {
+        this.splace = splace;
+    }
+
+    public String getSlevel() {
+        return slevel;
+    }
+
+    public void setSlevel(String slevel) {
+        this.slevel = slevel;
+    }
+
+    public String getIstate() {
+        return istate;
+    }
+
+    public void setIstate(String istate) {
+        this.istate = istate;
+    }
+
+    public String getSabc() {
+        return sabc;
+    }
+
+    public void setSabc(String sabc) {
+        this.sabc = sabc;
+    }
+
+    public boolean isAbnormal() {
+        return isAbnormal;
+    }
+
+    public void setAbnormal(boolean abnormal) {
+        isAbnormal = abnormal;
+    }
+
+    public String getScheckresult() {
+        return scheckresult;
+    }
+
+    public void setScheckresult(String scheckresult) {
+        this.scheckresult = scheckresult;
+        // 动态计算 isAbnormal
+        this.isAbnormal = "异常".equals(scheckresult);
+    }
+
+    public String getScheckremark() {
+        return scheckremark;
+    }
+
+    public void setScheckremark(String scheckremark) {
+        this.scheckremark = scheckremark;
+    }
+
+    public String getSusedept() {
+        return susedept;
+    }
+
+    public void setSusedept(String susedept) {
+        this.susedept = susedept;
+    }
+
     public String getErpId() { return erpId; }
     public void setErpId(String erpId) { this.erpId = erpId; }
-    public String getDeviceName() { return deviceName; }
-    public void setDeviceName(String deviceName) { this.deviceName = deviceName; }
-    public String getModel() { return model; }
-    public void setModel(String model) { this.model = model; }
-    public String getFactoryId() { return factoryId; }
-    public void setFactoryId(String factoryId) { this.factoryId = factoryId; }
-    public String getRange() { return range; }
+    public String getRange() { return this.slc; } // getRange() 返回 slc 的值
     public void setRange(String range) { this.range = range; }
-    public String getLocation() { return location; }
-    public void setLocation(String location) { this.location = location; }
-    public String getAccuracy() { return accuracy; }
-    public void setAccuracy(String accuracy) { this.accuracy = accuracy; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public String getPointCheckStatus() { return pointCheckStatus; }
-    public void setPointCheckStatus(String pointCheckStatus) { this.pointCheckStatus = pointCheckStatus; }
-    public boolean isAbnormal() { return isAbnormal; }
-    public void setAbnormal(boolean abnormal) { isAbnormal = abnormal; }
-    public String getAbc() { return abc; }
-    public void setAbc(String abc) { this.abc = abc; }
+    public String getSlc() { return slc; }
+    public void setSlc(String slc) { this.slc = slc; }
 }
-

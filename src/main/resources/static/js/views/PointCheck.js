@@ -197,6 +197,7 @@ export default class PointCheck {
         this.dataTable = new DataTable({
             columns, data: [], actions: [],
             options: {
+                uniformRowHeight: true,
                 configurable: false,
                 storageKey: 'pointCheckListTable',
                 selectable: 'multiple'
