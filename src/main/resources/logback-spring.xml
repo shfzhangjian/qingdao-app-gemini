@@ -87,11 +87,25 @@
     </logger>
 
     <!-- ===================================================================== -->
+    <!-- 【新增】打印MyBatis SQL和参数                                           -->
+    <!-- ===================================================================== -->
+    <!-- 将Mapper接口的日志级别设为TRACE，即可在控制台看到执行的SQL及绑定的参数 -->
+    <logger name="com.lucksoft.qingdao.qdjl.mapper" level="TRACE" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="com.lucksoft.qingdao.system.mapper" level="TRACE" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="com.lucksoft.qingdao.eam.maintainbook.mapper" level="TRACE" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- ===================================================================== -->
     <!-- 【关键修复】降低Kafka客户端自身的日志级别，减少控制台噪音             -->
     <!-- ===================================================================== -->
     <!-- 这将隐藏所有来自Kafka内部客户端的INFO级别日志，但保留WARN和ERROR -->
     <logger name="org.apache.kafka" level="WARN"/>
-
+    <logger name="org.apache.kafka.clients.NetworkClient" level="ERROR"/>
     <!-- 5. 根 Logger (默认配置) -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

@@ -15,6 +15,15 @@ public class PointCheckQuery extends PageQuery {
     private String viewMode;
     private List<ExportColumn> columns;
 
+    // --- 新增列表查询字段 ---
+    private String sjno; // 企业编号
+    private String sjname; // 设备名称
+    private Integer istate; // 设备状态
+    private Integer iqj; // 强检标识
+    private String snytype; // 能源分类
+    private String year; // 年份，用于统计查询
+    private Long userId; // 当前用户ID，用于权限过滤
+
     // Getters and Setters
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
@@ -30,5 +39,18 @@ public class PointCheckQuery extends PageQuery {
     public void setViewMode(String viewMode) { this.viewMode = viewMode; }
     public List<ExportColumn> getColumns() { return columns; }
     public void setColumns(List<ExportColumn> columns) { this.columns = columns; }
+    public String getSjno() { return sjno; }
+    public void setSjno(String sjno) { this.sjno = sjno; }
+    public String getSjname() { return sjname; }
+    public void setSjname(String sjname) { this.sjname = sjname; }
+    public Integer getIstate() { return istate; }
+    public void setIstate(Integer istate) { this.istate = istate; }
+    public Integer getIqj() { return iqj; }
+    public void setIqj(Integer iqj) { this.iqj = iqj; }
+    public String getSnytype() { return snytype; }
+    public void setSnytype(String snytype) { this.snytype = snytype; }
+    public String getYear() { return year; }
+    public void setYear(String year) { this.year = year; }
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
 }
-

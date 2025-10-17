@@ -117,7 +117,7 @@ export async function exportMetrologyTasks(params) {
 
 // --- 点检统计 ---
 export async function getPointCheckStatistics(params) {
-    const url = `/api/metrology/point-check/statistics?${new URLSearchParams(params)}`;
+    const url = `/api/metrology/point-check-stats/statistics?${new URLSearchParams(params)}`;
     return apiFetch(url);
 }
 
