@@ -33,19 +33,19 @@ public interface MetrologyLedgerMapper {
             @Result(property = "seq", column = "SEQ"),
             @Result(property = "susedept", column = "SUSEDEPT"),
             @Result(property = "suser", column = "SUSER"),
-            @Result(property = "sverifier", column = "SVERIFIER"),
+            @Result(property = "sverifier", column = "SCHECKUSER"),
             @Result(property = "sdefine1", column = "SDEFINE1"),
             @Result(property = "scertificate", column = "SCERTIFICATE"),
             @Result(property = "sbuytype", column = "SBUYTYPE"),
             @Result(property = "dcheck", column = "DCHECK"),
-            @Result(property = "dnextcheck", column = "DNEXTCHECK"),
+            @Result(property = "dupcheck", column = "DUPCHECK"),
             @Result(property = "sconfirmbasis", column = "SCONFIRMBASIS"),
             @Result(property = "snotes", column = "SNOTES")
     })
     @Select("<script>" +
             "SELECT * FROM V_JL_EQUIP " +
             "<where>" +
-            "   NVL(IDEL, 0) = 0 " +
+            "   NVL(IDEL, 0) = 0  and ISTATE != '备用'"+
             "   <if test='deviceName != null and deviceName != \"\"'>" +
             "       AND SJNAME LIKE '%' || #{deviceName} || '%'" +
             "   </if>" +

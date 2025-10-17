@@ -40,7 +40,7 @@ public class MetrologyLedgerDTO {
     private String slevel; // 准确度等级
 
     @JsonProperty("nextDate")
-    private Date dnextcheck; // 下次确认日期
+    private Date dcheck; // 下次确认日期
 
     @JsonProperty("parentDevice")
     private String seq; // 所属设备
@@ -66,7 +66,7 @@ public class MetrologyLedgerDTO {
     private String sdefine1; // 确认方式
     private String scertificate; // 证书编号
     private String sbuytype; // 购置形式
-    private Date dcheck; // 本次确认日期
+    private Date dupcheck; // 本次确认日期
     private String sconfirmbasis; // 确认依据
     private String snotes; // 备注
 
@@ -154,13 +154,13 @@ public class MetrologyLedgerDTO {
     }
 
     public Date getDnextcheck() {
-        return dnextcheck;
+        return dcheck;
     }
 
-    public void setDnextcheck(Date dnextcheck) {
-        this.dnextcheck = dnextcheck;
-        if (dnextcheck != null) {
-            this.expired = dnextcheck.before(new Date());
+    public void setDnextcheck(Date dcheck) {
+        this.dcheck = dcheck;
+        if (dcheck != null) {
+            this.expired = dcheck.before(new Date());
         } else {
             this.expired = false;
         }
@@ -278,12 +278,12 @@ public class MetrologyLedgerDTO {
         this.sbuytype = sbuytype;
     }
 
-    public Date getDcheck() {
-        return dcheck;
+    public Date getDupcheck() {
+        return dupcheck;
     }
 
-    public void setDcheck(Date dcheck) {
-        this.dcheck = dcheck;
+    public void setDupcheck(Date dupcheck) {
+        this.dupcheck = dupcheck;
     }
 
     public String getSconfirmbasis() {

@@ -108,7 +108,7 @@ export default class MetrologyLedger {
             { key: 'sdefine1', title: '确认方式', visible: false },
             { key: 'scertificate', title: '证书编号', visible: false },
             { key: 'sbuytype', title: '购置形式', visible: false },
-            { key: 'dcheck', title: '本次确认日期', visible: false, render: formatDate },
+            { key: 'dupcheck', title: '本次确认日期', visible: false, render: formatDate },
             { key: 'sconfirmbasis', title: '确认依据', visible: false },
             { key: 'snotes', title: '备注', visible: false },
         ];
