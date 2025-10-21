@@ -1,12 +1,14 @@
 package com.lucksoft.qingdao.tmis.metrology.dto;
 
+import java.io.Serializable;
 import java.util.Date;
 
 /**
  * 点检列表原始数据DTO，用于接收从数据库查询出的列表行数据。
  * 字段名直接对应数据库视图JL_EQUIP_DXJ中的列名。
  */
-public class PointCheckListItemDTO {
+public class PointCheckListItemDTO  implements Serializable {
+    private static final long serialVersionUID = 1L;
     // 主键
     private Long indocno;
     // 企业内码

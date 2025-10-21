@@ -1,10 +1,13 @@
 package com.lucksoft.qingdao.tmis.metrology.dto;
 
+import java.io.Serializable;
+
 /**
  * 点检原始统计数据DTO，用于接收MyBatis从数据库查询出的初步聚合结果。
  * 字段（F1, F1A1...）直接对应A/B/C类统计SQL中的别名。
  */
-public class PointCheckRawStatsDTO {
+public class PointCheckRawStatsDTO implements Serializable {
+    private static final long serialVersionUID = 1L;
     // 部门ID
     private Long iusedept;
     // 部门名称

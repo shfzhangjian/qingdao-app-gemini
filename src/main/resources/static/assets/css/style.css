@@ -298,3 +298,150 @@ body.theme-dark * { scrollbar-color: #555 var(--bg-primary); }
 body.theme-light .stats-table-hover .cell-highlight {
     background-color: rgba(0, 122, 204, 0.1) !important;
 }
+
+
+/* --- [新增] Splitter 分隔条样式 --- */
+.splitter-container {
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+}
+
+.splitter-container > #left-panel {
+    flex-shrink: 0;
+    transition: width 0.3s ease-in-out;
+}
+
+.splitter-container > #right-panel {
+    flex-grow: 1;
+    min-width: 0; /* Important for flex-grow to work correctly */
+}
+
+.splitter-handle {
+    flex-shrink: 0;
+    width: 8px;
+    background-color: var(--bg-primary);
+    cursor: col-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: background-color 0.2s;
+}
+
+.splitter-handle:hover {
+    background-color: var(--accent-color);
+}
+
+.is-dragging .splitter-handle {
+    background-color: var(--accent-color);
+}
+
+.splitter-icon-wrapper {
+    background-color: var(--border-color);
+    border-radius: 5px;
+    padding: 3px 0;
+    line-height: 1;
+}
+
+.splitter-collapse-btn {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 30px;
+    border-radius: 5px 0 0 5px;
+    background-color: var(--border-color);
+    color: var(--text-primary);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    z-index: 10;
+}
+
+.splitter-container.collapsed .splitter-collapse-btn {
+    border-radius: 0 5px 5px 0;
+}
+
+/* --- [新增] SimpleTree 树状视图样式 --- */
+.simple-tree {
+    list-style: none;
+    padding: 0.5rem;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.simple-tree li {
+    position: relative;
+    padding-left: 1.5rem; /* 为连接线留出空间 */
+}
+
+/* --- 连接线 --- */
+.simple-tree li::before,
+.simple-tree li::after {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    border-color: var(--border-color);
+}
+
+.simple-tree li::before {
+    border-left: 1px solid var(--border-color);
+    height: 100%;
+    top: 0;
+    width: 1px;
+}
+
+.simple-tree li:last-child::before {
+    height: 1.1rem; /* 最后一条线短一点 */
+}
+
+.simple-tree li::after {
+    border-top: 1px solid var(--border-color);
+    top: 1.1rem;
+    width: 0.8rem;
+}
+
+
+.simple-tree .tree-node {
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0.5rem;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    position: relative;
+    z-index: 1; /* 确保节点内容在连接线之上 */
+}
+
+.simple-tree .tree-node:hover {
+    background-color: rgba(128,128,128,0.1);
+}
+
+.simple-tree .tree-node.active {
+    background-color: var(--accent-color);
+    color: #fff;
+}
+
+.simple-tree .tree-toggle {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    width: 1em;
+}
+
+.simple-tree .tree-icon {
+    margin: 0 0.5rem;
+}
+
+.simple-tree .tree-node-placeholder {
+    display: inline-block;
+    width: 1em;
+}
+
+.simple-tree .tree-children {
+    list-style: none;
+    padding-left: 0;
+}

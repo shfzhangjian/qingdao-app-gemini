@@ -1,6 +1,11 @@
 package com.lucksoft.qingdao.tmis.metrology.dto;
 
-public class PointCheckStatsDTO {
+import java.io.Serializable;
+
+public class PointCheckStatsDTO implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private String dept;
 
     // 上半年

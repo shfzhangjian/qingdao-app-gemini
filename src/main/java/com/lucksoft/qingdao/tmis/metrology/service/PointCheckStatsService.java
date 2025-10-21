@@ -4,6 +4,7 @@ import com.lucksoft.qingdao.qdjl.mapper.PointCheckStatsMapper;
 import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckQuery;
 import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckRawStatsDTO;
 import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckStatsDTO;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -24,21 +25,26 @@ public class PointCheckStatsService {
     }
 
     /**
-     * 获取点检统计数据,并聚合成前端所需的上半年/下半年格式
+     * 获取点检统计数据,并聚合成前端所需的上半年/下半年格式。
+     * 使用 @Cacheable 注解为此方法的返回结果启用缓存。
+     * - cacheNames: 指定缓存存储的命名空间。
+     * - key: 定义缓存的键。这里使用年份、ABC分类和用户ID动态生成唯一的键，
+     * 确保不同用户的不同查询条件都有独立的缓存。
      * @param query 查询参数
      * @return 统计数据列表
      */
+    @Cacheable(cacheNames = "pointCheckStats", key = "#query.year + '-' + #query.category + '-' + #query.userId")
     public List<PointCheckStatsDTO> getStatistics(PointCheckQuery query) {
         // 从 dateRange 提取年份，默认为当前年份
-        String year = LocalDate.now().getYear() + "";
-        if (query.getDateRange() != null && !query.getDateRange().isEmpty()) {
+        String year = String.valueOf(LocalDate.now().getYear());
+        if (query.getDateRange() != null && !query.getDateRange().isEmpty() && query.getDateRange().length() >= 4) {
             year = query.getDateRange().substring(0, 4);
         }
         query.setYear(year);
-        // todo: 从SecurityContext获取当前用户ID
-        // query.setUserId(1L);
+        // todo: 在真实的权限集成中，应从SecurityContext获取当前登录用户的ID
+        // query.setUserId(getCurrentUserId());
 
-        // 从数据库获取原始聚合数据
+        // 从数据库获取按周期（双月/季度/半年）聚合的原始数据
         List<PointCheckRawStatsDTO> rawStatsList = pointCheckStatsMapper.getRawStatistics(query);
         List<PointCheckStatsDTO> finalStatsList = new ArrayList<>();
 
@@ -51,9 +57,9 @@ public class PointCheckStatsService {
 
             String category = query.getCategory() != null ? query.getCategory().toUpperCase() : "A";
 
-            // 根据类别聚合数据到上半年/下半年
+            // 根据ABC类别，将不同周期的数据累加到上半年(H1)和下半年(H2)
             switch(category) {
-                case "A": // 双月
+                case "A": // A类是双月周期, F1-F3为上半年, F4-F6为下半年
                     yingJianH1 = rawStats.getF1() + rawStats.getF2() + rawStats.getF3();
                     yiJianH1 = rawStats.getF1a1() + rawStats.getF2a1() + rawStats.getF3a1();
                     zhengChangH1 = rawStats.getF1a2() + rawStats.getF2a2() + rawStats.getF3a2();
@@ -61,7 +67,7 @@ public class PointCheckStatsService {
                     yiJianH2 = rawStats.getF4a1() + rawStats.getF5a1() + rawStats.getF6a1();
                     zhengChangH2 = rawStats.getF4a2() + rawStats.getF5a2() + rawStats.getF6a2();
                     break;
-                case "B": // 季度
+                case "B": // B类是季度周期, F1-F2为上半年, F3-F4为下半年
                     yingJianH1 = rawStats.getF1() + rawStats.getF2();
                     yiJianH1 = rawStats.getF1a1() + rawStats.getF2a1();
                     zhengChangH1 = rawStats.getF1a2() + rawStats.getF2a2();
@@ -69,7 +75,7 @@ public class PointCheckStatsService {
                     yiJianH2 = rawStats.getF3a1() + rawStats.getF4a1();
                     zhengChangH2 = rawStats.getF3a2() + rawStats.getF4a2();
                     break;
-                case "C": // 半年
+                case "C": // C类是半年周期, F1为上半年, F2为下半年
                 default:
                     yingJianH1 = rawStats.getF1();
                     yiJianH1 = rawStats.getF1a1();
@@ -80,7 +86,7 @@ public class PointCheckStatsService {
                     break;
             }
 
-            // --- 计算并设置上半年数据 ---
+            // --- 计算并设置上半年派生数据 ---
             finalStats.setYingJianShu1(yingJianH1);
             finalStats.setYiJianShu1(yiJianH1);
             finalStats.setZhengChangShu1(zhengChangH1);
@@ -88,7 +94,7 @@ public class PointCheckStatsService {
             finalStats.setYiChangShu1(yiJianH1 - zhengChangH1);
             finalStats.setZhiXingLv1(yingJianH1 > 0 ? String.format("%.0f%%", (double) yiJianH1 * 100 / yingJianH1) : "0%");
 
-            // --- 计算并设置下半年数据 ---
+            // --- 计算并设置下半年派生数据 ---
             finalStats.setYingJianShu2(yingJianH2);
             finalStats.setYiJianShu2(yiJianH2);
             finalStats.setZhengChangShu2(zhengChangH2);
