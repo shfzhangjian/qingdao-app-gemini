@@ -1,0 +1,241 @@
+/**
+ * @file /assets/css/maintenance-board.css
+ * @description 执行看板和任务执行视图的专属样式
+ * @version 1.1.0 - 2025-10-21
+ */
+
+/* --- [修改] --- */
+/* --- 执行看板九宫格 --- */
+.execution-dashboard {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    padding: 2rem;
+    background-color: var(--bg-primary);
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 2rem;
+    max-width: 800px;
+    width: 100%;
+}
+
+.grid-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.75rem;
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: 1px solid var(--border-color);
+}
+
+.grid-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    color: var(--accent-color);
+}
+
+/* --- [新增] 增大图标和字体 --- */
+.grid-item i {
+    font-size: 3.5rem; /* 增大图标尺寸 */
+    margin-bottom: 1rem;
+}
+
+.grid-item span {
+    font-weight: 500;
+    font-size: 1.1rem; /* 增大文字尺寸 */
+}
+/* --- [修改结束] --- */
+
+.grid-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.grid-item img {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 1rem;
+}
+
+.grid-item span {
+    font-weight: 500;
+}
+
+/* --- 任务执行视图 --- */
+.task-execution-view {
+    display: flex;
+    height: 100%;
+    background-color: var(--bg-primary);
+}
+
+.task-sidebar {
+    width: 200px;
+    flex-shrink: 0;
+    background-color: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    padding: 1rem 0;
+}
+
+.task-sidebar .sidebar-header {
+    font-size: 1.2rem;
+    font-weight: bold;
+    padding: 0 1.5rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+
+.task-sidebar .nav-link {
+    color: var(--text-secondary);
+    padding: 0.75rem 1.5rem;
+    border-left: 3px solid transparent;
+}
+
+.task-sidebar .nav-link:hover {
+    color: var(--text-primary);
+    background-color: rgba(128, 128, 128, 0.1);
+}
+
+.task-sidebar .nav-link.active {
+    color: var(--accent-color);
+    font-weight: bold;
+    border-left-color: var(--accent-color);
+}
+
+.task-sidebar .nav-link i {
+    margin-right: 0.75rem;
+}
+
+.task-main-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.content-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+/* --- [新增] 设备选择模态框样式 --- */
+.machine-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.machine-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+    background-color: var(--bg-primary);
+}
+
+.machine-item i {
+    font-size: 2.5rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.machine-item span {
+    font-size: 0.9rem;
+}
+
+.machine-item:hover {
+    background-color: rgba(128, 128, 128, 0.1);
+    border-color: var(--accent-color);
+}
+
+.machine-item.active {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+
+.machine-item.active i {
+    color: #fff;
+}
+
+/* --- 任务卡片样式 --- */
+.task-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.task-card .card-header {
+    background-color: rgba(128, 128, 128, 0.05);
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+}
+
+.task-card .card-body {
+    padding: 1rem;
+}
+
+.task-card .card-text {
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.task-card .card-text .score {
+    color: #dc3545; /* 红色以突出显示分值 */
+    font-weight: bold;
+    margin: 0 1rem;
+}
+
+.task-card .card-footer {
+    background-color: transparent;
+    border-top: 1px solid var(--border-color);
+    padding: 0.75rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.status-badge.status-pending {
+    color: #ffc107; /* 黄色 */
+}
+
+.status-badge.status-completed {
+    color: #198754; /* 绿色 */
+}
+
+

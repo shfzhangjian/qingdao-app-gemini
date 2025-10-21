@@ -27,6 +27,34 @@ const menuConfig = [
         ]
     },
     {
+        id: "execution_board",
+        title: "执行看板",
+        icon: "bi-grid-1x2-fill",
+        // --- [修改] ---
+        // 添加 children，用于定义子路由，即使它们不在侧边栏显示
+        children: [
+            {
+                id: "dashboard_main", // 九宫格主页
+                title: "选择任务类型",
+                url: "#!/dashboard_main",
+                component: "./views/ExecutionDashboard.js",
+            },
+            {
+                id: "tasks", // 任务执行视图的父级
+                title: "任务执行",
+                children: [
+                    { id: "routine_maintenance", title: "精点例保", url: "#!/execution_board/tasks/routine_maintenance", component: "./views/TaskExecutionView.js" },
+                    { id: "daily_maintenance", title: "精益日保", url: "#!/execution_board/tasks/daily_maintenance", component: "./views/TaskExecutionView.js" },
+                    { id: "rotational_maintenance", title: "精准轮保", url: "#!/execution_board/tasks/rotational_maintenance", component: "./views/TaskExecutionView.js" },
+                    { id: "monthly_maintenance", title: "精深月保", url: "#!/execution_board/tasks/monthly_maintenance", component: "./views/TaskExecutionView.js" },
+                    { id: "professional_check", title: "专业点检", url: "#!/execution_board/tasks/professional_check", component: "./views/TaskExecutionView.js" },
+                    { id: "mechanical_lubrication", title: "机械润滑", url: "#!/execution_board/tasks/mechanical_lubrication", component: "./views/TaskExecutionView.js" },
+                ]
+            }
+        ]
+        // --- [修改结束] ---
+    },
+    {
         id: "running_opt",
         title: "设备运行优化",
         icon: "bi-activity",

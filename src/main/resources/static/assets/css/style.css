@@ -37,6 +37,17 @@ body.content-only-mode #content-area {
     height: 100vh;
 }
 
+/* --- [新增] 看板模式，隐藏主导航和侧边栏 --- */
+body.board-mode .main-header .nav-link.active,
+body.board-mode #sidebar {
+    display: none;
+}
+
+body.board-mode #content-area {
+    margin-left: 0 !important;
+    padding: 0 !important; /* 移除内边距，让看板内容全屏 */
+    height: calc(100vh - 56px); /* 减去顶部header高度 */
+}
 
 /* --- 整体布局 --- */
 .wrapper {

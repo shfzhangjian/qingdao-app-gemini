@@ -186,7 +186,12 @@ class App {
         };
 
         const pathParts = hash.substring(3).split('/');
-
+        // 根据当前路由判断是否进入看板模式
+        if (pathParts[0] === 'execution_board') {
+            this.appBody.classList.add('board-mode');
+        } else {
+            this.appBody.classList.remove('board-mode');
+        }
         this.contentArea.innerHTML = `
             <div id="breadcrumb-container"></div>
             <div id="view-container" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"></div>
