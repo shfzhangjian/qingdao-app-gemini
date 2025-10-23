@@ -12,7 +12,7 @@ public class MetrologyTaskDTO {
     private Long indocno; // 主键
 
     @JsonProperty("date")
-    private Date dupcheck; // 任务时间 (确认日期)
+    private Date dupcheck; // 确认日期
 
     @JsonProperty("pointCheckStatus")
     private String idjstate; // 点检状态
@@ -49,9 +49,48 @@ public class MetrologyTaskDTO {
     private String scheckresult; // 检查结果 (用于计算 isAbnormal)
     private String scheckremark; // 检查备注 (异常描述)
     private String susedept; // 使用部门
-    private String erpId; // ERP 编号 (V_JL_EQUIP_DXJ 中没有，设为空)
+    private String erpId;
     private String range; // 量程范围 (V_JL_EQUIP_DXJ 中为 slc)
     private String slc;
+    private String dinit;//生成任务时间
+    private String sproduct;//制造单位
+    private String suser;//责任人
+    private String scheckuser;//检定员
+    private String seq;//所属设备
+
+    public String getSproduct() {
+        return sproduct;
+    }
+
+    public void setSproduct(String sproduct) {
+        this.sproduct = sproduct;
+    }
+
+    public String getSuser() {
+        return suser;
+    }
+
+    public void setSuser(String suser) {
+        this.suser = suser;
+    }
+
+    public String getScheckuser() {
+        return scheckuser;
+    }
+
+    public void setScheckuser(String scheckuser) {
+        this.scheckuser = scheckuser;
+    }
+
+    public String getSeq() {
+        return seq;
+    }
+
+    public void setSeq(String seq) {
+        this.seq = seq;
+    }
+
+
 
     // Getters and Setters
     public Long getIndocno() {
@@ -182,4 +221,6 @@ public class MetrologyTaskDTO {
     public void setRange(String range) { this.range = range; }
     public String getSlc() { return slc; }
     public void setSlc(String slc) { this.slc = slc; }
+    public String getDinit() { return dinit; }
+    public void setDinit(String dinit) { this.dinit = dinit; }
 }
