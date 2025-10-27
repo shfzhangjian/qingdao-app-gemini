@@ -11,6 +11,7 @@ public class TaskQuery extends PageQuery {
     private String taskStatus;
     private String abcCategory;
     private List<ExportColumn> columns;
+    private String loginId; // 新增: 用于传递当前登录用户的ID
 
     // Getters and Setters
     public String getDeviceName() {
@@ -61,6 +62,14 @@ public class TaskQuery extends PageQuery {
         this.columns = columns;
     }
 
+    public String getLoginId() { // 新增 Getter
+        return loginId;
+    }
+
+    public void setLoginId(String loginId) { // 新增 Setter
+        this.loginId = loginId;
+    }
+
     @Override
     public String toString() {
         return "TaskQuery{" +
@@ -69,9 +78,9 @@ public class TaskQuery extends PageQuery {
                 ", dateRange='" + dateRange + '\'' +
                 ", taskStatus='" + taskStatus + '\'' +
                 ", abcCategory='" + abcCategory + '\'' +
+                ", loginId='" + loginId + '\'' + // 新增
                 ", pageNum=" + getPageNum() +
                 ", pageSize=" + getPageSize() +
                 '}';
     }
 }
-

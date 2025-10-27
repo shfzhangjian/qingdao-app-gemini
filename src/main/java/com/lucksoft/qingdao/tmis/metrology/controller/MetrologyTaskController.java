@@ -1,5 +1,6 @@
 package com.lucksoft.qingdao.tmis.metrology.controller;
 
+import com.lucksoft.qingdao.system.util.AuthUtil;
 import com.lucksoft.qingdao.tmis.dto.PageResult;
 import com.lucksoft.qingdao.tmis.metrology.dto.MetrologyTaskDTO;
 import com.lucksoft.qingdao.tmis.metrology.dto.TaskQuery;
@@ -8,9 +9,11 @@ import com.lucksoft.qingdao.tmis.metrology.service.MetrologyTaskService;
 import com.lucksoft.qingdao.tmis.util.ExcelExportUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.HashMap;
@@ -25,20 +28,42 @@ public class MetrologyTaskController {
 
     private final MetrologyTaskService metrologyTaskService;
 
+    @Autowired // 注入 AuthUtil
+    private AuthUtil authUtil;
+
     public MetrologyTaskController(MetrologyTaskService metrologyTaskService) {
         this.metrologyTaskService = metrologyTaskService;
     }
 
     @GetMapping("/list")
-    public ResponseEntity<PageResult<MetrologyTaskDTO>> getTasks(TaskQuery query) {
+    public ResponseEntity<PageResult<MetrologyTaskDTO>> getTasks(TaskQuery query, HttpServletRequest request) {
         log.info("接收到计量任务查询请求: {}", query);
+
+        String loginId = authUtil.getCurrentUserLoginId(request); // 调用工具类方法
+        if (loginId != null) {
+            query.setLoginId(loginId);
+            log.info("当前登录用户 LoginId: {}, 将用于过滤任务。", loginId);
+        } else {
+            log.warn("无法获取当前登录用户信息，将查询所有任务。");
+        }
+
         PageResult<MetrologyTaskDTO> pageResult = metrologyTaskService.getTasksPage(query);
         return ResponseEntity.ok(pageResult);
     }
 
     @PostMapping("/export")
-    public void exportTasks(@RequestBody TaskQuery query, HttpServletResponse response) throws IOException {
+    public void exportTasks(@RequestBody TaskQuery query,HttpServletRequest request,  HttpServletResponse response) throws IOException {
         log.info("接收到计量任务导出请求: {}", query);
+
+        // --- 修改：使用 AuthUtil 获取当前登录用户信息 ---
+        String loginId = authUtil.getCurrentUserLoginId(request); // 调用工具类方法
+        if (loginId != null) {
+            query.setLoginId(loginId);
+            log.info("导出任务将根据 LoginId: {} 进行过滤。", loginId);
+        } else {
+            log.warn("导出时无法获取当前登录用户信息，将导出所有任务。");
+        }
+
         List<MetrologyTaskDTO> dataToExport = metrologyTaskService.getTasksForExport(query);
         ExcelExportUtil.export(response, "计量点检任务", query.getColumns(), dataToExport, MetrologyTaskDTO.class);
     }

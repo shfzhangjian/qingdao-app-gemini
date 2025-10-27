@@ -54,6 +54,12 @@ public interface MetrologyTaskMapper {
             "       <bind name='endDate' value=\"dateRange.split(' 至 ')[1]\" />" +
             "       AND DUPCHECK &gt;= TO_DATE(#{startDate}, 'YYYY-MM-DD') AND DUPCHECK &lt;= TO_DATE(#{endDate}, 'YYYY-MM-DD')" +
             "   </if>" +
+
+//            // 假设 SUSER 存储的是责任人的登录账号 (loginid)
+//            "   <if test='loginId != null and loginId != \"\"'>" +
+//            "       AND SUSER = #{loginId}" +
+//            "   </if>" +
+
             "</where>" +
             "ORDER BY DINIT DESC, IDJSTATE, SJNO" +
             "</script>")
