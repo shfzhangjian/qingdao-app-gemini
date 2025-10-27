@@ -51,7 +51,7 @@ export default class QueryForm {
                     const optionsHtml = field.options.map(opt => `<input type="radio" class="btn-check" name="${field.name}" id="${field.name}-${opt.value}" value="${opt.value}" autocomplete="off" ${opt.checked ? 'checked' : ''}><label class="btn btn-outline-secondary" for="${field.name}-${opt.value}">${opt.label}</label>`).join('');
                     return `<div class="d-flex align-items-center gap-2 ${field.containerClass || ''}">${commonParts}<div class="btn-group btn-group-sm" role="group">${optionsHtml}</div></div>`;
                 case 'daterange':
-                    return `<div class="d-flex align-items-center ${field.containerClass || ''}">${commonParts}<input type="text" name="${field.name}" class="form-control form-control-sm" ${field.style ? `style="${field.style}"` : ''} placeholder="请选择日期范围..."></div>`;
+                    return `<div class="d-flex align-items-center ${field.containerClass || ''}">${commonParts}<input type="text" name="${field.name}" class="form-control form-control-sm" ${field.style ? `style="${field.style}"` : ''} placeholder=""></div>`;
                 default:
                     return '';
             }

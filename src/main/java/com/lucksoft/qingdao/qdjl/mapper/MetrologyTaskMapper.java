@@ -25,7 +25,13 @@ public interface MetrologyTaskMapper {
             @Result(property = "scheckresult", column = "SCHECKRESULT"),
             @Result(property = "scheckremark", column = "SCHECKREMARK"),
             @Result(property = "susedept", column = "SUSEDEPT"),
-            @Result(property = "slc", column = "SLC")
+            @Result(property = "slc", column = "SLC"),
+            @Result(property = "erpId", column = "SERPNO"),
+            @Result(property = "dinit", column = "DINIT"),
+            @Result(property = "sproduct", column = "SPRODUCT"),
+            @Result(property = "suser", column = "SUSER"),
+            @Result(property = "seq", column = "SEQ"),
+            @Result(property = "scheckuser", column = "SCHECKUSER")
     })
     @Select("<script>" +
             "SELECT * FROM V_JL_EQUIP_DXJ " +

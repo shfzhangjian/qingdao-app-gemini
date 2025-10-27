@@ -44,7 +44,7 @@ export default class MetrologyTasks {
 
     _renderQueryForm(container) {
         const formFields = [
-            { type: 'daterange', label: '时间范围', name: 'dateRange', containerClass: 'col-12 col-md-4' },
+            { type: 'daterange', label: '确认时间范围', name: 'dateRange', containerClass: 'col-12 col-md-4' },
             { type: 'text', label: '设备名称', name: 'deviceName', containerClass: 'col-12 col-md-4' },
             { type: 'text', label: '企业编号', name: 'enterpriseId', containerClass: 'col-12 col-md-4' },
         ];
@@ -57,16 +57,24 @@ export default class MetrologyTasks {
 
     _renderDataTable(container) {
         const columns = [
-            { key: 'date', title: '任务时间', visible: true, width: 120, sortable: true, render: (val) => this._formatDate(val) },
+            { key: 'dinit', title: '生成任务时间', visible: true, width: 120, sortable: true, render: (val) => this._formatDate(val) },
+            { key: 'date', title: '确认时间', visible: true, width: 120, sortable: true, render: (val) => this._formatDate(val) },
             { key: 'pointCheckStatus', title: '点检状态', visible: true, width: 100 },
             { key: 'enterpriseId', title: '企业编号', visible: true, width: 120, sortable: true },
             { key: 'deviceName', title: '设备名称', visible: true, width: 180 },
             { key: 'model', title: '规格型号', visible: true, width: 120 },
             { key: 'factoryId', title: '出厂编号', visible: true, width: 120, sortable: true },
+            { key: 'slc', title: '量程范围', visible: true, width: 90 },
             { key: 'location', title: '安装位置/使用人', visible: true, width: 150 },
             { key: 'accuracy', title: '准确度等级', visible: true, width: 120 },
             { key: 'status', title: '设备状态', visible: true, width: 90 },
+            { key: 'seq', title: '所属设备', visible: true, width: 90 },
             { key: 'abc', title: 'ABC分类', visible: true, width: 90 },
+            { key: 'erpId', title: 'ERP编号', visible: true, width: 90 },
+            { key: 'sproduct', title: '制造单位', visible: true, width: 90 },
+            { key: 'susedept', title: '使用部门', visible: true, width: 90 },
+            { key: 'suser', title: '责任人', visible: true, width: 90 },
+            { key: 'scheckuser', title: '检定员', visible: true, width: 90 },
         ];
 
         const actions = [

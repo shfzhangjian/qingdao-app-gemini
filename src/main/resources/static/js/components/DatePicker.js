@@ -20,7 +20,7 @@ export default class DatePicker {
             mode: "range",
             dateFormat: "Y-m-d",
             locale: "zh", // Assumes the locale file is loaded globally
-            defaultDate: ["2025-06-01", "2025-06-30"],
+           // defaultDate: ["2025-06-01", "2025-06-30"],
         };
 
         this.instance = flatpickr(element, { ...defaultOptions, ...options });
