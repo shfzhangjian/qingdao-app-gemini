@@ -202,6 +202,12 @@ class App {
         const path = this.findPath(pathParts);
         this.breadcrumb.render(breadcrumbContainer, path);
 
+        if (this.appBody.classList.contains('board-mode')) {
+            breadcrumbContainer.style.display = 'none';
+        } else {
+            this.breadcrumb.render(breadcrumbContainer, path);
+        }
+
         const activeRoute = path[path.length - 1];
 
         if (!this.appBody.classList.contains('content-only-mode')) {

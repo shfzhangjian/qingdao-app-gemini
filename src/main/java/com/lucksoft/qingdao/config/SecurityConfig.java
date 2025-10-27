@@ -27,21 +27,18 @@ public class SecurityConfig {
                         .frameOptions(frameOptions -> frameOptions.disable())
                 )
                 .authorizeHttpRequests(authz -> authz
-                        // 允许所有用户访问根URL和主HTML文件
                         .antMatchers("/", "/index.html").permitAll()
-                        // 【核心修复】移除对 /api/metrology/** 的公开访问权限
                         .antMatchers("/assets/**", "/js/**","/libs/**").permitAll()
-                        .antMatchers("/assets/**", "/js/components/**","/js/views/**","/js/services/**").permitAll()
-                        // [新增] 允许匿名访问SSO所需的中转页、脚本和后台验证接口
                         .antMatchers("/sso.html", "/js/sso.js", "/sso/**").permitAll()
-                        // [新增] 允许访问 Token 生成工具页面
                         .antMatchers("/gen_token.html").permitAll()
-                        // 保留您原有的其他公共端点
                         .antMatchers("/login.html", "/stomp.min.js", "/sockjs.min.js","/main.html","/query-template.html", "/simulate.html").permitAll()
                         .antMatchers("/my-websocket/**").permitAll()
-                        .antMatchers("/api/system/auth/**","/api/maintainbook/**", "/api/tspm/simulate/**","/api/tspm/generate-json/**","/api/tspm/received-data/**", "/api/tspm/logs").permitAll()
+                        .antMatchers("/api/system/auth/**").permitAll()
+                        // Existing public endpoints
+                        .antMatchers("/api/maintainbook/**", "/api/tspm/simulate/**","/api/tspm/generate-json/**","/api/tspm/received-data/**", "/api/tspm/logs").permitAll()
+                        // Secure new kanban endpoints
+                        .antMatchers("/api/kb/**").authenticated()
                         .antMatchers("/api/trigger/**").hasRole("API")
-                        // 其他所有请求都需要JWT认证
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -55,4 +52,3 @@ public class SecurityConfig {
         return http.build();
     }
 }
-

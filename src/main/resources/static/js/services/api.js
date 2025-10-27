@@ -11,7 +11,7 @@ import AuthManager from '../components/AuthManager.js';
  * @param {object} options - fetch函数的配置选项
  * @returns {Promise<any>} - 解析后的JSON数据或Blob对象
  */
-async function apiFetch(url, options = {}, isRetry = false) {
+export async function apiFetch(url, options = {}, isRetry = false) {
     const token = localStorage.getItem('jwt_token');
     const headers = {
         'Content-Type': 'application/json',

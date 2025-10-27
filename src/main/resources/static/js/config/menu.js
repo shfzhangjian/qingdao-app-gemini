@@ -1,7 +1,7 @@
 /**
  * @file /js/config/menu.js
  * @description 应用程序的导航菜单配置文件
- * @version 2.2.0 - 2025-10-17
+ * @version 2.2.1 - 2025-10-21 - [FIX] 修正了执行看板的路由URL
  */
 
 const menuConfig = [
@@ -30,17 +30,16 @@ const menuConfig = [
         id: "execution_board",
         title: "执行看板",
         icon: "bi-grid-1x2-fill",
-        // --- [修改] ---
-        // 添加 children，用于定义子路由，即使它们不在侧边栏显示
         children: [
             {
-                id: "dashboard_main", // 九宫格主页
+                id: "dashboard_main",
                 title: "选择任务类型",
-                url: "#!/dashboard_main",
+                // [FIX] 修正URL，添加父级路径，使其符合路由规则
+                url: "#!/execution_board/dashboard_main",
                 component: "./views/ExecutionDashboard.js",
             },
             {
-                id: "tasks", // 任务执行视图的父级
+                id: "tasks",
                 title: "任务执行",
                 children: [
                     { id: "routine_maintenance", title: "精点例保", url: "#!/execution_board/tasks/routine_maintenance", component: "./views/TaskExecutionView.js" },
@@ -52,7 +51,6 @@ const menuConfig = [
                 ]
             }
         ]
-        // --- [修改结束] ---
     },
     {
         id: "running_opt",
@@ -154,4 +152,3 @@ const menuConfig = [
 ];
 
 export default menuConfig;
-

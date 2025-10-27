@@ -1,7 +1,7 @@
 /**
  * @file /assets/css/maintenance-board.css
  * @description 执行看板和任务执行视图的专属样式
- * @version 2.0.0 - 2025-10-22
+ * @version 1.9.0 - 2025-10-21
  */
 
 /* --- 执行看板九宫格 --- */
@@ -74,8 +74,8 @@
 body.theme-light .history-crosstab thead tr { background-color: #e9ecef; }
 .history-crosstab tr { height: 48px; }
 .history-crosstab .row-header { text-align: left; background-color: var(--bg-primary); }
-.history-crosstab .crosstab-seq { background-color: #343a40 !important; color: white; font-weight: bold; text-align: center; }
-body.theme-light .history-crosstab .crosstab-seq { background-color: #e9ecef !important; color: var(--text-primary); }
+.history-crosstab .crosstab-seq { background-color: #495057 !important; color: white; font-weight: bold; text-align: center; }
+body.theme-light .history-crosstab .crosstab-seq { background-color: #f1f3f5 !important; color: var(--text-primary); }
 .history-crosstab tbody td:nth-child(2), .history-crosstab tbody td:nth-child(3), .history-crosstab tbody td:nth-child(4) { text-align: left; }
 .history-crosstab tbody td { min-width: 80px; text-align: center; }
 .history-crosstab tfoot td { font-weight: bold; background-color: var(--bg-primary); }
