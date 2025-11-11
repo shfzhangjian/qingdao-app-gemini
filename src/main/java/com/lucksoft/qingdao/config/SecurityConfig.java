@@ -38,7 +38,7 @@ public class SecurityConfig {
                         .antMatchers("/api/maintainbook/**", "/api/tspm/simulate/**","/api/tspm/generate-json/**","/api/tspm/received-data/**", "/api/tspm/logs").permitAll()
                         // Secure new kanban endpoints
                         .antMatchers("/api/kb/**").authenticated()
-                        .antMatchers("/api/trigger/**").hasRole("API")
+                        .antMatchers("/api/trigger/**", "/api/oracle/**").hasRole("API")
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

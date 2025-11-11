@@ -19,7 +19,10 @@ import javax.sql.DataSource;
  * @Primary 注解确保在未指定数据源时，默认使用此数据源。
  */
 @Configuration
-@MapperScan(basePackages = {"com.lucksoft.qingdao.system.mapper", "com.lucksoft.qingdao.eam.maintainbook.mapper"}, sqlSessionFactoryRef = "primarySqlSessionFactory")
+@MapperScan(basePackages = {"com.lucksoft.qingdao.system.mapper",
+        "com.lucksoft.qingdao.oracle.mapper",
+        "com.lucksoft.qingdao.eam.maintainbook.mapper"},
+        sqlSessionFactoryRef = "primarySqlSessionFactory")
 public class PrimaryDataSourceConfig {
 
     /**
