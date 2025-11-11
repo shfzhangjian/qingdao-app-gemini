@@ -100,6 +100,18 @@
         <appender-ref ref="CONSOLE"/>
     </logger>
 
+    <logger name="com.lucksoft.qingdao.system.mapper" level="TRACE" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="com.lucksoft.qingdao.eam.maintainbook.mapper" level="TRACE" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- 【新增】为 Oracle API Controller 对应的 Mapper 添加 TRACE 日志 -->
+    <logger name="com.lucksoft.qingdao.oracle.mapper" level="TRACE" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
     <!-- ===================================================================== -->
     <!-- 【关键修复】降低Kafka客户端自身的日志级别，减少控制台噪音             -->
     <!-- ===================================================================== -->

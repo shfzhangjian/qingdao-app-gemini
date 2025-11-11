@@ -56,7 +56,7 @@ export async function apiFetch(url, options = {}, isRetry = false) {
  * [新增] 更新计量任务状态
  */
 export async function updateMetrologyTasks(payload) {
-    return apiFetch('/api/metrology/task/update', {
+    return apiFetch('api/metrology/task/update', {
         method: 'POST',
         body: JSON.stringify(payload)
     });
@@ -65,12 +65,12 @@ export async function updateMetrologyTasks(payload) {
 
 // --- 计量台账 ---
 export async function getMetrologyLedger(params) {
-    const url = `/api/metrology/ledger/list?${new URLSearchParams(params)}`;
+    const url = `api/metrology/ledger/list?${new URLSearchParams(params)}`;
     return apiFetch(url);
 }
 
 export async function exportMetrologyLedger(params) {
-    const blob = await apiFetch('/api/metrology/ledger/export', {
+    const blob = await apiFetch('api/metrology/ledger/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params)
@@ -89,7 +89,7 @@ export async function exportMetrologyLedger(params) {
 
 // --- 计量任务 ---
 export async function getMetrologyTasks(params) {
-    const url = `/api/metrology/task/list?${new URLSearchParams(params)}`;
+    const url = `api/metrology/task/list?${new URLSearchParams(params)}`;
     return apiFetch(url);
 }
 
@@ -97,7 +97,7 @@ export async function getMetrologyTasks(params) {
  * 【核心修复】新增缺失的 exportMetrologyTasks 函数
  */
 export async function exportMetrologyTasks(params) {
-    const blob = await apiFetch('/api/metrology/task/export', {
+    const blob = await apiFetch('api/metrology/task/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params)
@@ -117,17 +117,17 @@ export async function exportMetrologyTasks(params) {
 
 // --- 点检统计 ---
 export async function getPointCheckStatistics(params) {
-    const url = `/api/metrology/point-check-stats/statistics?${new URLSearchParams(params)}`;
+    const url = `api/metrology/point-check-stats/statistics?${new URLSearchParams(params)}`;
     return apiFetch(url);
 }
 
 export async function getPointCheckList(params) {
-    const url = `/api/metrology/point-check/list?${new URLSearchParams(params)}`;
+    const url = `api/metrology/point-check/list?${new URLSearchParams(params)}`;
     return apiFetch(url);
 }
 
 export async function exportPointCheck(params) {
-    const blob = await apiFetch('/api/metrology/point-check/export', {
+    const blob = await apiFetch('api/metrology/point-check/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params)

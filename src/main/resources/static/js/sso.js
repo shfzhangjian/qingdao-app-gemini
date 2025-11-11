@@ -19,11 +19,11 @@ window.addEventListener('load', () => {
         console.log("SSO: Token已存储, 正在跳转到主页...");
 
         // 使用 replace 跳转到主应用页面，这样可以防止用户通过“后退”按钮回到这个中转页
-        window.location.replace('/');
+        window.location.replace('index.html');
 
     } else {
         console.error("SSO: 未在URL hash中找到Token，认证失败。");
         // 如果没有Token，跳转到标准的登录页并提示错误
-        window.location.replace('/login.html?error=sso_token_missing');
+        window.location.replace('/tmis/login.html?error=sso_token_missing');
     }
 });

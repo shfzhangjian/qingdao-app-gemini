@@ -60,7 +60,7 @@
         loginButton.prop('disabled', true).text('登录中...');
 
         // 【修改】使用 fetch API 调用后台登录接口
-        fetch('/api/system/auth/login', {
+        fetch('api/system/auth/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
