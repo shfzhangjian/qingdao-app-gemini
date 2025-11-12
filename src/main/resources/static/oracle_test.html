@@ -28,14 +28,17 @@
         button:disabled { background-color: #a0a0a0; }
         button.secondary { background-color: #6c757d; }
         button.secondary:hover { background-color: #5a6268; }
-        /* [新增] 调试按钮样式 */
         button.danger { background-color: #dc3545; }
         button.danger:hover { background-color: #c82333; }
+        button.info { background-color: #0dcaf0; }
+        button.info:hover { background-color: #0aa8c2; }
 
         .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
         .toast { padding: 12px 20px; border-radius: 4px; color: white; font-size: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); opacity: 0; transform: translateX(100%); animation: slideIn 0.3s forwards; }
         .toast.success { background-color: #28a745; }
         .toast.error { background-color: #dc3545; }
+        /* [新] 增加 info 样式 */
+        .toast.info { background-color: #0d6efd; }
         .toast.fade-out { animation: slideOut 0.3s forwards; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
@@ -44,14 +47,13 @@
 <body>
 
 <div class="container">
-    <header class="header">Oracle API 推送模拟器 (/api/oracle/receive)</header>
+    <header class="header">Oracle API 推送模拟器</header>
 
     <div class="form-section">
         <div class="row g-3 align-items-end">
             <div class="col-md-5">
                 <label for="stype-select" class="form-label">1. 选择推送类型 (stype)</label>
                 <select id="stype-select" class="form-select">
-                    <!-- [更新] 添加了所有 6 个 stype -->
                     <option value="SP_GENDAYTASK">SP_GENDAYTASK (日保任务)</option>
                     <option value="PMBOARD.SP_QD_PLANBOARD_LB">SP_QD_PLANBOARD_LB (轮保/月保)</option>
                     <option value="JOB_GEN_BAOYANG_TASKS">JOB_GEN_BAOYANG_TASKS (例保任务)</option>
@@ -65,13 +67,13 @@
                 <input type="text" id="stype-param" class="form-control" value="123456">
             </div>
             <div class="col-md-3">
-                <button id="send-push-btn" class="w-100"><i class="bi bi-send-fill"></i> 发送推送</button>
+                <button id="send-push-btn" class="w-100"><i class="bi bi-send-fill"></i> (1) 模拟Oracle触发推送</button>
             </div>
         </div>
-        <!-- [新增] 调试按钮 -->
         <hr class="my-4">
-        <div class="d-flex justify-content-end">
-            <button id="clear-cache-btn" class="btn btn-sm danger"><i class="bi bi-eraser-fill"></i> 清空Redis缓存 (用于调试)</button>
+        <div class="d-flex justify-content-end gap-2">
+            <button id="push-all-bao-ji-btn" class="btn btn-sm info"><i class="bi bi-person-badge"></i> (2) 手动推送所有包机信息</button>
+            <button id="clear-cache-btn" class="btn btn-sm danger"><i class="bi bi-eraser-fill"></i> (3) 清空Redis缓存 (用于调试)</button>
         </div>
     </div>
 
@@ -88,125 +90,164 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // ... (DOM 元素获取，保持不变) ...
         const stypeSelect = document.getElementById('stype-select');
         const paramGroup = document.getElementById('stype-param-group');
         const paramInput = document.getElementById('stype-param');
         const sendBtn = document.getElementById('send-push-btn');
         const clearBtn = document.getElementById('clear-log-btn');
-        const clearCacheBtn = document.getElementById('clear-cache-btn'); // [新增]
+        const clearCacheBtn = document.getElementById('clear-cache-btn');
         const logArea = document.getElementById('response-log');
-
-        // [更新] 定义哪些 stype 需要参数
+        const pushAllBaoJiBtn = document.getElementById('push-all-bao-ji-btn');
         const typesRequiringParam = ['PM_MONTH_ARCHIVED', 'EQ_PLANLB_ARCHIVED'];
 
-        // 1. 控制参数输入框的显示/隐藏
+        // --- 事件监听 (保持不变) ---
         stypeSelect.addEventListener('change', function() {
-            if (typesRequiringParam.includes(this.value)) {
-                paramGroup.style.display = 'block';
-            } else {
-                paramGroup.style.display = 'none';
-            }
+            paramGroup.style.display = typesRequiringParam.includes(this.value) ? 'block' : 'none';
         });
 
-        // 2. 清空日志
-        clearBtn.addEventListener('click', function() {
-            logArea.value = '';
-        });
+        clearBtn.addEventListener('click', function() { logArea.value = ''; });
 
-        // 3. 发送推送
         sendBtn.addEventListener('click', async function() {
             const selectedType = stypeSelect.value;
             let finalStype = selectedType;
-
-            // [更新] 检查所有需要参数的类型
             if (typesRequiringParam.includes(selectedType)) {
                 const paramValue = paramInput.value.trim();
-                if (!paramValue) {
-                    showToast(`请输入 ID`, 'error');
-                    return;
-                }
+                if (!paramValue) { showToast(`请输入 ID`, 'error'); return; }
                 finalStype = `${selectedType}:${paramValue}`;
             }
+            const payload = { stype: finalStype };
 
-            const payload = {
-                stype: finalStype
-            };
-
-            // 禁用按钮
-            sendBtn.disabled = true;
-            sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 发送中...';
-            logToArea(`---> [${new Date().toLocaleTimeString()}] 发起请求: POST api/oracle/receive\n${JSON.stringify(payload, null, 2)}\n`);
-
-            try {
-                // 注意：这里使用了相对路径 'api/oracle/receive'
-                const response = await fetch('api/oracle/receive', {
+            await handleApiRequest(
+                'api/oracle/receive',
+                {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                        // 实际项目中, API Key 应该由后端处理或在此处添加
-                        // 'X-API-KEY': 'YOUR_SUPER_SECRET_KEY_HERE'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
-                });
-
-                const responseData = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${JSON.stringify(responseData)}`);
-                }
-
-                logToArea(`<--- [${new Date().toLocaleTimeString()}] 收到响应 (HTTP ${response.status}):\n${JSON.stringify(responseData, null, 2)}\n\n`);
-                showToast('推送成功，已收到后端响应', 'success');
-
-            } catch (error) {
-                logToArea(`<--- [${new Date().toLocaleTimeString()}] 请求失败:\n${error.message}\n\n`);
-                showToast(`推送失败: ${error.message}`, 'error');
-            } finally {
-                // 恢复按钮
-                sendBtn.disabled = false;
-                sendBtn.innerHTML = '<i class="bi bi-send-fill"></i> 发送推送';
-            }
+                },
+                sendBtn,
+                '<i class="bi bi-send-fill"></i> (1) 模拟Oracle触发推送'
+            );
         });
 
-        // 4. [新增] 清空 Redis 缓存
+        pushAllBaoJiBtn.addEventListener('click', async function() {
+            if (!confirm('确定要查询所有包机信息并推送到Kafka吗？\n这将推送全量数据。')) return;
+            await handleApiRequest(
+                'api/push/user-equipment-all',
+                { method: 'POST' },
+                pushAllBaoJiBtn,
+                '<i class="bi bi-person-badge"></i> (2) 手动推送所有包机信息'
+            );
+        });
+
         clearCacheBtn.addEventListener('click', async function() {
-            if (!confirm('确定要清空所有 Oracle 推送任务的 Redis 缓存吗？\n这将允许所有任务被重新推送。')) {
-                return;
-            }
-
-            clearCacheBtn.disabled = true;
-            clearCacheBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 清空中...';
-            logToArea(`---> [${new Date().toLocaleTimeString()}] 发起请求: POST api/oracle/clear-push-cache\n`);
-
-            try {
-                const response = await fetch('api/oracle/clear-push-cache', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                        // 'X-API-KEY': 'YOUR_SUPER_SECRET_KEY_HERE'
-                    }
-                });
-
-                const responseData = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${JSON.stringify(responseData)}`);
-                }
-
-                logToArea(`<--- [${new Date().toLocaleTimeString()}] 收到响应 (HTTP ${response.status}):\n${JSON.stringify(responseData, null, 2)}\n\n`);
-                showToast(`成功清空 ${responseData.deletedKeysCount} 个缓存键`, 'success');
-
-            } catch (error) {
-                logToArea(`<--- [${new Date().toLocaleTimeString()}] 请求失败:\n${error.message}\n\n`);
-                showToast(`清空缓存失败: ${error.message}`, 'error');
-            } finally {
-                clearCacheBtn.disabled = false;
-                clearCacheBtn.innerHTML = '<i class="bi bi-eraser-fill"></i> 清空Redis缓存 (用于调试)';
-            }
+            if (!confirm('确定要清空所有 Oracle 推送任务的 Redis 缓存吗？\n这将允许所有任务被重新推送。')) return;
+            await handleApiRequest(
+                'api/oracle/clear-push-cache',
+                { method: 'POST' },
+                clearCacheBtn,
+                '<i class="bi bi-eraser-fill"></i> (3) 清空Redis缓存 (用于调试)'
+            );
         });
-
 
         // --- 辅助函数 ---
+
+        /**
+         * [已修改] 通用的API请求处理函数
+         * 现在它能处理异步任务ID (taskId) 的响应。
+         */
+        async function handleApiRequest(url, options, button, originalButtonHtml) {
+            const btnText = button.textContent;
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 处理中...';
+
+            const logPayload = options.body ? `\nPayload: ${options.body}` : '';
+            logToArea(`---> [${new Date().toLocaleTimeString()}] 发起请求: ${options.method || 'GET'} ${url}${logPayload}\n`);
+
+            try {
+                const response = await fetch(url, options);
+                const responseData = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${JSON.stringify(responseData)}`);
+                }
+
+                // 打印收到的第一条响应
+                logToArea(`<--- [${new Date().toLocaleTimeString()}] 收到响应 (HTTP ${response.status}):\n${JSON.stringify(responseData, null, 2)}\n\n`);
+
+                // [核心修改] 检查是否是异步任务
+                if (responseData.taskId && responseData.status && responseData.status.startsWith('Task submitted')) {
+                    // 是异步任务，开始轮询
+                    showToast(`任务已提交 (ID: ${responseData.taskId})，正在后台处理...`, 'info');
+                    pollTaskStatus(responseData.taskId); // <-- [新] 开始轮询
+                } else {
+                    // 是同步任务，直接显示成功
+                    showToast(`${btnText} 操作成功`, 'success');
+                }
+
+            } catch (error) {
+                logToArea(`<--- [${new Date().toLocaleTimeString()}] 请求失败:\n${error.message}\n\n`);
+                showToast(`${btnText} 操作失败: ${error.message}`, 'error');
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalButtonHtml;
+            }
+        }
+
+        /**
+         * [新] 轮询任务状态函数
+         * @param {string} taskId - 要查询的任务ID
+         */
+        function pollTaskStatus(taskId) {
+            let pollCount = 0;
+            const maxPolls = 30; // 最多轮询30秒
+
+            logToArea(`---> [${new Date().toLocaleTimeString()}] 开始轮询任务状态: ${taskId}\n`);
+
+            const intervalId = setInterval(async () => {
+                pollCount++;
+                if (pollCount > maxPolls) {
+                    clearInterval(intervalId);
+                    logToArea(`!!!! [${new Date().toLocaleTimeString()}] 任务 ${taskId} 轮询超时 (30s)。\n`);
+                    showToast(`任务 ${taskId} 轮询超时`, 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`api/oracle/task-status/${taskId}`);
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        // 404 Not Found 也算是一种状态
+                        logToArea(`.... [${new Date().toLocaleTimeString()}] 状态查询: ${data.status || 'NOT_FOUND'}\n`);
+                        clearInterval(intervalId);
+                        showToast(`任务 ${taskId} 未找到`, 'error');
+                        return;
+                    }
+
+                    const status = data.status;
+                    logToArea(`.... [${new Date().toLocaleTimeString()}] 状态: ${status}\n`);
+
+                    // 检查是否为最终状态
+                    if (status.startsWith('SUCCESS') || status.startsWith('FAILED') || status.startsWith('SKIPPED')) {
+                        clearInterval(intervalId);
+                        logToArea(`---- [${new Date().toLocaleTimeString()}] 任务 ${taskId} 轮询结束。\n\n`);
+                        if (status.startsWith('SUCCESS')) {
+                            showToast(`任务 ${taskId} 处理成功: ${status}`, 'success');
+                        } else {
+                            showToast(`任务 ${taskId} 完成: ${status}`, 'info');
+                        }
+                    }
+                    // 如果是 PENDING 或 RUNNING，则不打印日志，继续轮询
+
+                } catch (error) {
+                    clearInterval(intervalId);
+                    logToArea(`!!!! [${new Date().toLocaleTimeString()}] 轮询 ${taskId} 时出错: ${error.message}\n\n`);
+                    showToast(`轮询任务 ${taskId} 失败`, 'error');
+                }
+            }, 1000); // 每秒轮询一次
+        }
+
 
         function logToArea(message) {
             logArea.value += message;
@@ -215,7 +256,7 @@
 
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
-            if (!container) return; // 确保容器存在
+            if (!container) return;
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
             toast.textContent = message;

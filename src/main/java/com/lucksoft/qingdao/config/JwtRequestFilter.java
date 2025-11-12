@@ -5,9 +5,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import javax.servlet.FilterChain;
@@ -16,6 +16,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * JWT 认证过滤器
@@ -28,9 +30,43 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Autowired
     private JwtTokenUtil jwtTokenUtil;
 
+    // [新增] 定义一个要排除（跳过JWT检查）的路径列表
+    // 这个列表应与 SecurityConfig 中的 permitAll() 保持一致
+    private final List<String> excludedPaths = Arrays.asList(
+            "/", "/index.html", "/assets/**", "/js/**", "/libs/**",
+            "/sso.html", "/js/sso.js", "/sso/**",
+            "/gen_token.html", "/login.html", "/simulate.html", "/oracle_test.html",
+            "/my-websocket/**",
+            "/stomp.min.js", "/sockjs.min.js",
+            "/api/oracle/task-status/**",
+            "/api/system/auth/**",
+            "/api/maintainbook/**",
+            "/api/oracle/**",
+            "/api/tspm/simulate/**",
+            "/api/tspm/generate-json/**",
+            "/api/tspm/received-data/**",
+            "/api/tspm/logs"
+    );
+
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+
+        final String requestURI = request.getRequestURI().substring(request.getContextPath().length());
+
+        // [新增] 检查请求路径是否在排除列表中
+        boolean isExcluded = excludedPaths.stream()
+                .anyMatch(path -> pathMatcher.match(path, requestURI));
+
+        if (isExcluded) {
+            // 如果是排除的路径，则直接跳过JWT检查，放行
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // --- 以下是原有的JWT检查逻辑，仅对非排除路径执行 ---
 
         final String requestTokenHeader = request.getHeader("Authorization");
 
@@ -46,7 +82,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 logger.warn("JWT Token 解析失败", e);
             }
         } else {
-            logger.warn("JWT Token does not begin with Bearer String");
+            // [修改] 只有在需要认证的路径上才打印警告
+            logger.warn("JWT Token does not begin with Bearer String, or is missing. URI: " + requestURI);
         }
 
         // 一旦我们得到令牌，就验证它
@@ -67,6 +104,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             // 所以它会成功通过 Spring Security 的配置。
             SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
         }
+
         chain.doFilter(request, response);
     }
 }

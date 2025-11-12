@@ -1,190 +1,119 @@
 package com.lucksoft.qingdao.oracle.service;
 
-import com.lucksoft.qingdao.oracle.dto.EqPlanLbDTO;
-import com.lucksoft.qingdao.oracle.dto.EqPlanLbDtDTO;
-import com.lucksoft.qingdao.oracle.dto.PmissionBoardBaoYangDTO;
-import com.lucksoft.qingdao.oracle.dto.PmissionBoardDTO;
-import com.lucksoft.qingdao.oracle.dto.PmissionBoardDayDTO;
-import com.lucksoft.qingdao.oracle.dto.PmMonthDTO;
-import com.lucksoft.qingdao.oracle.dto.PmMonthItemDTO;
+import com.lucksoft.qingdao.oracle.dto.*;
 import com.lucksoft.qingdao.tspm.dto.MaintenanceTaskDTO;
 import com.lucksoft.qingdao.tspm.dto.ProductionHaltTaskDTO;
 import com.lucksoft.qingdao.tspm.dto.RotationalPlanDTO;
+import com.lucksoft.qingdao.oracle.dto.VMaintenanceTaskDTO; // [修改] 引入视图 DTO
+import com.lucksoft.qingdao.oracle.dto.VRotationalPlanDTO; // [修改] 引入视图 DTO
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 新增服务：
- * 负责将从 Oracle 接收到的 DTOs 转换为标准的 TIMS DTOs (即 simulate.html 使用的实体)。
+ * [已重构]
+ * Oracle DTO 转换服务
+ * 1. 保养任务(日保/月保/例保)的转换逻辑已移至 V_MAINTENANCE_TASKS_RECENT 视图。
+ * 2. 轮保计划的转换逻辑已移至 V_ROTATIONAL_PLANS_RECENT 视图。
+ * 3. 本类现在只负责同步转换 维修计划(PM_MONTH) 和简单的 DTO 传递。
  */
 @Service
 public class OracleDataTransformerService {
 
-    private static final SimpleDateFormat SDF = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     /**
-     * 转换 "日保" 任务 (PmissionBoardDayDTO)
-     * @param oracleTask Oracle DTO
-     * @return TIMS MaintenanceTaskDTO
+     * [新]
+     * 将从 V_MAINTENANCE_TASKS_RECENT 视图查询到的 DTO 转换为 MaintenanceTaskDTO
+     * (此类用于解耦，尽管目前两个DTO结构相同)
+     *
+     * @param vTask 从视图查询到的 DTO
+     * @return 转换后的 MaintenanceTaskDTO
      */
-    public MaintenanceTaskDTO transformDayTask(PmissionBoardDayDTO oracleTask) {
-        MaintenanceTaskDTO timsTask = new MaintenanceTaskDTO();
-        String taskId = "T-DAY-" + oracleTask.getIdocid();
-        String planId = "P-DAY-" + oracleTask.getIdocid();
-
-        timsTask.setPlanId(planId);
-        timsTask.setTaskId(taskId);
-        // PmissionBoardDayDTO 中缺少 equipmentCode，我们暂时使用 equipmentName 作为替代
-        timsTask.setEquipmentCode(oracleTask.getMakeFlName());
-        timsTask.setType(1); // 1-日保
-        timsTask.setProject(oracleTask.getMiTitle());
-        timsTask.setContent(oracleTask.getMiTitle()); // 日保任务中，项目、内容、标准相同
-        timsTask.setStandard(oracleTask.getMiTitle());
-        timsTask.setFullScore(10); // 默认分值
-        timsTask.setCreateDateTime(formatDate(oracleTask.getdRegt()));
-        timsTask.setPlanStartTime(formatDate(oracleTask.getdBegin()));
-        timsTask.setOperator(oracleTask.getsDuty());
-
-        return timsTask;
+    public MaintenanceTaskDTO transformVTaskToMaintenanceTask(VMaintenanceTaskDTO vTask) {
+        MaintenanceTaskDTO task = new MaintenanceTaskDTO();
+        task.setPlanId(vTask.getPlanId());
+        task.setTaskId(vTask.getTaskId());
+        task.setEquipmentCode(vTask.getEquipmentCode());
+        task.setType(vTask.getType());
+        task.setProject(vTask.getProject());
+        task.setContent(vTask.getContent());
+        task.setStandard(vTask.getStandard());
+        task.setTool(vTask.getTool());
+        task.setFullScore(vTask.getFullScore());
+        task.setCreateDateTime(vTask.getCreateDateTime());
+        task.setPlanStartTime(vTask.getPlanStartTime());
+        task.setOperator(vTask.getOperator());
+        task.setOilId(vTask.getOilId());
+        task.setOilQuantity(vTask.getOilQuantity());
+        return task;
     }
 
     /**
-     * 转换 "轮保/月保" 任务 (PmissionBoardDTO)
-     * @param oracleTask Oracle DTO
-     * @return TIMS MaintenanceTaskDTO
+     * [已重构]
+     * 将从 V_ROTATIONAL_PLANS_RECENT 视图查询到的 DTO 转换为 RotationalPlanDTO
+     *
+     * @param vPlan 从视图查询到的 DTO
+     * @return 转换后的 RotationalPlanDTO
      */
-    public MaintenanceTaskDTO transformBoardLbTask(PmissionBoardDTO oracleTask) {
-        MaintenanceTaskDTO timsTask = new MaintenanceTaskDTO();
-        String taskId = "T-LB-" + oracleTask.getIdocid();
-        String planId = "P-LB-" + oracleTask.getIdocid();
+    public RotationalPlanDTO transformVPlanToRotationalPlan(VRotationalPlanDTO vPlan) {
+        RotationalPlanDTO plan = new RotationalPlanDTO();
+        plan.setPlanId(vPlan.getPlanId());
+        plan.setEquipmentCode(vPlan.getEquipmentCode());
+        plan.setPlanDate(vPlan.getPlanDate());
+        plan.setCreateDate(vPlan.getCreateDate());
+        return plan;
+    }
 
-        timsTask.setPlanId(planId);
-        timsTask.setTaskId(taskId);
-        // PmissionBoardDTO 中缺少 equipmentCode，我们使用 ieqno (设备内码) 作为替代
-        timsTask.setEquipmentCode(String.valueOf(oracleTask.getIeqno()));
 
-        // 31-轮保, 32-月保
-        if (oracleTask.getDjClass() != null && oracleTask.getDjClass() == 31) {
-            timsTask.setType(3); // 3-轮保
-        } else {
-            timsTask.setType(2); // 2-月保 (默认)
+    /**
+     * 4. 转换维修计划 (PM_MONTH_ARCHIVED)
+     * 将一个 PM_MONTH 主表和多个 PM_MONTH_ITEM 子表记录转换为一个 ProductionHaltTaskDTO 列表
+     *
+     * @param pmMonthData 包含主表和子表数据的 DTO
+     * @return 转换后的 ProductionHaltTaskDTO 列表
+     */
+    public List<ProductionHaltTaskDTO> transformPmMonthTasks(PmMonthDTO pmMonthData) {
+        if (pmMonthData == null || pmMonthData.getItems() == null || pmMonthData.getItems().isEmpty()) {
+            return new ArrayList<>();
         }
 
-        timsTask.setProject(oracleTask.getMititle());
-        timsTask.setContent(oracleTask.getMititle());
-        timsTask.setStandard(oracleTask.getMititle());
-        timsTask.setFullScore(10); // 默认分值
-        timsTask.setCreateDateTime(formatDate(oracleTask.getMakedate()));
-        timsTask.setPlanStartTime(formatDate(oracleTask.getMidate()));
-        timsTask.setOperator(oracleTask.getSduty());
-
-        return timsTask;
-    }
-
-    /**
-     * 转换 "例保" 任务 (PmissionBoardBaoYangDTO)
-     * @param oracleTask Oracle DTO
-     * @return TIMS MaintenanceTaskDTO
-     */
-    public MaintenanceTaskDTO transformBaoYangTask(PmissionBoardBaoYangDTO oracleTask) {
-        MaintenanceTaskDTO timsTask = new MaintenanceTaskDTO();
-        String taskId = "T-BY-" + oracleTask.getIdocid();
-        String planId = "P-BY-" + oracleTask.getIdocid();
-
-        timsTask.setPlanId(planId);
-        timsTask.setTaskId(taskId);
-        timsTask.setEquipmentCode(oracleTask.getMakeflcode());
-        timsTask.setType(0); // 0-保养(例保)
-        timsTask.setProject(oracleTask.getMititle());
-        timsTask.setContent(oracleTask.getMititle());
-        timsTask.setStandard(oracleTask.getMititle());
-        timsTask.setFullScore(10); // 默认分值
-        timsTask.setCreateDateTime(formatDate(oracleTask.getMakedate()));
-        timsTask.setPlanStartTime(formatDate(oracleTask.getDbegin()));
-        timsTask.setOperator(oracleTask.getSduty());
-
-        return timsTask;
-    }
-
-    /**
-     * 转换 "维修计划" (PmMonthDTO) 为停产检修任务列表
-     * @param mainData 包含主表和子项的 Oracle DTO
-     * @return TIMS ProductionHaltTaskDTO 列表
-     */
-    public List<ProductionHaltTaskDTO> transformPmMonthTasks(PmMonthDTO mainData) {
-        if (mainData == null || mainData.getItems() == null) {
-            return Collections.emptyList();
-        }
-
-        return mainData.getItems().stream()
+        // 维修计划 (PM_MONTH) 被视为停产检修 (ProductionHaltTask)
+        return pmMonthData.getItems().stream()
                 .map(item -> {
-                    ProductionHaltTaskDTO timsTask = new ProductionHaltTaskDTO();
-                    timsTask.setTaskId(String.valueOf(item.getIndocno())); // 任务ID = 维修计划明细ID
-                    timsTask.setEquipmentCode(item.getSfcode());
+                    ProductionHaltTaskDTO task = new ProductionHaltTaskDTO();
 
-                    // 组合检修项目和内容
-                    String content = (item.getSitem() != null ? item.getSitem() : "") +
-                            (item.getStodo() != null ? ": " + item.getStodo() : "");
-                    timsTask.setContent(content);
+                    // 关键字段映射
+                    task.setTaskId(item.getIndocno().toString()); // 任务唯一标识 (使用子表主键)
+                    task.setEquipmentCode(item.getSfcode()); // 设备编码
+                    task.setContent(item.getStodo()); // 检修内容
+                    task.setHead(item.getSduty()); // 负责人
+                    task.setTeamName(item.getSdept()); // 班组 (承修单位)
+                    task.setExecutor(item.getSduty()); // 执行人 (使用负责人)
 
-                    timsTask.setHead(mainData.getSapplyer()); // 负责人 = 主表提报人
-                    timsTask.setTeamName(item.getSdept());    // 班组 = 子项承修单位
-                    timsTask.setExecutor(item.getSduty());    // 执行人 = 子项维修负责人
+                    // 日期格式化
+                    task.setPlanStartTime(formatDate(item.getDplanbegin())); // 计划开始时间
+                    task.setPlanEndTime(formatDate(item.getDplanend())); // 计划结束时间
 
-                    timsTask.setPlanStartTime(formatDate(item.getDplanbegin()));
-                    timsTask.setPlanEndTime(formatDate(item.getDplanend()));
-
-                    return timsTask;
+                    return task;
                 })
                 .collect(Collectors.toList());
     }
 
     /**
-     * [新增] 转换 "轮保计划" (EqPlanLbDTO) 为轮保计划排期列表
-     * @param mainData 包含主表和子项的 Oracle DTO
-     * @return TIMS RotationalPlanDTO 列表
-     */
-    public List<RotationalPlanDTO> transformEqPlanLbTasks(EqPlanLbDTO mainData) {
-        if (mainData == null || mainData.getItems() == null) {
-            return Collections.emptyList();
-        }
-
-        // 轮保计划 (TIMS DTO) 是一个扁平列表，
-        // Oracle (EAM DTO) 是一个主-从结构。
-        // 我们将 Oracle 的 *每一个子项* 转换为一个 TIMS 计划项。
-        return mainData.getItems().stream()
-                .map(item -> {
-                    RotationalPlanDTO timsPlan = new RotationalPlanDTO();
-
-                    // 计划ID = Oracle 主表SNO + 子表ID
-                    String planId = (mainData.getSno() != null ? mainData.getSno() : mainData.getIndocno())
-                            + "-" + item.getIndocno();
-
-                    timsPlan.setPlanId(planId);
-                    timsPlan.setEquipmentCode(item.getSfcode());
-                    timsPlan.setPlanDate(formatDate(item.getDbegin()));
-                    timsPlan.setCreateDate(formatDate(mainData.getDregt()));
-
-                    return timsPlan;
-                })
-                .collect(Collectors.toList());
-    }
-
-
-    /**
-     * 辅助方法：安全地格式化日期
+     * 辅助方法，安全地格式化日期
      */
     private String formatDate(Date date) {
         if (date == null) {
             return null;
         }
-        synchronized (SDF) {
-            return SDF.format(date);
+        // SimpleDateFormat 不是线程安全的，所以在调用时进行同步
+        synchronized (dateTimeFormatter) {
+            return dateTimeFormatter.format(date);
         }
     }
 }

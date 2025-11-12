@@ -34,6 +34,8 @@ public class SecurityConfig {
                         .antMatchers("/login.html", "/stomp.min.js", "/sockjs.min.js","/main.html","/query-template.html", "/simulate.html").permitAll()
                         .antMatchers("/my-websocket/**").permitAll()
                         .antMatchers("/api/system/auth/**").permitAll()
+                        .antMatchers("/api/push/**").permitAll()
+                        .antMatchers("/api/oracle/task-status/**").permitAll()
                         // Existing public endpoints
                         .antMatchers("/api/maintainbook/**","/api/oracle/**","/oracle_test.html", "/api/tspm/simulate/**","/api/tspm/generate-json/**","/api/tspm/received-data/**", "/api/tspm/logs").permitAll()
                         // Secure new kanban endpoints

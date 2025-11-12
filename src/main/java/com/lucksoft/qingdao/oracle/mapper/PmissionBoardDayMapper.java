@@ -33,7 +33,9 @@ public interface PmissionBoardDayMapper {
     })
     @Select("SELECT IDOCID, MITYPE, MITITLE, MIDATE, MAKEPEOPLE, MAKEFLNAME, SDUTY, DBEGIN, DEND, DREGT " +
             "FROM PMISSIONBOARDDAY " +
-            "WHERE DREGT >= SYSDATE - (1/24) " + // 查询过去1小时内的数据
+            "WHERE SPMCODE IN ('JB000483','JB000484','JB000488','JB000487')  " +
+            " and to_char(DREGT,'yyyy-MM-dd')='2025-10-16' " +
+           // " AND DREGT >= SYSDATE - (1/24) " + // 查询过去1小时内的数据
             "ORDER BY DREGT DESC")
     List<PmissionBoardDayDTO> findRecentTasks();
 

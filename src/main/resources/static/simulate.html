@@ -79,8 +79,8 @@
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
     </style>
-    <script src="/sockjs.min.js"></script>
-    <script src="/stomp.min.js"></script>
+    <script src="sockjs.min.js"></script>
+    <script src="stomp.min.js"></script>
 </head>
 <body>
 
@@ -285,10 +285,10 @@
 
         setDefaultData();
 
-        const stompClient = Stomp.over(new SockJS('/my-websocket'));
+        const stompClient = Stomp.over(new SockJS('my-websocket'));
         stompClient.connect({}, frame => {
             fetchInitialLogs();
-            stompClient.subscribe('/topic/logs', message => addLog(JSON.parse(message.body)));
+            stompClient.subscribe('topic/logs', message => addLog(JSON.parse(message.body)));
         });
 
         // --- Helper Functions ---
@@ -297,7 +297,7 @@
             const container = document.getElementById(containerId);
             if (!container) return;
             try {
-                const response = await fetch(`/api/tspm/received-data?topic=${topic}`);
+                const response = await fetch(`api/tspm/received-data?topic=${topic}`);
                 if (!response.ok) throw new Error('网络响应错误');
                 const data = await response.json();
 
@@ -369,7 +369,7 @@
             input.click();
         }
         function pushMessage(type, data) {
-            fetch('/api/tspm/simulate/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: type, data: data })
+            fetch('api/tspm/simulate/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: type, data: data })
             }).then(response => {
                 if (!response.ok) return response.text().then(text => { throw new Error(text) });
                 return response.text();
@@ -387,7 +387,7 @@
             const params = paramsStr.split('\n').map(p => p.trim()).filter(p => p !== '');
 
             try {
-                const response = await fetch('/api/tspm/generate-json', {
+                const response = await fetch('api/tspm/generate-json', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -409,7 +409,7 @@
 
         async function fetchInitialLogs() {
             try {
-                const response = await fetch('/api/tspm/logs');
+                const response = await fetch('api/tspm/logs');
                 if (response.ok) { allLogs = await response.json(); renderLogs(); }
             } catch (error) { console.error('获取初始日志失败:', error); }
         }
@@ -466,7 +466,7 @@
             const container = document.getElementById(containerId);
             if (!container) return;
             try {
-                const response = await fetch(`/api/tspm/received-data?topic=${topic}`);
+                const response = await fetch(`api/tspm/received-data?topic=${topic}`);
                 if (!response.ok) throw new Error('网络响应错误');
                 const data = await response.json();
                 if (data.length === 0) { container.innerHTML = '<div class="empty-data">暂无数据</div>'; return; }

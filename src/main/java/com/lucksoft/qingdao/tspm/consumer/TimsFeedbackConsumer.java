@@ -3,6 +3,7 @@ package com.lucksoft.qingdao.tspm.consumer;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lucksoft.qingdao.tspm.dto.*;
+import com.lucksoft.qingdao.tspm.service.ReceivedDataCacheService;
 import com.lucksoft.qingdao.tspm.service.TspmLogService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 监听并处理所有来自TIMS系统的消息
@@ -36,7 +38,8 @@ public class TimsFeedbackConsumer {
     private static final Logger faultAnalysisLogger = LoggerFactory.getLogger("kafka.consumer.fault.analysis");
     private static final Logger haltCompletionLogger = LoggerFactory.getLogger("kafka.consumer.halt.completion");
 
-
+    @Autowired
+    private ReceivedDataCacheService cacheService;
     /**
      * 接口 2: 消费“反馈保养、点检、润滑任务完成情况”
      */
@@ -51,6 +54,8 @@ public class TimsFeedbackConsumer {
                 maintenanceCompletionLogger.info(logContent);
                 // 2. 推送到前端UI
                 logService.logReceive(topic, logContent);
+                Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
+                cacheService.addData(topic, dataMap);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -71,6 +76,9 @@ public class TimsFeedbackConsumer {
                 String logContent = objectMapper.writeValueAsString(feedback);
                 maintenanceScoreLogger.info(logContent);
                 logService.logReceive(topic, logContent);
+
+                Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
+                cacheService.addData(topic, dataMap);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -91,6 +99,10 @@ public class TimsFeedbackConsumer {
                 String logContent = objectMapper.writeValueAsString(report);
                 faultReportLogger.info(logContent);
                 logService.logReceive(topic, logContent);
+
+                // [修复] 写入内存缓存
+                Map<String, Object> dataMap = objectMapper.convertValue(report, new TypeReference<Map<String, Object>>() {});
+                cacheService.addData(topic, dataMap);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -111,6 +123,9 @@ public class TimsFeedbackConsumer {
                 String logContent = objectMapper.writeValueAsString(task);
                 recommendTaskLogger.info(logContent);
                 logService.logReceive(topic, logContent);
+
+                Map<String, Object> dataMap = objectMapper.convertValue(task, new TypeReference<Map<String, Object>>() {});
+                cacheService.addData(topic, dataMap);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -131,6 +146,9 @@ public class TimsFeedbackConsumer {
                 String logContent = objectMapper.writeValueAsString(feedback);
                 rotationalCompletionLogger.info(logContent);
                 logService.logReceive(topic, logContent);
+
+                Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
+                cacheService.addData(topic, dataMap);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -151,6 +169,9 @@ public class TimsFeedbackConsumer {
                 String logContent = objectMapper.writeValueAsString(feedback);
                 rotationalScoreLogger.info(logContent);
                 logService.logReceive(topic, logContent);
+
+                Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
+                cacheService.addData(topic, dataMap);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -171,6 +192,9 @@ public class TimsFeedbackConsumer {
                 String logContent = objectMapper.writeValueAsString(report);
                 faultAnalysisLogger.info(logContent);
                 logService.logReceive(topic, logContent);
+
+                Map<String, Object> dataMap = objectMapper.convertValue(report, new TypeReference<Map<String, Object>>() {});
+                cacheService.addData(topic, dataMap);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -191,6 +215,9 @@ public class TimsFeedbackConsumer {
                 String logContent = objectMapper.writeValueAsString(feedback);
                 haltCompletionLogger.info(logContent);
                 logService.logReceive(topic, logContent);
+
+                Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
+                cacheService.addData(topic, dataMap);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;

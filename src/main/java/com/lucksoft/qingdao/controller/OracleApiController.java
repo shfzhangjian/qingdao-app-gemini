@@ -1,31 +1,25 @@
 package com.lucksoft.qingdao.controller;
 
-import com.lucksoft.qingdao.oracle.dto.*;
+import com.lucksoft.qingdao.oracle.service.AsyncTaskService;
 import com.lucksoft.qingdao.oracle.service.OracleDataService;
-import com.lucksoft.qingdao.tspm.dto.MaintenanceTaskDTO;
-import com.lucksoft.qingdao.tspm.dto.ProductionHaltTaskDTO;
-import com.lucksoft.qingdao.tspm.dto.RotationalPlanDTO;
-import com.lucksoft.qingdao.tspm.producer.TspmProducerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.io.Serializable;
-import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
+ * [已重构]
  * 专门用于接收来自 Oracle 数据库 UTL_HTTP 请求的控制器。
+ * 1. [安全] 受 ApiKeyAuthFilter 保护, 必须提供 X-API-KEY。
+ * 2. [异步] 接收到请求后，立即将任务提交给 AsyncTaskService，并返回 taskId。
+ * 3. [路由] 根据 stype 路由到不同的后台处理逻辑。
+ * 4. [移除] 不再处理 EQ_PLANLB_ARCHIVED（已由 RotationalPlanPushJob 自动处理）。
  *
  * @author Gemini
  */
@@ -39,141 +33,112 @@ public class OracleApiController {
     private OracleDataService oracleDataService;
 
     @Autowired
-    private TspmProducerService producerService;
-
-    // --- [修改] 注入 TIMS 标准 Topics ---
-    @Value("${kafka.topics.sync-maintenance-task}")
-    private String syncMaintenanceTaskTopic;
-
-    @Value("${kafka.topics.sync-production-halt-maintenance-task}")
-    private String syncProductionHaltTaskTopic;
-
-    /**
-     * [新增] 注入轮保计划Topic
-     */
-    @Value("${kafka.topics.sync-rotational-plan}")
-    private String syncRotationalPlanTopic;
-
-    // --- [保留] 未被重构的 Topics ---
-    @Value("${kafka.topics.push-pmission-zy-jm}")
-    private String pushPmissionZyJmTopic;
+    private AsyncTaskService asyncTaskService; // [新] 注入异步任务服务
 
 
     /**
+     * [已重构]
      * 接收来自 Oracle 过程的 JSON 推送。
+     * 立即返回 200 OK 和一个 taskId，实际工作在后台线程完成。
      *
      * @param payload 包含 "stype" 的 JSON 负载
-     * @return 一个简单的 JSON 响应，表示成功
+     * @return 一个包含 taskId 的 JSON 响应
      */
     @PostMapping("/receive")
     public ResponseEntity<Map<String, Object>> receiveOraclePush(@RequestBody OracleRequestPayload payload) {
 
-        LocalDateTime receptionTime = LocalDateTime.now();
         String receivedStype = (payload != null) ? payload.getStype() : "null";
+        log.info("--- [Oracle Trigger] 收到推送请求: {} ---", receivedStype);
 
-        log.info("--- Oracle 推送接收成功 ---");
-        log.info("接收时间: {}", receptionTime);
-        log.info("接收参数 (stype): {}", receivedStype);
+        if (receivedStype == null || receivedStype.isEmpty()) {
+            throw new IllegalArgumentException("stype 不能为空");
+        }
+
+        // --- 1. 立即生成任务ID ---
+        String taskId = asyncTaskService.submitTask();
+        log.info("[Task {}] 已为 stype '{}' 创建异步任务。", taskId, receivedStype);
 
         try {
-            if (receivedStype == null || receivedStype.isEmpty()) {
-                throw new IllegalArgumentException("stype 不能为空");
+            // --- 2. 路由: 根据 stype 触发*不同*的异步任务 ---
+
+            // A. 统一处理所有保养任务 (日保, 轮保/月保, 例保)
+            if ("SP_GENDAYTASK".equals(receivedStype) ||
+                    "PMBOARD.SP_QD_PLANBOARD_LB".equals(receivedStype) ||
+                    "JOB_GEN_BAOYANG_TASKS".equals(receivedStype))
+            {
+                log.info("[Task {}] 路由到: 保养任务处理 (processMaintenanceTasks)", taskId);
+                asyncTaskService.processMaintenanceTasks(taskId);
             }
-
-            // --- 路由: 根据 stype 调用不同的服务 ---
-
-            // 1. [修改] 精益日保 (SP_GENDAYTASK) - 转换为标准DTO
-            if ("SP_GENDAYTASK".equals(receivedStype)) {
-                log.info("识别到 stype [{}], 开始处理(精益日保)数据推送...", receivedStype);
-                // [修改] service返回转换后的TIMS DTO列表
-                List<MaintenanceTaskDTO> newTasks = oracleDataService.getAndFilterNewDayTasks();
-                if (!newTasks.isEmpty()) {
-                    // [修改] 推送到标准的保养Topic
-                    producerService.sendMessage(syncMaintenanceTaskTopic, newTasks);
-                    log.info("成功推送 {} 条 [MaintenanceTaskDTO] 任务到 Kafka Topic: {}", newTasks.size(), syncMaintenanceTaskTopic);
-                }
-
-                // 2. [修改] 轮保/月保 (SP_QD_PLANBOARD_LB) - 转换为标准DTO
-            } else if ("PMBOARD.SP_QD_PLANBOARD_LB".equals(receivedStype)) {
-                log.info("识别到 stype [{}], 开始处理(轮保/月保)数据推送...", receivedStype);
-                // [修改] service返回转换后的TIMS DTO列表
-                List<MaintenanceTaskDTO> newTasks = oracleDataService.getAndFilterNewPmissionBoardTasks();
-                if (!newTasks.isEmpty()) {
-                    // [修改] 推送到标准的保养Topic
-                    producerService.sendMessage(syncMaintenanceTaskTopic, newTasks);
-                    log.info("成功推送 {} 条 [MaintenanceTaskDTO] 任务到 Kafka Topic: {}", newTasks.size(), syncMaintenanceTaskTopic);
-                }
-
-                // 3. [修改] 例保 (JOB_GEN_BAOYANG_TASKS) - 转换为标准DTO
-            } else if ("JOB_GEN_BAOYANG_TASKS".equals(receivedStype)) {
-                log.info("识别到 stype [{}], 开始处理(例保)数据推送...", receivedStype);
-                // [修改] service返回转换后的TIMS DTO列表
-                List<MaintenanceTaskDTO> newTasks = oracleDataService.getAndFilterNewPmissionBoardBaoYangTasks();
-                if (!newTasks.isEmpty()) {
-                    // [修改] 推送到标准的保养Topic
-                    producerService.sendMessage(syncMaintenanceTaskTopic, newTasks);
-                    log.info("成功推送 {} 条 [MaintenanceTaskDTO] 任务到 Kafka Topic: {}", newTasks.size(), syncMaintenanceTaskTopic);
-                }
-
-                // 4. [修改] 维修计划归档 (PM_MONTH_ARCHIVED:ID) - 转换为标准DTO
-            } else if (receivedStype.startsWith("PM_MONTH_ARCHIVED:")) {
-                log.info("识别到 stype [{}], 开始处理(维修计划归档)数据推送...", receivedStype);
+            // B. 处理专业/精密点检
+            else if ("PD_ZY_JM".equals(receivedStype))
+            {
+                log.info("[Task {}] 路由到: 专业点检处理 (processProfessionalCheckTasks)", taskId);
+                asyncTaskService.processProfessionalCheckTasks(taskId);
+            }
+            // C. [同步处理] 维修计划归档 (数据量小，非高并发源，无需异步)
+            else if (receivedStype.startsWith("PM_MONTH_ARCHIVED:"))
+            {
+                log.info("[Task {}] 路由到: 维修计划 (同步处理)", taskId);
                 Long indocno = Long.parseLong(receivedStype.split(":")[1]);
-                // [修改] service返回转换后的TIMS DTO列表
-                List<ProductionHaltTaskDTO> newTasks = oracleDataService.getAndFilterPmMonthData(indocno);
-                if (newTasks != null && !newTasks.isEmpty()) {
-                    // [修改] 推送到标准的停产检修Topic
-                    producerService.sendMessage(syncProductionHaltTaskTopic, newTasks);
-                    log.info("成功推送 {} 条 [ProductionHaltTaskDTO] 任务 (来自 INDOCNO: {}) 到 Kafka Topic: {}", newTasks.size(), indocno, syncProductionHaltTaskTopic);
-                }
+                Map<String, Object> result = oracleDataService.getAndFilterPmMonthData(indocno);
 
-                // 5. [修改] 轮保计划归档 (EQ_PLANLB_ARCHIVED:ID) - 转换为标准DTO
-            } else if (receivedStype.startsWith("EQ_PLANLB_ARCHIVED:")) {
-                log.info("识别到 stype [{}], 开始处理(轮保计划归档)数据推送...", receivedStype);
-                Long indocno = Long.parseLong(receivedStype.split(":")[1]);
-                // [修改] service返回转换后的TIMS DTO列表
-                List<RotationalPlanDTO> newTasks = oracleDataService.getAndFilterEqPlanLbData(indocno);
-                if (newTasks != null && !newTasks.isEmpty()) {
-                    // [修改] 推送到标准的轮保计划Topic
-                    producerService.sendMessage(syncRotationalPlanTopic, newTasks);
-                    log.info("成功推送 {} 条 [RotationalPlanDTO] 计划 (来自 INDOCNO: {}) 到 Kafka Topic: {}", newTasks.size(), indocno, syncRotationalPlanTopic);
-                }
+                // [修复] 调用 asyncTaskService 来更新状态
+                asyncTaskService.updateTaskStatus(taskId, "SUCCESS (Pushed " + result.get("pushedCount") + " tasks)");
 
-                // 6. [保留] 专业/精密点检 (PD_ZY_JM) - 按要求不转换
-            } else if ("PD_ZY_JM".equals(receivedStype)) {
-                log.info("识别到 stype [{}], 开始处理(专业/精密点检)数据推送...", receivedStype);
-                List<PmissionDTO> newTasks = oracleDataService.getAndFilterNewPmissionTasks();
-                if (!newTasks.isEmpty()) {
-                    // [保留] 仍推送到旧的 'oracle.push.*' topic
-                    producerService.sendMessage(pushPmissionZyJmTopic, newTasks);
-                    log.info("成功推送 {} 条新任务到 Kafka Topic: {}", newTasks.size(), pushPmissionZyJmTopic);
-                }
-
-                // ... (可以继续添加其他 stype 的 else if) ...
-
-                // 默认: 收到 stype 但没有匹配的处理器
-            } else {
-                log.warn("收到了一个未处理的 stype: {}", receivedStype);
+                // [修改] 将推送的数据也返回给 Oracle
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "Task processed synchronously");
+                response.put("taskId", taskId);
+                response.put("pushedData", result.get("pushedData"));
+                return ResponseEntity.ok(response);
+            }
+            // D. [已移除] 轮保计划归档
+            else if (receivedStype.startsWith("EQ_PLANLB_ARCHIVED:"))
+            {
+                log.warn("[Task {}] 路由到: 轮保计划 (已忽略)", taskId);
+                log.warn("stype '{}' 已被忽略，此逻辑现由 'RotationalPlanPushJob' 定时任务自动处理。", receivedStype);
+                asyncTaskService.updateTaskStatus(taskId, "SKIPPED (Deprecated, handled by Job)");
+            }
+            // E. 其他
+            else
+            {
+                log.warn("[Task {}] 路由到: 未知 (SKIPPED)", taskId);
+                asyncTaskService.updateTaskStatus(taskId, "SKIPPED (Unknown stype)");
             }
 
         } catch (Exception e) {
-            log.error("处理 Oracle 推送 (stype={}) 时发生严重错误: {}", receivedStype, e.getMessage(), e);
+            log.error("[Task {}] 提交异步任务时发生严重错误: {}", taskId, e.getMessage(), e);
+            asyncTaskService.updateTaskStatus(taskId, "FAILED (Submission Error)");
 
-            // 返回 500 错误给 Oracle
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("status", "error");
-            errorResponse.put("receivedStype", receivedStype);
-            errorResponse.put("errorMessage", e.getMessage());
-            return ResponseEntity.status(500).body(errorResponse);
+            // 即使提交失败，也要返回 200 和 TaskId，让Oracle知道我们收到了请求
+            // 真正的错误会在 /task-status/{taskId} 中反映出来
         }
 
-        // 2. 构建一个成功的响应返回给 Oracle
+        // --- 3. 立即返回 200 OK 和 TaskId ---
         Map<String, Object> response = new HashMap<>();
-        response.put("status", "success");
-        response.put("receivedAt", receptionTime.toString());
-        response.put("receivedStype", receivedStype);
+        response.put("status", "Task submitted");
+        response.put("taskId", taskId);
+        return ResponseEntity.ok(response);
+    }
 
-        log.info("--- Oracle 推送处理完毕 ---");
+    /**
+     * [新]
+     * 检查一个异步任务的执行状态。
+     *
+     * @param taskId 任务ID
+     * @return 任务状态
+     */
+    @GetMapping("/task-status/{taskId}")
+    public ResponseEntity<Map<String, String>> getTaskStatus(@PathVariable String taskId) {
+        String status = asyncTaskService.getTaskStatus(taskId);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("taskId", taskId);
+        response.put("status", status);
+
+        if ("NOT_FOUND".equals(status)) {
+            return ResponseEntity.status(404).body(response);
+        }
         return ResponseEntity.ok(response);
     }
 
@@ -196,14 +161,15 @@ public class OracleApiController {
 
         } catch (Exception e) {
             log.error("清空 Redis 缓存失败", e);
-            return ResponseEntity.status(500).body(Collections.singletonMap("error", e.getMessage()));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
         }
     }
 
 
     /**
      * 用于映射 Oracle 发送的 JSON 负载 {"stype": "..."} 的简单 DTO。
-     * 作为一个静态内部类，它不需要单独的文件。
      */
     static class OracleRequestPayload implements Serializable {
         private static final long serialVersionUID = 1L;
