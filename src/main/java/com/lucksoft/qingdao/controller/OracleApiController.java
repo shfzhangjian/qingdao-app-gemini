@@ -16,12 +16,10 @@ import java.util.Set;
 /**
  * [已重构]
  * 专门用于接收来自 Oracle 数据库 UTL_HTTP 请求的控制器。
- * 1. [安全] 受 ApiKeyAuthFilter 保护, 必须提供 X-API-KEY。
- * 2. [异步] 接收到请求后，立即将任务提交给 AsyncTaskService，并返回 taskId。
- * 3. [路由] 根据 stype 路由到不同的后台处理逻辑。
- * 4. [移除] 不再处理 EQ_PLANLB_ARCHIVED（已由 RotationalPlanPushJob 自动处理）。
- *
- * @author Gemini
+ * 1. [安全] 依赖 ApiKeyAuthFilter (X-API-KEY) + SecurityConfig (ROLE_API) 进行验证。
+ * 2. [异步] 接收请求后立即提交到 AsyncTaskService，并返回 HTTP 200 OK 和 TaskId。
+ * 3. [查询] 提供 /task-status/{taskId} 端点用于轮询任务状态。
+ * 4. [注释] 增加了您要求的5个接口的路由注释。
  */
 @RestController
 @RequestMapping("/api/oracle")
@@ -33,88 +31,92 @@ public class OracleApiController {
     private OracleDataService oracleDataService;
 
     @Autowired
-    private AsyncTaskService asyncTaskService; // [新] 注入异步任务服务
-
+    private AsyncTaskService asyncTaskService; // [新] 注入异步服务
 
     /**
-     * [已重构]
-     * 接收来自 Oracle 过程的 JSON 推送。
-     * 立即返回 200 OK 和一个 taskId，实际工作在后台线程完成。
+     * [核心入口] 接收来自 Oracle 过程的 JSON 推送。
      *
      * @param payload 包含 "stype" 的 JSON 负载
-     * @return 一个包含 taskId 的 JSON 响应
+     * @return HTTP 200 OK + TaskId，或 HTTP 400/500 错误
      */
     @PostMapping("/receive")
     public ResponseEntity<Map<String, Object>> receiveOraclePush(@RequestBody OracleRequestPayload payload) {
 
-        String receivedStype = (payload != null) ? payload.getStype() : "null";
-        log.info("--- [Oracle Trigger] 收到推送请求: {} ---", receivedStype);
-
+        String receivedStype = (payload != null) ? payload.getStype() : null;
         if (receivedStype == null || receivedStype.isEmpty()) {
-            throw new IllegalArgumentException("stype 不能为空");
+            log.warn("--- Oracle 推送被拒绝：stype 不能为空 ---");
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", "stype 不能为空");
+            return ResponseEntity.badRequest().body(errorResponse);
         }
 
-        // --- 1. 立即生成任务ID ---
-        String taskId = asyncTaskService.submitTask();
-        log.info("[Task {}] 已为 stype '{}' 创建异步任务。", taskId, receivedStype);
+        String taskId = asyncTaskService.submitTask(receivedStype); // 1. 立即生成 TaskId
+        log.info("--- [Task {}] Oracle 推送接收成功 (stype: {}) ---", taskId, receivedStype);
 
         try {
-            // --- 2. 路由: 根据 stype 触发*不同*的异步任务 ---
+            // --- 路由: 根据 stype 触发不同的异步任务 ---
 
-            // A. 统一处理所有保养任务 (日保, 轮保/月保, 例保)
+            // 接口 1: 推送保养任务 (高并发, 视图查询)
+            // 路由: SP_GENDAYTASK, PMBOARD.SP_QD_PLANBOARD_LB, JOB_GEN_BAOYANG_TASKS
             if ("SP_GENDAYTASK".equals(receivedStype) ||
                     "PMBOARD.SP_QD_PLANBOARD_LB".equals(receivedStype) ||
-                    "JOB_GEN_BAOYANG_TASKS".equals(receivedStype))
-            {
-                log.info("[Task {}] 路由到: 保养任务处理 (processMaintenanceTasks)", taskId);
+                    "JOB_GEN_BAOYANG_TASKS".equals(receivedStype)) {
+
                 asyncTaskService.processMaintenanceTasks(taskId);
-            }
-            // B. 处理专业/精密点检
-            else if ("PD_ZY_JM".equals(receivedStype))
-            {
-                log.info("[Task {}] 路由到: 专业点检处理 (processProfessionalCheckTasks)", taskId);
-                asyncTaskService.processProfessionalCheckTasks(taskId);
-            }
-            // C. [同步处理] 维修计划归档 (数据量小，非高并发源，无需异步)
-            else if (receivedStype.startsWith("PM_MONTH_ARCHIVED:"))
-            {
-                log.info("[Task {}] 路由到: 维修计划 (同步处理)", taskId);
+
+                // 接口 5: 推送轮保计划 (低并发, 表查询)
+                // 路由: EQ_PLANLB_ARCHIVED:{id}
+            } else if (receivedStype.startsWith("EQ_PLANLB_ARCHIVED:")) {
+
                 Long indocno = Long.parseLong(receivedStype.split(":")[1]);
-                Map<String, Object> result = oracleDataService.getAndFilterPmMonthData(indocno);
+                asyncTaskService.processEqPlanLbArchive(taskId, indocno);
 
-                // [修复] 调用 asyncTaskService 来更新状态
-                asyncTaskService.updateTaskStatus(taskId, "SUCCESS (Pushed " + result.get("pushedCount") + " tasks)");
+                // [新] 接口 7: 推送轮保任务 (高并发, 视图查询)
+                // 路由: TIMS_PUSH_ROTATIONAL_TASK
+            } else if ("TIMS_PUSH_ROTATIONAL_TASK".equals(receivedStype)) {
 
-                // [修改] 将推送的数据也返回给 Oracle
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", "Task processed synchronously");
-                response.put("taskId", taskId);
-                response.put("pushedData", result.get("pushedData"));
-                return ResponseEntity.ok(response);
-            }
-            // D. [已移除] 轮保计划归档
-            else if (receivedStype.startsWith("EQ_PLANLB_ARCHIVED:"))
-            {
-                log.warn("[Task {}] 路由到: 轮保计划 (已忽略)", taskId);
-                log.warn("stype '{}' 已被忽略，此逻辑现由 'RotationalPlanPushJob' 定时任务自动处理。", receivedStype);
-                asyncTaskService.updateTaskStatus(taskId, "SKIPPED (Deprecated, handled by Job)");
-            }
-            // E. 其他
-            else
-            {
-                log.warn("[Task {}] 路由到: 未知 (SKIPPED)", taskId);
-                asyncTaskService.updateTaskStatus(taskId, "SKIPPED (Unknown stype)");
+                asyncTaskService.processRotationalTasks(taskId);
+
+                // [新] 接口 12: 推送故障报告编码 (低并发, 视图查询)
+                // 路由: TIMS_PUSH_FAULT_REPORT_CODE:{id}
+            } else if (receivedStype.startsWith("TIMS_PUSH_FAULT_REPORT_CODE:")) {
+
+                Integer timsId = Integer.parseInt(receivedStype.split(":")[1]);
+                asyncTaskService.processFaultReportCode(taskId, timsId);
+
+                // 接口 13: 推送停产检修任务 (低并发, 表查询)
+                // 路由: PM_MONTH_ARCHIVED:{id}
+            } else if (receivedStype.startsWith("PM_MONTH_ARCHIVED:")) {
+
+                Long indocno = Long.parseLong(receivedStype.split(":")[1]);
+                asyncTaskService.processPmMonthArchive(taskId, indocno);
+
+                // (旧) 接口: 专业/精密点检 (高并发, 表查询)
+                // 路由: PD_ZY_JM
+            } else if ("PD_ZY_JM".equals(receivedStype)) {
+
+                asyncTaskService.processPmissionTasks(taskId);
+
+            } else {
+                log.warn("[Task {}] 收到了一个未处理的 stype: {}", taskId, receivedStype);
+                // 即使未处理，也更新状态为SKIPPED
+                asyncTaskService.updateTaskStatus(taskId, AsyncTaskService.TaskStatus.SKIPPED, "Skipped (Unknown stype)", null);
             }
 
         } catch (Exception e) {
-            log.error("[Task {}] 提交异步任务时发生严重错误: {}", taskId, e.getMessage(), e);
-            asyncTaskService.updateTaskStatus(taskId, "FAILED (Submission Error)");
+            log.error("[Task {}] 触发异步任务时发生严重错误: {}", taskId, e.getMessage(), e);
+            // 同步阶段就失败了（例如解析ID失败），更新状态
+            asyncTaskService.updateTaskStatus(taskId, AsyncTaskService.TaskStatus.FAILED, "Failed to submit task: " + e.getMessage(), null);
 
-            // 即使提交失败，也要返回 200 和 TaskId，让Oracle知道我们收到了请求
-            // 真正的错误会在 /task-status/{taskId} 中反映出来
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("taskId", taskId);
+            errorResponse.put("message", "提交任务失败: " + e.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
         }
 
-        // --- 3. 立即返回 200 OK 和 TaskId ---
+        // 2. 立即返回 200 OK 和 TaskId
         Map<String, Object> response = new HashMap<>();
         response.put("status", "Task submitted");
         response.put("taskId", taskId);
@@ -122,28 +124,22 @@ public class OracleApiController {
     }
 
     /**
-     * [新]
-     * 检查一个异步任务的执行状态。
-     *
+     * [新增] 异步任务状态查询接口
      * @param taskId 任务ID
      * @return 任务状态
      */
     @GetMapping("/task-status/{taskId}")
-    public ResponseEntity<Map<String, String>> getTaskStatus(@PathVariable String taskId) {
-        String status = asyncTaskService.getTaskStatus(taskId);
-
-        Map<String, String> response = new HashMap<>();
-        response.put("taskId", taskId);
-        response.put("status", status);
-
-        if ("NOT_FOUND".equals(status)) {
-            return ResponseEntity.status(404).body(response);
+    public ResponseEntity<Map<String, Object>> getTaskStatus(@PathVariable String taskId) {
+        Map<String, Object> status = asyncTaskService.getTaskStatus(taskId);
+        if ("NOT_FOUND".equals(status.get("status"))) {
+            return ResponseEntity.status(404).body(status);
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(status);
     }
 
+
     /**
-     * [新增] 调试接口：清空所有 Oracle 推送任务的 Redis 缓存
+     * 调试接口：清空所有 Oracle 推送任务的 Redis 缓存
      * @return 清理结果
      */
     @PostMapping("/clear-push-cache")
@@ -170,6 +166,7 @@ public class OracleApiController {
 
     /**
      * 用于映射 Oracle 发送的 JSON 负载 {"stype": "..."} 的简单 DTO。
+     * 作为一个静态内部类，它不需要单独的文件。
      */
     static class OracleRequestPayload implements Serializable {
         private static final long serialVersionUID = 1L;
