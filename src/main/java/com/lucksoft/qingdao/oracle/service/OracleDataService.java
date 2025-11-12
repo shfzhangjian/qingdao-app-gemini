@@ -2,6 +2,9 @@ package com.lucksoft.qingdao.oracle.service;
 
 import com.lucksoft.qingdao.oracle.dto.*;
 import com.lucksoft.qingdao.oracle.mapper.*;
+import com.lucksoft.qingdao.tspm.dto.MaintenanceTaskDTO;
+import com.lucksoft.qingdao.tspm.dto.ProductionHaltTaskDTO;
+import com.lucksoft.qingdao.tspm.dto.RotationalPlanDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +16,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -50,13 +52,19 @@ public class OracleDataService {
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
+    /**
+     * [新增] 注入转换服务
+     */
+    @Autowired
+    private OracleDataTransformerService transformerService;
+
 
     /**
      * 1. SP_GENDAYTASK (精益日保)
-     * 获取并过滤（防重） PMISSIONBOARDDAY 中新生成的任务
-     * @return 仅包含新任务的 DTO 列表
+     * 获取、过滤并**转换**新生成的任务
+     * @return 仅包含新任务的 **MaintenanceTaskDTO** 列表
      */
-    public List<PmissionBoardDayDTO> getAndFilterNewDayTasks() {
+    public List<MaintenanceTaskDTO> getAndFilterNewDayTasks() {
         // 1. 从数据库查询过去5分钟内的所有任务
         List<PmissionBoardDayDTO> recentTasks = pmissionBoardDayMapper.findRecentTasks();
         if (recentTasks.isEmpty()) {
@@ -66,7 +74,7 @@ public class OracleDataService {
         String redisKey = PUSHED_TASK_KEY_PREFIX + "pmissionday";
 
         // 2. 过滤掉已经推送过的
-        List<PmissionBoardDayDTO> newTasks = new ArrayList<>();
+        List<PmissionBoardDayDTO> newOracleTasks = new ArrayList<>();
         for (PmissionBoardDayDTO task : recentTasks) {
             // SADD 命令 (add) 是原子的。
             // 如果 ID 是新的, 返回 1 (Long); 如果 ID 已存在, 返回 0 (Long)
@@ -74,25 +82,29 @@ public class OracleDataService {
 
             if (addedCount != null && addedCount > 0) {
                 // 这是一个新任务
-                newTasks.add(task);
+                newOracleTasks.add(task);
             }
         }
 
         // 3. 如果我们添加了新任务, 就刷新 Key 的过期时间
-        if (!newTasks.isEmpty()) {
+        if (!newOracleTasks.isEmpty()) {
             redisTemplate.expire(redisKey, KEY_EXPIRATION);
         }
 
-        log.info("[{}] 查询到 {} 条近期任务, 过滤后新增 {} 条。", "SP_GENDAYTASK", recentTasks.size(), newTasks.size());
-        return newTasks;
+        log.info("[{}] 查询到 {} 条近期任务, 过滤后新增 {} 条。", "SP_GENDAYTASK", recentTasks.size(), newOracleTasks.size());
+
+        // 4. [修改] 转换 DTO
+        return newOracleTasks.stream()
+                .map(transformerService::transformDayTask)
+                .collect(Collectors.toList());
     }
 
     /**
      * 2. SP_QD_PLANBOARD_LB (轮保/月保)
-     * 获取并过滤（防重） PMISSIONBOARD 中新生成的任务
-     * @return 仅包含新任务的 DTO 列表
+     * 获取、过滤并**转换**新生成的任务
+     * @return 仅包含新任务的 **MaintenanceTaskDTO** 列表
      */
-    public List<PmissionBoardDTO> getAndFilterNewPmissionBoardTasks() {
+    public List<MaintenanceTaskDTO> getAndFilterNewPmissionBoardTasks() {
         List<PmissionBoardDTO> recentTasks = pmissionBoardMapper.findRecentTasks();
         if (recentTasks.isEmpty()) {
             return new ArrayList<>();
@@ -100,28 +112,32 @@ public class OracleDataService {
 
         String redisKey = PUSHED_TASK_KEY_PREFIX + "pmissionboard_lb";
 
-        List<PmissionBoardDTO> newTasks = recentTasks.stream()
+        List<PmissionBoardDTO> newOracleTasks = recentTasks.stream()
                 .filter(task -> {
                     Long addedCount = redisTemplate.opsForSet().add(redisKey, task.getIdocid().toString());
                     return addedCount != null && addedCount > 0;
                 })
                 .collect(Collectors.toList());
 
-        if (!newTasks.isEmpty()) {
+        if (!newOracleTasks.isEmpty()) {
             redisTemplate.expire(redisKey, KEY_EXPIRATION);
         }
 
-        log.info("[{}] 查询到 {} 条近期任务, 过滤后新增 {} 条。", "SP_QD_PLANBOARD_LB", recentTasks.size(), newTasks.size());
-        return newTasks;
+        log.info("[{}] 查询到 {} 条近期任务, 过滤后新增 {} 条。", "SP_QD_PLANBOARD_LB", recentTasks.size(), newOracleTasks.size());
+
+        // [修改] 转换 DTO
+        return newOracleTasks.stream()
+                .map(transformerService::transformBoardLbTask)
+                .collect(Collectors.toList());
     }
 
 
     /**
      * 3. JOB_GEN_BAOYANG_TASKS (例保)
-     * 获取并过滤（防重） PMISSIONBOARDBAOYANG 中新生成的任务
-     * @return 仅包含新任务的 DTO 列表
+     * 获取、过滤并**转换**新生成的任务
+     * @return 仅包含新任务的 **MaintenanceTaskDTO** 列表
      */
-    public List<PmissionBoardBaoYangDTO> getAndFilterNewPmissionBoardBaoYangTasks() {
+    public List<MaintenanceTaskDTO> getAndFilterNewPmissionBoardBaoYangTasks() {
         List<PmissionBoardBaoYangDTO> recentTasks = pmissionBoardBaoYangMapper.findRecentTasks();
         if (recentTasks.isEmpty()) {
             return new ArrayList<>();
@@ -130,35 +146,39 @@ public class OracleDataService {
         String redisKey = PUSHED_TASK_KEY_PREFIX + "pmissionbaoyang";
 
         // 注意: 例保任务使用 IIDCID 作为Redis防重键, IDOCID (任务ID) 作为Kafka推送内容
-        List<PmissionBoardBaoYangDTO> newTasks = recentTasks.stream()
+        List<PmissionBoardBaoYangDTO> newOracleTasks = recentTasks.stream()
                 .filter(task -> {
                     Long addedCount = redisTemplate.opsForSet().add(redisKey, task.getIidc().toString());
                     return addedCount != null && addedCount > 0;
                 })
                 .collect(Collectors.toList());
 
-        if (!newTasks.isEmpty()) {
+        if (!newOracleTasks.isEmpty()) {
             redisTemplate.expire(redisKey, KEY_EXPIRATION);
         }
 
-        log.info("[{}] 查询到 {} 条近期任务, 过滤后新增 {} 条。", "JOB_GEN_BAOYANG_TASKS", recentTasks.size(), newTasks.size());
-        return newTasks;
+        log.info("[{}] 查询到 {} 条近期任务, 过滤后新增 {} 条。", "JOB_GEN_BAOYANG_TASKS", recentTasks.size(), newOracleTasks.size());
+
+        // [修改] 转换 DTO
+        return newOracleTasks.stream()
+                .map(transformerService::transformBaoYangTask)
+                .collect(Collectors.toList());
     }
 
     /**
      * 4. PM_MONTH_ARCHIVED (维修计划归档 - 触发器)
-     * 获取并过滤（防重） PM_MONTH + PM_MONTH_ITEM 的主从数据
+     * 获取、过滤并**转换** PM_MONTH + PM_MONTH_ITEM 的主从数据
      * @param indocno 触发器传入的主键 ID
-     * @return 包含主从数据的 DTO (如果它是新的), 否则返回 null
+     * @return 包含 **ProductionHaltTaskDTO** 的列表 (如果它是新的), 否则返回空列表
      */
-    public PmMonthDTO getAndFilterPmMonthData(Long indocno) {
+    public List<ProductionHaltTaskDTO> getAndFilterPmMonthData(Long indocno) {
         String redisKey = PUSHED_TASK_KEY_PREFIX + "pm_month";
 
         // 1. 检查 Redis 中是否已推送过
         Long addedCount = redisTemplate.opsForSet().add(redisKey, indocno.toString());
         if (addedCount == null || addedCount == 0) {
             log.warn("[{}] INDOCNO: {} 触发, 但 Redis 中显示已推送过, 将跳过。", "PM_MONTH_ARCHIVED", indocno);
-            return null; // 已推送过, 返回 null
+            return new ArrayList<>(); // [修改] 返回空列表
         }
 
         // 2. 这是一个新 ID, 刷新过期时间
@@ -168,7 +188,7 @@ public class OracleDataService {
         PmMonthDTO mainData = pmMonthMapper.findMainByIndocno(indocno);
         if (mainData == null) {
             log.error("[{}] INDOCNO: {} 触发, 但在 PM_MONTH 中未查询到数据!", "PM_MONTH_ARCHIVED", indocno);
-            return null;
+            return new ArrayList<>(); // [修改] 返回空列表
         }
 
         // 4. 查询子表并组合
@@ -176,23 +196,25 @@ public class OracleDataService {
         mainData.setItems(items);
 
         log.info("[{}] INDOCNO: {} 触发, 成功查询到主表及 {} 条子项, 准备推送。", "PM_MONTH_ARCHIVED", indocno, items.size());
-        return mainData;
+
+        // 5. [修改] 转换 DTO
+        return transformerService.transformPmMonthTasks(mainData);
     }
 
     /**
      * 5. EQ_PLANLB_ARCHIVED (轮保计划归档 - 触发器)
-     * 获取并过滤（防重） EQ_PLANLB + EQ_PLANLBDT 的主从数据
+     * 获取、过滤并**转换** EQ_PLANLB + EQ_PLANLBDT 的主从数据
      * @param indocno 触发器传入的主键 ID
-     * @return 包含主从数据的 DTO (如果它是新的), 否则返回 null
+     * @return 包含 **RotationalPlanDTO** 的列表 (如果它是新的), 否则返回空列表
      */
-    public EqPlanLbDTO getAndFilterEqPlanLbData(Long indocno) {
+    public List<RotationalPlanDTO> getAndFilterEqPlanLbData(Long indocno) {
         String redisKey = PUSHED_TASK_KEY_PREFIX + "eq_planlb";
 
         // 1. 检查 Redis 中是否已推送过
         Long addedCount = redisTemplate.opsForSet().add(redisKey, indocno.toString());
         if (addedCount == null || addedCount == 0) {
             log.warn("[{}] INDOCNO: {} 触发, 但 Redis 中显示已推送过, 将跳过。", "EQ_PLANLB_ARCHIVED", indocno);
-            return null; // 已推送过, 返回 null
+            return new ArrayList<>(); // [修改] 返回空列表
         }
 
         // 2. 这是一个新 ID, 刷新过期时间
@@ -202,7 +224,7 @@ public class OracleDataService {
         EqPlanLbDTO mainData = eqPlanLbMapper.findMainByIndocno(indocno);
         if (mainData == null) {
             log.error("[{}] INDOCNO: {} 触发, 但在 EQ_PLANLB 中未查询到数据!", "EQ_PLANLB_ARCHIVED", indocno);
-            return null;
+            return new ArrayList<>(); // [修改] 返回空列表
         }
 
         // 4. 查询子表并组合
@@ -210,7 +232,9 @@ public class OracleDataService {
         mainData.setItems(items);
 
         log.info("[{}] INDOCNO: {} 触发, 成功查询到主表及 {} 条子项, 准备推送。", "EQ_PLANLB_ARCHIVED", indocno, items.size());
-        return mainData;
+
+        // 5. [修改] 转换 DTO
+        return transformerService.transformEqPlanLbTasks(mainData);
     }
 
 

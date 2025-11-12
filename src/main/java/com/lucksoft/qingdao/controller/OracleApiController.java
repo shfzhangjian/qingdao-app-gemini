@@ -2,6 +2,9 @@ package com.lucksoft.qingdao.controller;
 
 import com.lucksoft.qingdao.oracle.dto.*;
 import com.lucksoft.qingdao.oracle.service.OracleDataService;
+import com.lucksoft.qingdao.tspm.dto.MaintenanceTaskDTO;
+import com.lucksoft.qingdao.tspm.dto.ProductionHaltTaskDTO;
+import com.lucksoft.qingdao.tspm.dto.RotationalPlanDTO;
 import com.lucksoft.qingdao.tspm.producer.TspmProducerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,22 +41,20 @@ public class OracleApiController {
     @Autowired
     private TspmProducerService producerService;
 
-    // --- Kafka Topics ---
-    @Value("${kafka.topics.push-pmission-day}")
-    private String pushPmissionDayTopic;
+    // --- [修改] 注入 TIMS 标准 Topics ---
+    @Value("${kafka.topics.sync-maintenance-task}")
+    private String syncMaintenanceTaskTopic;
 
-    @Value("${kafka.topics.push-pmission-board-lb}")
-    private String pushPmissionBoardLbTopic;
+    @Value("${kafka.topics.sync-production-halt-maintenance-task}")
+    private String syncProductionHaltTaskTopic;
 
-    @Value("${kafka.topics.push-pmission-baoyang}")
-    private String pushPmissionBaoYangTopic;
+    /**
+     * [新增] 注入轮保计划Topic
+     */
+    @Value("${kafka.topics.sync-rotational-plan}")
+    private String syncRotationalPlanTopic;
 
-    @Value("${kafka.topics.push-pm-month}")
-    private String pushPmMonthTopic;
-
-    @Value("${kafka.topics.push-eq-planlb}")
-    private String pushEqPlanLbTopic;
-
+    // --- [保留] 未被重构的 Topics ---
     @Value("${kafka.topics.push-pmission-zy-jm}")
     private String pushPmissionZyJmTopic;
 
@@ -81,58 +82,69 @@ public class OracleApiController {
 
             // --- 路由: 根据 stype 调用不同的服务 ---
 
-            // 1. 精益日保 (SP_GENDAYTASK)
+            // 1. [修改] 精益日保 (SP_GENDAYTASK) - 转换为标准DTO
             if ("SP_GENDAYTASK".equals(receivedStype)) {
                 log.info("识别到 stype [{}], 开始处理(精益日保)数据推送...", receivedStype);
-                List<PmissionBoardDayDTO> newTasks = oracleDataService.getAndFilterNewDayTasks();
+                // [修改] service返回转换后的TIMS DTO列表
+                List<MaintenanceTaskDTO> newTasks = oracleDataService.getAndFilterNewDayTasks();
                 if (!newTasks.isEmpty()) {
-                    producerService.sendMessage(pushPmissionDayTopic, newTasks);
-                    log.info("成功推送 {} 条新任务到 Kafka Topic: {}", newTasks.size(), pushPmissionDayTopic);
+                    // [修改] 推送到标准的保养Topic
+                    producerService.sendMessage(syncMaintenanceTaskTopic, newTasks);
+                    log.info("成功推送 {} 条 [MaintenanceTaskDTO] 任务到 Kafka Topic: {}", newTasks.size(), syncMaintenanceTaskTopic);
                 }
 
-                // 2. 轮保/月保 (SP_QD_PLANBOARD_LB)
+                // 2. [修改] 轮保/月保 (SP_QD_PLANBOARD_LB) - 转换为标准DTO
             } else if ("PMBOARD.SP_QD_PLANBOARD_LB".equals(receivedStype)) {
                 log.info("识别到 stype [{}], 开始处理(轮保/月保)数据推送...", receivedStype);
-                List<PmissionBoardDTO> newTasks = oracleDataService.getAndFilterNewPmissionBoardTasks();
+                // [修改] service返回转换后的TIMS DTO列表
+                List<MaintenanceTaskDTO> newTasks = oracleDataService.getAndFilterNewPmissionBoardTasks();
                 if (!newTasks.isEmpty()) {
-                    producerService.sendMessage(pushPmissionBoardLbTopic, newTasks);
-                    log.info("成功推送 {} 条新任务到 Kafka Topic: {}", newTasks.size(), pushPmissionBoardLbTopic);
+                    // [修改] 推送到标准的保养Topic
+                    producerService.sendMessage(syncMaintenanceTaskTopic, newTasks);
+                    log.info("成功推送 {} 条 [MaintenanceTaskDTO] 任务到 Kafka Topic: {}", newTasks.size(), syncMaintenanceTaskTopic);
                 }
 
-                // 3. 例保 (JOB_GEN_BAOYANG_TASKS)
+                // 3. [修改] 例保 (JOB_GEN_BAOYANG_TASKS) - 转换为标准DTO
             } else if ("JOB_GEN_BAOYANG_TASKS".equals(receivedStype)) {
                 log.info("识别到 stype [{}], 开始处理(例保)数据推送...", receivedStype);
-                List<PmissionBoardBaoYangDTO> newTasks = oracleDataService.getAndFilterNewPmissionBoardBaoYangTasks();
+                // [修改] service返回转换后的TIMS DTO列表
+                List<MaintenanceTaskDTO> newTasks = oracleDataService.getAndFilterNewPmissionBoardBaoYangTasks();
                 if (!newTasks.isEmpty()) {
-                    producerService.sendMessage(pushPmissionBaoYangTopic, newTasks);
-                    log.info("成功推送 {} 条新任务到 Kafka Topic: {}", newTasks.size(), pushPmissionBaoYangTopic);
+                    // [修改] 推送到标准的保养Topic
+                    producerService.sendMessage(syncMaintenanceTaskTopic, newTasks);
+                    log.info("成功推送 {} 条 [MaintenanceTaskDTO] 任务到 Kafka Topic: {}", newTasks.size(), syncMaintenanceTaskTopic);
                 }
 
-                // 4. 维修计划归档 (PM_MONTH_ARCHIVED:ID)
+                // 4. [修改] 维修计划归档 (PM_MONTH_ARCHIVED:ID) - 转换为标准DTO
             } else if (receivedStype.startsWith("PM_MONTH_ARCHIVED:")) {
                 log.info("识别到 stype [{}], 开始处理(维修计划归档)数据推送...", receivedStype);
                 Long indocno = Long.parseLong(receivedStype.split(":")[1]);
-                PmMonthDTO mainData = oracleDataService.getAndFilterPmMonthData(indocno);
-                if (mainData != null) {
-                    producerService.sendMessage(pushPmMonthTopic, mainData);
-                    log.info("成功推送 INDOCNO: {} (含 {} 条子项) 到 Kafka Topic: {}", indocno, mainData.getItems().size(), pushPmMonthTopic);
+                // [修改] service返回转换后的TIMS DTO列表
+                List<ProductionHaltTaskDTO> newTasks = oracleDataService.getAndFilterPmMonthData(indocno);
+                if (newTasks != null && !newTasks.isEmpty()) {
+                    // [修改] 推送到标准的停产检修Topic
+                    producerService.sendMessage(syncProductionHaltTaskTopic, newTasks);
+                    log.info("成功推送 {} 条 [ProductionHaltTaskDTO] 任务 (来自 INDOCNO: {}) 到 Kafka Topic: {}", newTasks.size(), indocno, syncProductionHaltTaskTopic);
                 }
 
-                // 5. 轮保计划归档 (EQ_PLANLB_ARCHIVED:ID)
+                // 5. [修改] 轮保计划归档 (EQ_PLANLB_ARCHIVED:ID) - 转换为标准DTO
             } else if (receivedStype.startsWith("EQ_PLANLB_ARCHIVED:")) {
                 log.info("识别到 stype [{}], 开始处理(轮保计划归档)数据推送...", receivedStype);
                 Long indocno = Long.parseLong(receivedStype.split(":")[1]);
-                EqPlanLbDTO mainData = oracleDataService.getAndFilterEqPlanLbData(indocno);
-                if (mainData != null) {
-                    producerService.sendMessage(pushEqPlanLbTopic, mainData);
-                    log.info("成功推送 INDOCNO: {} (含 {} 条子项) 到 Kafka Topic: {}", indocno, mainData.getItems().size(), pushEqPlanLbTopic);
+                // [修改] service返回转换后的TIMS DTO列表
+                List<RotationalPlanDTO> newTasks = oracleDataService.getAndFilterEqPlanLbData(indocno);
+                if (newTasks != null && !newTasks.isEmpty()) {
+                    // [修改] 推送到标准的轮保计划Topic
+                    producerService.sendMessage(syncRotationalPlanTopic, newTasks);
+                    log.info("成功推送 {} 条 [RotationalPlanDTO] 计划 (来自 INDOCNO: {}) 到 Kafka Topic: {}", newTasks.size(), indocno, syncRotationalPlanTopic);
                 }
 
-                // 6. 专业/精密点检 (PD_ZY_JM)
+                // 6. [保留] 专业/精密点检 (PD_ZY_JM) - 按要求不转换
             } else if ("PD_ZY_JM".equals(receivedStype)) {
                 log.info("识别到 stype [{}], 开始处理(专业/精密点检)数据推送...", receivedStype);
                 List<PmissionDTO> newTasks = oracleDataService.getAndFilterNewPmissionTasks();
                 if (!newTasks.isEmpty()) {
+                    // [保留] 仍推送到旧的 'oracle.push.*' topic
                     producerService.sendMessage(pushPmissionZyJmTopic, newTasks);
                     log.info("成功推送 {} 条新任务到 Kafka Topic: {}", newTasks.size(), pushPmissionZyJmTopic);
                 }
