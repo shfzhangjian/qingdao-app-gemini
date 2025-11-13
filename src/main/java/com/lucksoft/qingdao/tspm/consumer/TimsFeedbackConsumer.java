@@ -2,6 +2,8 @@ package com.lucksoft.qingdao.tspm.consumer;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lucksoft.qingdao.controller.OracleApiController;
+import com.lucksoft.qingdao.oracle.service.AsyncTaskService;
 import com.lucksoft.qingdao.tspm.dto.*;
 import com.lucksoft.qingdao.tspm.service.ReceivedDataCacheService;
 import com.lucksoft.qingdao.tspm.service.TspmLogService;
@@ -16,10 +18,11 @@ import java.util.Map;
 
 /**
  * 监听并处理所有来自TIMS系统的消息
- * (已根据Excel重构并集成日志)
+ * [已重构] 所有消费者现在都调用 AsyncTaskService 来异步处理数据
  */
 @Service
 public class TimsFeedbackConsumer {
+    private static final Logger log = LoggerFactory.getLogger(OracleApiController.class);
 
     // --- UI实时日志服务 ---
     @Autowired
@@ -40,6 +43,11 @@ public class TimsFeedbackConsumer {
 
     @Autowired
     private ReceivedDataCacheService cacheService;
+
+    // 注入统一异步任务服务
+    @Autowired
+    private AsyncTaskService asyncTaskService;
+
     /**
      * 接口 2: 消费“反馈保养、点检、润滑任务完成情况”
      */
@@ -50,12 +58,15 @@ public class TimsFeedbackConsumer {
             List<TaskCompletionFeedbackDTO> feedbacks = objectMapper.readValue(message, new TypeReference<List<TaskCompletionFeedbackDTO>>(){});
             for (TaskCompletionFeedbackDTO feedback : feedbacks) {
                 String logContent = objectMapper.writeValueAsString(feedback);
-                // 1. 写入物理日志文件
                 maintenanceCompletionLogger.info(logContent);
-                // 2. 推送到前端UI
                 logService.logReceive(topic, logContent);
+
                 Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
+
+                // [新] 提交给异步服务处理
+                log.info("为接收到的任务完成 (ID: {}) 派发异步任务...", feedback.getTaskId());
+                asyncTaskService.submitTaskCompletion(feedback);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -79,6 +90,10 @@ public class TimsFeedbackConsumer {
 
                 Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
+
+                // [新] 提交给异步服务处理
+                log.info("为接收到的任务得分 (ID: {}) 派发异步任务...", feedback.getTaskId());
+                asyncTaskService.submitTaskScore(feedback);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -95,14 +110,18 @@ public class TimsFeedbackConsumer {
         String topic = "tims.create.fault.report";
         try {
             List<FaultReportDTO> reports = objectMapper.readValue(message, new TypeReference<List<FaultReportDTO>>(){});
+
             for (FaultReportDTO report : reports) {
                 String logContent = objectMapper.writeValueAsString(report);
                 faultReportLogger.info(logContent);
                 logService.logReceive(topic, logContent);
 
-                // [修复] 写入内存缓存
                 Map<String, Object> dataMap = objectMapper.convertValue(report, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
+
+                // [已修改] 调用 AsyncTaskService 来异步管理此任务
+                log.info("为接收到的故障报告 (ID: {}) 派发异步任务...", report.getId());
+                asyncTaskService.submitFaultReportTask(report);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -126,6 +145,10 @@ public class TimsFeedbackConsumer {
 
                 Map<String, Object> dataMap = objectMapper.convertValue(task, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
+
+                // [新] 提交给异步服务处理
+                log.info("为接收到的推荐任务 (PlanID: {}) 派发异步任务...", task.getPlanId());
+                asyncTaskService.submitRecommendTask(task);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -149,6 +172,10 @@ public class TimsFeedbackConsumer {
 
                 Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
+
+                // [新] 提交给异步服务处理
+                log.info("为接收到的轮保完成 (ID: {}) 派发异步任务...", feedback.getTaskId());
+                asyncTaskService.submitRotationalCompletion(feedback);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -172,6 +199,10 @@ public class TimsFeedbackConsumer {
 
                 Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
+
+                // [新] 提交给异步服务处理
+                log.info("为接收到的轮保得分 (ID: {}) 派发异步任务...", feedback.getTaskId());
+                asyncTaskService.submitRotationalScore(feedback);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -182,6 +213,7 @@ public class TimsFeedbackConsumer {
 
     /**
      * 接口 11: 消费“故障分析报告创建”
+     * [注意] 此接口缺少 DTO 规范，暂不调用存储过程。
      */
     @KafkaListener(topics = "${kafka.topics.create-fault-analysis-report}", groupId = "${spring.kafka.consumer.group-id}")
     public void consumeFaultAnalysisReport(String message) {
@@ -195,6 +227,9 @@ public class TimsFeedbackConsumer {
 
                 Map<String, Object> dataMap = objectMapper.convertValue(report, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
+
+                // [TODO] 缺少此 DTO 的存储过程调用逻辑
+                log.warn("接收到故障分析报告 (ID: {})，但未实现存储过程调用。", report.getId());
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -218,6 +253,10 @@ public class TimsFeedbackConsumer {
 
                 Map<String, Object> dataMap = objectMapper.convertValue(feedback, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
+
+                // [新] 提交给异步服务处理
+                log.info("为接收到的停产检修完成 (ID: {}) 派发异步任务...", feedback.getTaskId());
+                asyncTaskService.submitHaltCompletion(feedback);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;
@@ -226,4 +265,3 @@ public class TimsFeedbackConsumer {
         }
     }
 }
-

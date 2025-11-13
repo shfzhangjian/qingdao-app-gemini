@@ -17,12 +17,78 @@
             --bg-color: #ffffff;
             --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
         }
-        body { margin: 0; font-family: var(--font-family); background-color: var(--light-gray); color: var(--text-color); font-size: 14px; }
-        .container { max-width: 900px; margin: 2rem auto; padding: 2rem; background-color: var(--bg-color); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .header { background-color: var(--secondary-color); color: white; padding: 12px 24px; font-size: 18px; font-weight: 500; margin-bottom: 1.5rem; border-radius: 4px; }
-        .form-section { border: 1px solid var(--border-color); border-radius: 4px; padding: 1.5rem; }
-        .log-section { margin-top: 1.5rem; }
-        textarea { width: 100%; height: 300px; border: 1px solid var(--border-color); border-radius: 4px; padding: 10px; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.5; resize: vertical; box-sizing: border-box; background-color: #2b2b2b; color: #f2f2f2; }
+        html, body {
+            height: 100%;
+        }
+        body {
+            margin: 0;
+            font-family: var(--font-family);
+            background-color: var(--light-gray);
+            color: var(--text-color);
+            font-size: 14px;
+            /* 允许容器 flex 布局占满高度 */
+            display: flex;
+            flex-direction: column;
+        }
+        /* [新] 调整 container 样式以支持 flex 和高度100% */
+        .container {
+            max-width: 900px;
+            margin: 1.5rem auto;
+            background-color: var(--bg-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            /* 核心: flex 布局 */
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            /* 限制高度防止溢出 */
+            max-height: calc(100vh - 3rem);
+        }
+        .header {
+            background-color: var(--secondary-color);
+            color: white; padding: 12px 24px;
+            font-size: 18px;
+            font-weight: 500;
+            border-radius: 8px 8px 0 0;
+            flex-shrink: 0; /* 防止 header 缩小 */
+        }
+        .form-section {
+            padding: 1.5rem;
+        }
+        /* [新] Tab 内容区域 flex 布局 */
+        .tab-content {
+            flex-grow: 1; /* 占据剩余空间 */
+            min-height: 0; /* 允许内部元素滚动 */
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            border-top: 0;
+            border-radius: 0 0 4px 4px;
+        }
+        .tab-pane {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .log-section {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            flex-grow: 1;
+        }
+        textarea {
+            width: 100%;
+            flex-grow: 1; /* 占满日志tab的剩余空间 */
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            resize: vertical;
+            box-sizing: border-box;
+            background-color: #2b2b2b;
+            color: #f2f2f2;
+        }
         button { background-color: var(--primary-color); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; font-size: 14px; }
         button:hover { background-color: var(--secondary-color); }
         button:disabled { background-color: #a0a0a0; }
@@ -32,12 +98,22 @@
         button.danger:hover { background-color: #c82333; }
         button.info { background-color: #0dcaf0; }
         button.info:hover { background-color: #0aa8c2; }
+        .btn-group .btn {
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        .nav-tabs .nav-link {
+            color: var(--text-color);
+        }
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
 
         .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
         .toast { padding: 12px 20px; border-radius: 4px; color: white; font-size: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); opacity: 0; transform: translateX(100%); animation: slideIn 0.3s forwards; }
         .toast.success { background-color: #28a745; }
         .toast.error { background-color: #dc3545; }
-        /* [新] 增加 info 样式 */
         .toast.info { background-color: #0d6efd; }
         .toast.fade-out { animation: slideOut 0.3s forwards; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -49,112 +125,158 @@
 <div class="container">
     <header class="header">Oracle API 推送模拟器</header>
 
-    <div class="form-section">
-        <div class="row g-3 align-items-end">
-            <div class="col-md-5">
-                <label for="stype-select" class="form-label">1. 选择推送类型 (stype)</label>
-                <select id="stype-select" class="form-select">
-                    <option value="SP_GENDAYTASK">SP_GENDAYTASK (日保任务)</option>
-                    <option value="PMBOARD.SP_QD_PLANBOARD_LB">SP_QD_PLANBOARD_LB (轮保/月保)</option>
-                    <option value="JOB_GEN_BAOYANG_TASKS">JOB_GEN_BAOYANG_TASKS (例保任务)</option>
-                    <option value="PD_ZY_JM">PD_ZY_JM (专业/精密点检)</option>
-                    <option value="PM_MONTH_ARCHIVED">PM_MONTH_ARCHIVED (维修计划归档)</option>
-                    <option value="EQ_PLANLB_ARCHIVED">EQ_PLANLB_ARCHIVED (轮保计划归档)</option>
-                </select>
-            </div>
-            <div class="col-md-4" id="stype-param-group" style="display: none;">
-                <label for="stype-param" class="form-label">参数 (例如: ID)</label>
-                <input type="text" id="stype-param" class="form-control" value="123456">
-            </div>
-            <div class="col-md-3">
-                <button id="send-push-btn" class="w-100"><i class="bi bi-send-fill"></i> (1) 模拟Oracle触发推送</button>
-            </div>
-        </div>
-        <hr class="my-4">
-        <div class="d-flex justify-content-end gap-2">
-            <button id="push-all-bao-ji-btn" class="btn btn-sm info"><i class="bi bi-person-badge"></i> (2) 手动推送所有包机信息</button>
-            <button id="clear-cache-btn" class="btn btn-sm danger"><i class="bi bi-eraser-fill"></i> (3) 清空Redis缓存 (用于调试)</button>
-        </div>
-    </div>
+    <!-- [新] Tab 导航 -->
+    <ul class="nav nav-tabs" id="myTab" role="tablist" style="padding: 0 1.5rem; border-bottom: 1px solid var(--border-color);">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="panel-tab-btn" data-bs-toggle="tab" data-bs-target="#panel-tab" type="button" role="tab" aria-controls="panel-tab" aria-selected="true">
+                <i class="bi bi-play-circle-fill me-1"></i> 按钮面板
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="log-tab-btn" data-bs-toggle="tab" data-bs-target="#log-tab" type="button" role="tab" aria-controls="log-tab" aria-selected="false">
+                <i class="bi bi-terminal-fill me-1"></i> 响应日志
+            </button>
+        </li>
+    </ul>
 
-    <div class="log-section">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="mb-0">响应日志</h5>
-            <button id="clear-log-btn" class="btn btn-sm secondary"><i class="bi bi-trash"></i> 清空日志</button>
+    <!-- [新] Tab 内容 -->
+    <div class="tab-content" id="myTabContent">
+        <!-- (1) 按钮面板 Tab -->
+        <div class="tab-pane fade show active" id="panel-tab" role="tabpanel" aria-labelledby="panel-tab-btn">
+            <div class="form-section" id="api-button-container">
+                <h5>(1) 模拟Oracle触发推送 (stype)</h5>
+
+                <label class="form-label mt-3">接口 1: 推送保养任务 (高并发, 无参数)</label>
+                <div class="btn-group w-100" role="group">
+                    <button type="button" class="btn btn-primary" data-stype="SP_GENDAYTASK">SP_GENDAYTASK (日保)</button>
+                    <button type="button" class="btn btn-primary" data-stype="PMBOARD.SP_QD_PLANBOARD_LB">SP_QD_PLANBOARD_LB (轮保/月保)</button>
+                    <button type="button" class="btn btn-primary" data-stype="JOB_GEN_BAOYANG_TASKS">JOB_GEN_BAOYANG_TASKS (例保)</button>
+                </div>
+
+                <label class="form-label mt-3">其他推送 (无参数)</label>
+                <div class="btn-group w-100" role="group">
+                    <button type="button" class="btn btn-secondary" data-stype="TIMS_PUSH_ROTATIONAL_TASK">接口 7: TIMS_PUSH_ROTATIONAL_TASK (轮保任务)</button>
+                    <button type="button" class="btn btn-secondary" data-stype="PD_ZY_JM">(旧) PD_ZY_JM (专业/精密点检)</button>
+                </div>
+
+                <label class="form-label mt-3">带参数的推送 (低并发)</label>
+                <div class="input-group mb-2">
+                    <button class="btn btn-outline-primary" type="button" data-stype-prefix="EQ_PLANLB_ARCHIVED" data-param-input="param-eq-planlb">接口 5: EQ_PLANLB_ARCHIVED</button>
+                    <input type="text" class="form-control" placeholder="输入 ID (例如: 123456)" id="param-eq-planlb" value="123456">
+                </div>
+                <div class="input-group mb-2">
+                    <button class="btn btn-outline-primary" type="button" data-stype-prefix="TIMS_PUSH_FAULT_REPORT_CODE" data-param-input="param-fault-code">接口 12: TIMS_PUSH_FAULT_REPORT_CODE</button>
+                    <input type="text" class="form-control" placeholder="输入 ID (例如: 101)" id="param-fault-code" value="101">
+                </div>
+                <div class="input-group">
+                    <button class="btn btn-outline-primary" type="button" data-stype-prefix="PM_MONTH_ARCHIVED" data-param-input="param-pm-month">接口 13: PM_MONTH_ARCHIVED</button>
+                    <input type="text" class="form-control" placeholder="输入 ID (例如: 5678)" id="param-pm-month" value="5678">
+                </div>
+
+                <hr class="my-4">
+
+                <h5>(2) 手动/调试操作</h5>
+                <div class="d-grid gap-2">
+                    <button id="push-all-bao-ji-btn" class="btn btn-info"><i class="bi bi-person-badge"></i> 手动推送所有包机信息</button>
+                    <button id="clear-cache-btn" class="btn btn-danger"><i class="bi bi-eraser-fill"></i> 清空Redis缓存 (用于调试)</button>
+                </div>
+            </div>
         </div>
-        <textarea id="response-log" readonly></textarea>
+
+        <!-- (2) 响应日志 Tab -->
+        <div class="tab-pane fade" id="log-tab" role="tabpanel" aria-labelledby="log-tab-btn">
+            <div class="log-section">
+                <div class="d-flex justify-content-end align-items-center mb-2">
+                    <button id="clear-log-btn" class="btn btn-sm secondary"><i class="bi bi-trash"></i> 清空日志</button>
+                </div>
+                <textarea id="response-log" readonly></textarea>
+            </div>
+        </div>
     </div>
 </div>
 
 <div id="toast-container" class="toast-container"></div>
 
+<!-- [新] 引入 Bootstrap JS (Tab功能需要) -->
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // ... (DOM 元素获取，保持不变) ...
-        const stypeSelect = document.getElementById('stype-select');
-        const paramGroup = document.getElementById('stype-param-group');
-        const paramInput = document.getElementById('stype-param');
-        const sendBtn = document.getElementById('send-push-btn');
-        const clearBtn = document.getElementById('clear-log-btn');
-        const clearCacheBtn = document.getElementById('clear-cache-btn');
+        const apiButtonContainer = document.getElementById('api-button-container');
+        const clearLogBtn = document.getElementById('clear-log-btn');
         const logArea = document.getElementById('response-log');
-        const pushAllBaoJiBtn = document.getElementById('push-all-bao-ji-btn');
-        const typesRequiringParam = ['PM_MONTH_ARCHIVED', 'EQ_PLANLB_ARCHIVED'];
 
-        // --- 事件监听 (保持不变) ---
-        stypeSelect.addEventListener('change', function() {
-            paramGroup.style.display = typesRequiringParam.includes(this.value) ? 'block' : 'none';
-        });
+        if (clearLogBtn) {
+            clearLogBtn.addEventListener('click', function() { logArea.value = ''; });
+        }
 
-        clearBtn.addEventListener('click', function() { logArea.value = ''; });
+        // [新] 使用事件委托处理所有API按钮的点击
+        if (apiButtonContainer) {
+            apiButtonContainer.addEventListener('click', async function(e) {
+                const button = e.target.closest('button');
+                if (!button) return;
 
-        sendBtn.addEventListener('click', async function() {
-            const selectedType = stypeSelect.value;
-            let finalStype = selectedType;
-            if (typesRequiringParam.includes(selectedType)) {
-                const paramValue = paramInput.value.trim();
-                if (!paramValue) { showToast(`请输入 ID`, 'error'); return; }
-                finalStype = `${selectedType}:${paramValue}`;
-            }
-            const payload = { stype: finalStype };
+                let stype = button.dataset.stype;
+                let stypePrefix = button.dataset.stypePrefix;
+                let paramInputId = button.dataset.paramInput;
 
-            await handleApiRequest(
-                'api/oracle/receive',
-                {
+                let finalStype = null;
+                let originalButtonHtml = button.innerHTML;
+                let apiPayload = null;
+                let apiUrl = null;
+                let fetchOptions = {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                },
-                sendBtn,
-                '<i class="bi bi-send-fill"></i> (1) 模拟Oracle触发推送'
-            );
-        });
+                    headers: { 'Content-Type': 'application/json' }
+                };
 
-        pushAllBaoJiBtn.addEventListener('click', async function() {
-            if (!confirm('确定要查询所有包机信息并推送到Kafka吗？\n这将推送全量数据。')) return;
-            await handleApiRequest(
-                'api/push/user-equipment-all',
-                { method: 'POST' },
-                pushAllBaoJiBtn,
-                '<i class="bi bi-person-badge"></i> (2) 手动推送所有包机信息'
-            );
-        });
+                if (stype) {
+                    // --- (1a) 无参数stype按钮 ---
+                    finalStype = stype;
+                    apiPayload = { stype: finalStype };
+                    apiUrl = 'api/oracle/receive';
+                    fetchOptions.body = JSON.stringify(apiPayload);
 
-        clearCacheBtn.addEventListener('click', async function() {
-            if (!confirm('确定要清空所有 Oracle 推送任务的 Redis 缓存吗？\n这将允许所有任务被重新推送。')) return;
-            await handleApiRequest(
-                'api/oracle/clear-push-cache',
-                { method: 'POST' },
-                clearCacheBtn,
-                '<i class="bi bi-eraser-fill"></i> (3) 清空Redis缓存 (用于调试)'
-            );
-        });
+                } else if (stypePrefix && paramInputId) {
+                    // --- (1b) 带参数stype按钮 ---
+                    const paramInput = document.getElementById(paramInputId);
+                    const paramValue = paramInput ? paramInput.value.trim() : '';
+                    if (!paramValue) {
+                        showToast(`请输入 ID`, 'error');
+                        return;
+                    }
+                    finalStype = `${stypePrefix}:${paramValue}`;
+                    apiPayload = { stype: finalStype };
+                    apiUrl = 'api/oracle/receive';
+                    fetchOptions.body = JSON.stringify(apiPayload);
+
+                } else if (button.id === 'push-all-bao-ji-btn') {
+                    // --- (2) 手动推送包机 ---
+                    if (!confirm('确定要查询所有包机信息并推送到Kafka吗？\n这将推送全量数据。')) return;
+                    apiUrl = 'api/push/user-equipment-all';
+
+                } else if (button.id === 'clear-cache-btn') {
+                    // --- (3) 清空缓存 ---
+                    if (!confirm('确定要清空所有 Oracle 推送任务的 Redis 缓存吗？\n这将允许所有任务被重新推送。')) return;
+                    apiUrl = 'api/oracle/clear-push-cache';
+
+                } else {
+                    // 不是我们关心的按钮
+                    return;
+                }
+
+                // --- 执行API请求 ---
+                await handleApiRequest(
+                    apiUrl,
+                    fetchOptions,
+                    button,
+                    originalButtonHtml
+                );
+            });
+        }
 
         // --- 辅助函数 ---
 
         /**
-         * [已修改] 通用的API请求处理函数
-         * 现在它能处理异步任务ID (taskId) 的响应。
+         * 通用的API请求处理函数
          */
         async function handleApiRequest(url, options, button, originalButtonHtml) {
             const btnText = button.textContent;
@@ -175,7 +297,7 @@
                 // 打印收到的第一条响应
                 logToArea(`<--- [${new Date().toLocaleTimeString()}] 收到响应 (HTTP ${response.status}):\n${JSON.stringify(responseData, null, 2)}\n\n`);
 
-                // [核心修改] 检查是否是异步任务
+                // 检查是否是异步任务
                 if (responseData.taskId && responseData.status && responseData.status.startsWith('Task submitted')) {
                     // 是异步任务，开始轮询
                     showToast(`任务已提交 (ID: ${responseData.taskId})，正在后台处理...`, 'info');
@@ -195,7 +317,7 @@
         }
 
         /**
-         * [新] 轮询任务状态函数
+         * 轮询任务状态函数
          * @param {string} taskId - 要查询的任务ID
          */
         function pollTaskStatus(taskId) {

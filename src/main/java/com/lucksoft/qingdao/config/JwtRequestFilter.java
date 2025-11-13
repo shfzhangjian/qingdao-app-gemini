@@ -37,7 +37,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             "/sso.html", "/js/sso.js", "/sso/**",
             "/gen_token.html", "/login.html", "/simulate.html", "/oracle_test.html",
             "/my-websocket/**",
-            "/stomp.min.js", "/sockjs.min.js",
+            "/stomp.min.js", "/sockjs.min.js", "/sockjs.min.js.map",
             "/api/oracle/task-status/**",
             "/api/system/auth/**",
             "/api/maintainbook/**",
