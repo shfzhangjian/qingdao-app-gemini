@@ -16,6 +16,7 @@ public interface TmisTaskCompletionMapper {
 
     @Select(value = "{CALL tmis.FEEDBACK_COMPLETED_MAINTENANCE_TASK(" +
             "p_task_id => #{dto.taskId, jdbcType=VARCHAR, mode=IN}," +
+            "p_task_type => #{dto.type, jdbcType=INTEGER, mode=IN}," +
             "p_complete_user => #{dto.completeUser, jdbcType=VARCHAR, mode=IN}," +
             "p_complete_date_time => #{dto.completeDateTime, jdbcType=VARCHAR, mode=IN}," +
             "p_inspection_actual_value => #{dto.inspectionActualValue, jdbcType=VARCHAR, mode=IN}" +

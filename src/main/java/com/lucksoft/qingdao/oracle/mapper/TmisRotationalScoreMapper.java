@@ -16,6 +16,7 @@ public interface TmisRotationalScoreMapper {
 
     @Select(value = "{CALL tmis.FEEDBACK_ROTATIONAL_TASK_SCORE(" +
             "p_task_id => #{dto.taskId, jdbcType=VARCHAR, mode=IN}," +
+            "p_task_type => #{dto.type, jdbcType=INTEGER, mode=IN}," +
             "p_score => #{dto.score, jdbcType=VARCHAR, mode=IN}" +
             ")}")
     @Options(statementType = StatementType.CALLABLE)

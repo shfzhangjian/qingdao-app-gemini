@@ -25,6 +25,11 @@ public class RotationalTaskCompletionFeedbackDTO {
     @JsonProperty("completeDateTime")
     private String completeDateTime;
 
+    @JsonProperty("type")
+    private Integer type;
+    public Integer getType() {        return type;    }
+    public void setType(Integer type) {        this.type = type;    }
+
     // Getters and Setters
     public String getTaskId() { return taskId; }
     public void setTaskId(String taskId) { this.taskId = taskId; }

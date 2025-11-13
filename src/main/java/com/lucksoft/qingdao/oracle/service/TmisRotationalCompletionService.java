@@ -1,4 +1,4 @@
-package com.lucksoft.qingdao.tmis.service;
+package com.lucksoft.qingdao.oracle.service;
 
 import com.lucksoft.qingdao.oracle.mapper.TmisRotationalCompletionMapper;
 import com.lucksoft.qingdao.tspm.dto.RotationalTaskCompletionFeedbackDTO;

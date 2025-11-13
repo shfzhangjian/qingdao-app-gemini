@@ -19,6 +19,11 @@ public class TaskScoreFeedbackDTO {
     @JsonProperty("score")
     private Integer score;
 
+    @JsonProperty("type")
+    private Integer type;
+    public Integer getType() {        return type;    }
+    public void setType(Integer type) {        this.type = type;    }
+
     /**
      * 整改内容
      */

@@ -25,10 +25,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * [已重构 - JDK 1.8 兼容]
+ * [已重构]
  * 业务服务层，用于处理来自 Oracle API Controller 的数据查询和过滤。
  * 1. 依赖 `V_..._RECENT` 系列视图来统一查询。
- * 2. 包含 Redis 防重逻辑。
+ * 2. [关键] 包含“先推送Kafka，成功后再写入Redis”的防重逻辑。
  * 3. 包含 Kafka 消息分批推送逻辑。
  * 4. 本类所有方法都是同步的，由 AsyncTaskService 在后台线程中调用。
  */
@@ -80,57 +80,51 @@ public class OracleDataService {
 
 
     /**
-     * 接口 1: (保养任务) 查询、防重并推送所有新保养任务（来自视图）
-     * 由 SP_GENDAYTASK, PMBOARD.SP_QD_PLANBOARD_LB, JOB_GEN_BAOYANG_TASKS 触发
+     * [重构] 接口 1: (保养任务) 查询、防重并推送所有新保养任务（来自视图）
      *
      * @param taskId 异步任务ID，用于日志跟踪
      * @return 包含推送计数和数据的Map
+     * @throws Exception 如果 Kafka 推送失败
      */
-    public Map<String, Object> findAndPushNewMaintenanceTasks(String taskId) {
+    public Map<String, Object> findAndPushNewMaintenanceTasks(String taskId) throws Exception {
         // 1. 从统一视图查询所有近期任务
         List<VMaintenanceTaskDTO> recentTasks = vMaintenanceTasksMapper.findRecentTasks();
         if (recentTasks.isEmpty()) {
             log.info("[Task {}][MaintenanceTasks] V_MAINTENANCE_TASKS_RECENT 视图中未发现近期任务。", taskId);
-            // [JDK 1.8] 替换 Map.of()
-            Map<String, Object> emptyResult = new HashMap<>();
-            emptyResult.put("pushedCount", 0);
-            emptyResult.put("pushedData", new ArrayList<>());
-            return emptyResult;
+            return createEmptyResult();
         }
 
         String redisKey = PUSHED_TASK_KEY_PREFIX + "maintenance_tasks_v2";
         List<MaintenanceTaskDTO> newTasksToPush = new ArrayList<>();
+        Set<String> pushedDeDupeKeys = new HashSet<>();
 
         // 2. 过滤掉已经推送过的
         for (VMaintenanceTaskDTO vTask : recentTasks) {
-            String deDupeKey = vTask.getDeDupeKey(); // 使用视图中定义的防重键
+            String deDupeKey = vTask.getDeDupeKey();
             if (deDupeKey == null || deDupeKey.isEmpty()) {
                 log.warn("[Task {}] 跳过任务，因为 deDupeKey 为空: taskId={}", taskId, vTask.getTaskId());
                 continue;
             }
 
-            Long addedCount = redisTemplate.opsForSet().add(redisKey, deDupeKey);
-            if (addedCount != null && addedCount > 0) {
-                // 这是一个新任务，转换并添加到推送列表
+            // [关键] 检查 Redis
+            if (!redisTemplate.opsForSet().isMember(redisKey, deDupeKey)) {
                 newTasksToPush.add(transformerService.transformVTaskToMaintenanceTask(vTask));
+                pushedDeDupeKeys.add(deDupeKey); // 暂存准备推送的key
             }
         }
 
-        // 3. 如果我们添加了新任务, 就刷新 Key 的过期时间并推送
+        // 3. [关键] 先推送 Kafka, 成功后再写入 Redis
         if (!newTasksToPush.isEmpty()) {
-            redisTemplate.expire(redisKey, KEY_EXPIRATION);
             log.info("[Task {}][MaintenanceTasks] 查询到 {} 条近期任务, 过滤后新增 {} 条。", taskId, recentTasks.size(), newTasksToPush.size());
 
-            // 4. [新] 分批推送到 Kafka
-            int totalTasks = newTasksToPush.size();
-            for (int i = 0; i < totalTasks; i += KAFKA_BATCH_SIZE) {
-                int end = Math.min(i + KAFKA_BATCH_SIZE, totalTasks);
-                List<MaintenanceTaskDTO> batchList = newTasksToPush.subList(i, end);
+            // 4. 分批推送到 Kafka (同步)
+            pushTasksInBatches(taskId, maintenanceTaskTopic, newTasksToPush, KAFKA_BATCH_SIZE);
 
-                log.info("[Task {}] 正在推送批次 {}/{} ({} 条任务)...", taskId, (i / KAFKA_BATCH_SIZE) + 1, (totalTasks + KAFKA_BATCH_SIZE - 1) / KAFKA_BATCH_SIZE, batchList.size());
-                producerService.sendMessage(maintenanceTaskTopic, batchList);
-            }
-            log.info("[Task {}] 成功分批推送 {} 条新保养任务到 Kafka Topic: {}", taskId, totalTasks, maintenanceTaskTopic);
+            // 5. [成功后] 批量写入 Redis
+            log.info("[Task {}] Kafka 同步推送成功, 正在将 {} 个 deDupeKeys 写入 Redis...", taskId, pushedDeDupeKeys.size());
+            redisTemplate.opsForSet().add(redisKey, pushedDeDupeKeys.toArray());
+            redisTemplate.expire(redisKey, KEY_EXPIRATION);
+            log.info("[Task {}] Redis 写入完毕。", taskId);
 
         } else {
             log.info("[Task {}][MaintenanceTasks] 查询到 {} 条近期任务, 但全部已推送过。", taskId, recentTasks.size());
@@ -138,38 +132,31 @@ public class OracleDataService {
 
         Map<String, Object> result = new HashMap<>();
         result.put("pushedCount", newTasksToPush.size());
-        result.put("pushedData", newTasksToPush); // 仍然返回完整列表供日志记录
+        result.put("pushedData", newTasksToPush);
         return result;
     }
 
     /**
-     * 接口 5: (轮保计划) 获取并过滤 EQ_PLANLB (轮保计划归档 - 触发器)
-     * 由 EQ_PLANLB_ARCHIVED:{id} 触发
+     * [重构] 接口 5: (轮保计划) 获取并过滤 EQ_PLANLB
      *
      * @param indocno 主键
      * @return 包含推送计数和数据的Map
+     * @throws Exception 如果 Kafka 推送失败
      */
-    public Map<String, Object> getAndFilterEqPlanLbData(Long indocno) {
-        String redisKey = PUSHED_TASK_KEY_PREFIX + "eq_planlb_v2"; // 使用 v2 key
-        Long addedCount = redisTemplate.opsForSet().add(redisKey, indocno.toString());
-        if (addedCount == null || addedCount == 0) {
+    public Map<String, Object> getAndFilterEqPlanLbData(Long indocno) throws Exception {
+        String redisKey = PUSHED_TASK_KEY_PREFIX + "eq_planlb_v2";
+        String indocnoStr = indocno.toString();
+
+        // [关键] 检查 Redis
+        if (redisTemplate.opsForSet().isMember(redisKey, indocnoStr)) {
             log.warn("[{}] INDOCNO: {} 触发, 但 Redis 中显示已推送过, 将跳过。", "EQ_PLANLB_ARCHIVED", indocno);
-            Map<String, Object> skippedResult = new HashMap<>();
-            skippedResult.put("pushedCount", 0);
-            skippedResult.put("pushedData", new ArrayList<>());
-            skippedResult.put("message", "Skipped (already pushed)");
-            return skippedResult;
+            return createSkippedResult();
         }
-        redisTemplate.expire(redisKey, KEY_EXPIRATION);
 
         EqPlanLbDTO mainData = eqPlanLbMapper.findMainByIndocno(indocno);
         if (mainData == null) {
             log.error("[{}] INDOCNO: {} 触发, 但在 EQ_PLANLB 中未查询到数据!", "EQ_PLANLB_ARCHIVED", indocno);
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("pushedCount", 0);
-            errorResult.put("pushedData", new ArrayList<>());
-            errorResult.put("message", "Error (Data not found)");
-            return errorResult;
+            return createErrorResult("Data not found");
         }
         List<EqPlanLbDtDTO> items = eqPlanLbMapper.findItemsByIlinkno(indocno);
         mainData.setItems(items);
@@ -177,37 +164,37 @@ public class OracleDataService {
 
         List<RotationalPlanDTO> plansToPush = transformerService.transformEqPlanLbTasks(mainData);
 
-        // 推送 (轮保计划通常不大，不需要分批)
-        producerService.sendMessage(syncRotationalPlanTopic, plansToPush);
-        log.info("成功推送 {} 条轮保计划到 Kafka Topic: {}", plansToPush.size(), syncRotationalPlanTopic);
+        // [关键] 先推送 Kafka, 成功后再写入 Redis
+        if (!plansToPush.isEmpty()) {
+            producerService.sendSync(syncRotationalPlanTopic, plansToPush);
+            log.info("成功推送 {} 条轮保计划到 Kafka Topic: {}", plansToPush.size(), syncRotationalPlanTopic);
+        }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("pushedCount", plansToPush.size());
-        result.put("pushedData", plansToPush);
-        result.put("message", "Success");
-        return result;
+        // 写入 Redis
+        redisTemplate.opsForSet().add(redisKey, indocnoStr);
+        redisTemplate.expire(redisKey, KEY_EXPIRATION);
+
+        return createSuccessResult(plansToPush);
     }
 
     /**
-     * [新增] 接口 7: (轮保任务) 查询、防重并推送所有新轮保任务（来自视图）
-     * 由 TIMS_PUSH_ROTATIONAL_TASK 触发
+     * [重构] 接口 7: (轮保任务) 查询、防重并推送所有新轮保任务（来自视图）
      *
      * @param taskId 异步任务ID，用于日志跟踪
      * @return 包含推送计数和数据的Map
+     * @throws Exception 如果 Kafka 推送失败
      */
-    public Map<String, Object> findAndPushNewRotationalTasks(String taskId) {
+    public Map<String, Object> findAndPushNewRotationalTasks(String taskId) throws Exception {
         // 1. 从视图查询
         List<VRotationalTaskDTO> recentTasks = vRotationalTaskMapper.findRecentTasks();
         if (recentTasks.isEmpty()) {
             log.info("[Task {}][RotationalTasks] V_ROTATIONAL_TASK_RECENT 视图中未发现近期任务。", taskId);
-            Map<String, Object> emptyResult = new HashMap<>();
-            emptyResult.put("pushedCount", 0);
-            emptyResult.put("pushedData", new ArrayList<>());
-            return emptyResult;
+            return createEmptyResult();
         }
 
         String redisKey = PUSHED_TASK_KEY_PREFIX + "rotational_tasks_v1";
         List<ScreenedRotationalTaskDTO> newTasksToPush = new ArrayList<>();
+        Set<String> pushedDeDupeKeys = new HashSet<>();
 
         // 2. 过滤
         for (VRotationalTaskDTO vTask : recentTasks) {
@@ -216,26 +203,24 @@ public class OracleDataService {
                 log.warn("[Task {}] 跳过轮保任务，因为 deDupeKey 为空: taskId={}", taskId, vTask.getTaskId());
                 continue;
             }
-            Long addedCount = redisTemplate.opsForSet().add(redisKey, deDupeKey);
-            if (addedCount != null && addedCount > 0) {
+            if (!redisTemplate.opsForSet().isMember(redisKey, deDupeKey)) {
                 newTasksToPush.add(transformerService.transformVTaskToRotationalTask(vTask));
+                pushedDeDupeKeys.add(deDupeKey);
             }
         }
 
         // 3. 推送
         if (!newTasksToPush.isEmpty()) {
-            redisTemplate.expire(redisKey, KEY_EXPIRATION);
             log.info("[Task {}][RotationalTasks] 查询到 {} 条近期任务, 过滤后新增 {} 条。", taskId, recentTasks.size(), newTasksToPush.size());
 
-            // 4. 分批推送到 Kafka
-            int totalTasks = newTasksToPush.size();
-            for (int i = 0; i < totalTasks; i += KAFKA_BATCH_SIZE) {
-                int end = Math.min(i + KAFKA_BATCH_SIZE, totalTasks);
-                List<ScreenedRotationalTaskDTO> batchList = newTasksToPush.subList(i, end);
-                log.info("[Task {}] 正在推送轮保任务批次 {}/{} ({} 条任务)...", taskId, (i / KAFKA_BATCH_SIZE) + 1, (totalTasks + KAFKA_BATCH_SIZE - 1) / KAFKA_BATCH_SIZE, batchList.size());
-                producerService.sendMessage(syncRotationalTaskTopic, batchList);
-            }
-            log.info("[Task {}] 成功分批推送 {} 条新轮保任务到 Kafka Topic: {}", taskId, totalTasks, syncRotationalTaskTopic);
+            // 4. 分批推送到 Kafka (同步)
+            pushTasksInBatches(taskId, syncRotationalTaskTopic, newTasksToPush, KAFKA_BATCH_SIZE);
+
+            // 5. [成功后] 批量写入 Redis
+            log.info("[Task {}] Kafka 同步推送成功, 正在将 {} 个 deDupeKeys 写入 Redis...", taskId, pushedDeDupeKeys.size());
+            redisTemplate.opsForSet().add(redisKey, pushedDeDupeKeys.toArray());
+            redisTemplate.expire(redisKey, KEY_EXPIRATION);
+            log.info("[Task {}] Redis 写入完毕。", taskId);
 
         } else {
             log.info("[Task {}][RotationalTasks] 查询到 {} 条近期任务, 但全部已推送过。", taskId, recentTasks.size());
@@ -248,34 +233,26 @@ public class OracleDataService {
     }
 
     /**
-     * [新增] 接口 12: (故障编码) 获取并推送故障报告编码
-     * 由 TIMS_PUSH_FAULT_REPORT_CODE:{id} 触发
+     * [重构] 接口 12: (故障编码) 获取并推送故障报告编码
      *
      * @param timsId TIMS系统报告数据记录主键
      * @return 包含推送计数和数据的Map
+     * @throws Exception 如果 Kafka 推送失败
      */
-    public Map<String, Object> getAndFilterFaultReportCode(Integer timsId) {
+    public Map<String, Object> getAndFilterFaultReportCode(Integer timsId) throws Exception {
         String redisKey = PUSHED_TASK_KEY_PREFIX + "fault_report_code_v1";
-        Long addedCount = redisTemplate.opsForSet().add(redisKey, timsId.toString());
-        if (addedCount == null || addedCount == 0) {
+        String timsIdStr = timsId.toString();
+
+        if (redisTemplate.opsForSet().isMember(redisKey, timsIdStr)) {
             log.warn("[{}] TIMS_ID: {} 触发, 但 Redis 中显示已推送过, 将跳过。", "FAULT_REPORT_CODE", timsId);
-            Map<String, Object> skippedResult = new HashMap<>();
-            skippedResult.put("pushedCount", 0);
-            skippedResult.put("pushedData", new ArrayList<>());
-            skippedResult.put("message", "Skipped (already pushed)");
-            return skippedResult;
+            return createSkippedResult();
         }
-        redisTemplate.expire(redisKey, KEY_EXPIRATION);
 
         // 1. 从视图查询
         VFaultReportCodeDTO reportCodeDTO = vFaultReportCodeMapper.findByTimsId(timsId);
         if (reportCodeDTO == null) {
             log.error("[{}] TIMS_ID: {} 触发, 但在 V_TMIS_REPORT_CODE 视图中未查询到数据!", "FAULT_REPORT_CODE", timsId);
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("pushedCount", 0);
-            errorResult.put("pushedData", new ArrayList<>());
-            errorResult.put("message", "Error (Data not found)");
-            return errorResult;
+            return createErrorResult("Data not found");
         }
         log.info("[{}] TIMS_ID: {} 触发, 成功查询到数据, 准备转换。", "FAULT_REPORT_CODE", timsId);
 
@@ -286,94 +263,91 @@ public class OracleDataService {
         List<FaultReportCodeFeedbackDTO> listToPush = new ArrayList<>();
         listToPush.add(dtoToPush);
 
-        producerService.sendMessage(receiveFaultReportCodeTopic, listToPush);
+        producerService.sendSync(receiveFaultReportCodeTopic, listToPush);
         log.info("成功推送 1 条故障编码到 Kafka Topic: {}", receiveFaultReportCodeTopic);
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("pushedCount", 1);
-        result.put("pushedData", listToPush);
-        result.put("message", "Success");
-        return result;
+        // 4. [成功后] 写入 Redis
+        redisTemplate.opsForSet().add(redisKey, timsIdStr);
+        redisTemplate.expire(redisKey, KEY_EXPIRATION);
+
+        return createSuccessResult(listToPush);
     }
 
     /**
-     * 接口 13: (停产检修) 获取并过滤 PM_MONTH (维修计划归档 - 触发器)
-     * 由 PM_MONTH_ARCHIVED:{id} 触发
+     * [重构] 接口 13: (停产检修) 获取并过滤 PM_MONTH (使用视图)
      *
      * @param indocno 主键
      * @return 包含推送计数和数据的Map
+     * @throws Exception 如果 Kafka 推送失败
      */
-    public Map<String, Object> getAndFilterPmMonthData(Long indocno) {
-        String redisKey = PUSHED_TASK_KEY_PREFIX + "pm_month_v2"; // v2 key
-        Long addedCount = redisTemplate.opsForSet().add(redisKey, indocno.toString());
-        if (addedCount == null || addedCount == 0) {
+    public Map<String, Object> getAndFilterPmMonthData(Long indocno) throws Exception {
+        String redisKey = PUSHED_TASK_KEY_PREFIX + "pm_month_v2";
+        String indocnoStr = indocno.toString();
+
+        if (redisTemplate.opsForSet().isMember(redisKey, indocnoStr)) {
             log.warn("[{}] INDOCNO: {} 触发, 但 Redis 中显示已推送过, 将跳过。", "PM_MONTH_ARCHIVED", indocno);
-            Map<String, Object> skippedResult = new HashMap<>();
-            skippedResult.put("pushedCount", 0);
-            skippedResult.put("pushedData", new ArrayList<>());
-            skippedResult.put("message", "Skipped (already pushed)");
-            return skippedResult;
+            return createSkippedResult();
         }
+
+        // [核心修改] 直接从视图查询，不再需要 DTO 转换
+        List<ProductionHaltTaskDTO> tasksToPush = pmMonthMapper.findTasksFromViewByIndocno(indocno);
+        if (tasksToPush == null || tasksToPush.isEmpty()) {
+            log.error("[{}] INDOCNO: {} 触发, 但在 v_pm_month_item 视图中未查询到数据!", "PM_MONTH_ARCHIVED", indocno);
+            return createErrorResult("Data not found in view v_pm_month_item");
+        }
+        log.info("[{}] INDOCNO: {} 触发, 成功从视图 v_pm_month_item 查询到 {} 条任务, 准备推送。", "PM_MONTH_ARCHIVED", indocno, tasksToPush.size());
+
+        // [关键] 先推送 Kafka
+        if (!tasksToPush.isEmpty()) {
+            producerService.sendSync(syncProductionHaltMaintenanceTaskTopic, tasksToPush);
+            log.info("成功推送 {} 条停产检修任务到 Kafka Topic: {}", tasksToPush.size(), syncProductionHaltMaintenanceTaskTopic);
+        }
+
+        // 4. [成功后] 写入 Redis
+        redisTemplate.opsForSet().add(redisKey, indocnoStr);
         redisTemplate.expire(redisKey, KEY_EXPIRATION);
 
-        PmMonthDTO mainData = pmMonthMapper.findMainByIndocno(indocno);
-        if (mainData == null) {
-            log.error("[{}] INDOCNO: {} 触发, 但在 PM_MONTH 中未查询到数据!", "PM_MONTH_ARCHIVED", indocno);
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("pushedCount", 0);
-            errorResult.put("pushedData", new ArrayList<>());
-            errorResult.put("message", "Error (Data not found)");
-            return errorResult;
-        }
-        List<PmMonthItemDTO> items = pmMonthMapper.findItemsByIlinkno(indocno);
-        mainData.setItems(items);
-        log.info("[{}] INDOCNO: {} 触发, 成功查询到主表及 {} 条子项, 准备转换。", "PM_MONTH_ARCHIVED", indocno, items.size());
-
-        List<ProductionHaltTaskDTO> tasksToPush = transformerService.transformPmMonthTasks(mainData);
-
-        // 推送 (维修计划通常不大，不需要分批)
-        producerService.sendMessage(syncProductionHaltMaintenanceTaskTopic, tasksToPush);
-        log.info("成功推送 {} 条停产检修任务到 Kafka Topic: {}", tasksToPush.size(), syncProductionHaltMaintenanceTaskTopic);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("pushedCount", tasksToPush.size());
-        result.put("pushedData", tasksToPush);
-        result.put("message", "Success");
-        return result;
+        return createSuccessResult(tasksToPush);
     }
 
 
     /**
-     * (旧) PD_ZY_JM (专业/精密点检) - [已废弃, 由接口7替代]
+     * [重构] (旧) PD_ZY_JM (专业/精密点检)
      *
      * @param taskId 异步任务ID，用于日志跟踪
      * @return 包含推送计数和数据的Map
+     * @throws Exception 如果 Kafka 推送失败
      */
-    public Map<String, Object> findAndPushNewPmissionTasks(String taskId) {
+    public Map<String, Object> findAndPushNewPmissionTasks(String taskId) throws Exception {
         List<PmissionDTO> recentTasks = pmissionMapper.findRecentTasks();
         if (recentTasks.isEmpty()) {
             log.info("[Task {}][PD_ZY_JM] 未发现近期任务。", taskId);
-            Map<String, Object> emptyResult = new HashMap<>();
-            emptyResult.put("pushedCount", 0);
-            emptyResult.put("pushedData", new ArrayList<>());
-            return emptyResult;
+            return createEmptyResult();
         }
         String redisKey = PUSHED_TASK_KEY_PREFIX + "pmission_zy_jm";
 
+        Set<String> pushedTaskIds = new HashSet<>();
         List<PmissionDTO> newTasksToPush = recentTasks.stream()
                 .filter(task -> {
-                    Long addedCount = redisTemplate.opsForSet().add(redisKey, task.getIdocid().toString());
-                    return addedCount != null && addedCount > 0;
+                    String taskIdStr = task.getIdocid().toString();
+                    if (!redisTemplate.opsForSet().isMember(redisKey, taskIdStr)) {
+                        pushedTaskIds.add(taskIdStr);
+                        return true;
+                    }
+                    return false;
                 })
                 .collect(Collectors.toList());
 
         if (!newTasksToPush.isEmpty()) {
-            redisTemplate.expire(redisKey, KEY_EXPIRATION);
             log.info("[Task {}][PD_ZY_JM] 查询到 {} 条近期任务, 过滤后新增 {} 条。", taskId, recentTasks.size(), newTasksToPush.size());
 
-            // 推送专业点检任务 (假设数量可控，不分批)
-            producerService.sendMessage(pushPmissionZyJmTopic, newTasksToPush);
+            // [关键] 先推送 Kafka
+            producerService.sendSync(pushPmissionZyJmTopic, newTasksToPush);
             log.info("[Task {}] 成功推送 {} 条专业/精密点检任务到 Kafka Topic: {}", taskId, newTasksToPush.size(), pushPmissionZyJmTopic);
+
+            // [成功后] 写入 Redis
+            redisTemplate.opsForSet().add(redisKey, pushedTaskIds.toArray());
+            redisTemplate.expire(redisKey, KEY_EXPIRATION);
 
         } else {
             log.info("[Task {}][PD_ZY_JM] 查询到 {} 条近期任务, 但全部已推送过。", taskId, recentTasks.size());
@@ -383,6 +357,27 @@ public class OracleDataService {
         result.put("pushedCount", newTasksToPush.size());
         result.put("pushedData", newTasksToPush);
         return result;
+    }
+
+    /**
+     * [新] 辅助方法：分批同步推送到 Kafka
+     * @param taskId 任务ID
+     * @param topic Topic
+     * @param tasksToPush 任务列表
+     * @param batchSize 批次大小
+     * @throws Exception 如果任何批次推送失败
+     */
+    private <T> void pushTasksInBatches(String taskId, String topic, List<T> tasksToPush, int batchSize) throws Exception {
+        int totalTasks = tasksToPush.size();
+        for (int i = 0; i < totalTasks; i += batchSize) {
+            int end = Math.min(i + batchSize, totalTasks);
+            List<T> batchList = tasksToPush.subList(i, end);
+
+            log.info("[Task {}] 正在同步推送批次 {}/{} ({} 条任务)...", taskId, (i / batchSize) + 1, (totalTasks + batchSize - 1) / batchSize, batchList.size());
+
+            // [关键] 调用同步发送
+            producerService.sendSync(topic, batchList);
+        }
     }
 
     /**
@@ -401,5 +396,38 @@ public class OracleDataService {
         Long deleteCount = redisTemplate.delete(keys);
         log.warn("--- [调试] 成功删除 {} 个键: {} ---", deleteCount, keys);
         return keys;
+    }
+
+    // --- [新] 辅助方法，用于创建标准响应 ---
+
+    private Map<String, Object> createEmptyResult() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("pushedCount", 0);
+        result.put("pushedData", new ArrayList<>());
+        return result;
+    }
+
+    private Map<String, Object> createSkippedResult() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("pushedCount", 0);
+        result.put("pushedData", new ArrayList<>());
+        result.put("message", "Skipped (already pushed)");
+        return result;
+    }
+
+    private Map<String, Object> createErrorResult(String message) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("pushedCount", 0);
+        result.put("pushedData", new ArrayList<>());
+        result.put("message", message);
+        return result;
+    }
+
+    private Map<String, Object> createSuccessResult(List<?> data) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("pushedCount", data.size());
+        result.put("pushedData", data);
+        result.put("message", "Success");
+        return result;
     }
 }

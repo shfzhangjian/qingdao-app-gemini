@@ -13,6 +13,10 @@ public class RotationalTaskScoreFeedbackDTO {
     @JsonProperty("taskId")
     private String taskId;
 
+    @JsonProperty("type")
+    private Integer type;
+    public Integer getType() {        return type;    }
+    public void setType(Integer type) {        this.type = type;    }
     /**
      * 维修工对任务完成情况打分
      */
@@ -24,5 +28,7 @@ public class RotationalTaskScoreFeedbackDTO {
     public void setTaskId(String taskId) { this.taskId = taskId; }
     public Integer getScore() { return score; }
     public void setScore(Integer score) { this.score = score; }
+
+
 }
 

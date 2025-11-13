@@ -1,11 +1,6 @@
 package com.lucksoft.qingdao.oracle.service;
 
-import com.lucksoft.qingdao.oracle.service.OracleDataService;
-import com.lucksoft.qingdao.tmis.service.*;
-import com.lucksoft.qingdao.tmis.service.TmisHaltCompletionService;
-import com.lucksoft.qingdao.tmis.service.TmisRecommendTaskService;
-import com.lucksoft.qingdao.tmis.service.TmisRotationalScoreService;
-import com.lucksoft.qingdao.tmis.service.TmisTaskCompletionService;
+
 import com.lucksoft.qingdao.tmis.service.TmisTaskScoreService;
 import com.lucksoft.qingdao.tspm.dto.*;
 import org.slf4j.Logger;
