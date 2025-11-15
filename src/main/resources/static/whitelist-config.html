@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP 白名单配置</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        :root {
+            /* [修改] 切换为亮色主题变量 */
+            --primary-color: #007acc;
+            --secondary-color: #005A9C;
+            --bg-color: #f8f9fa;       /* 亮灰色背景 */
+            --bg-secondary: #ffffff;   /* 白色卡片 */
+            --text-color: #212529;     /* 深色文字 */
+            --text-secondary: #6c757d; /* 灰色文字 */
+            --border-color: #dee2e6;   /* 亮灰色边框 */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 1rem;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 1.5rem auto;
+            background-color: var(--bg-secondary); /* [修改] 使用白色卡片 */
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* [修改] 调整阴影 */
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            max-height: calc(100vh - 3rem);
+        }
+
+        .header {
+            /* [修改] 顶部栏改为白色背景，深色文字 */
+            background-color: var(--bg-secondary);
+            color: var(--text-color);
+            padding: 12px 24px;
+            font-size: 18px;
+            font-weight: 500;
+            border-radius: 8px 8px 0 0;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color); /* [新增] 增加边框 */
+        }
+
+        /* [新增] 修改标题图标和返回按钮颜色 */
+        .header > span > .bi {
+            color: var(--primary-color);
+        }
+        .header a.btn-outline-light {
+            color: var(--text-secondary);
+            border-color: var(--border-color);
+        }
+        .header a.btn-outline-light:hover {
+            color: var(--text-color);
+            background-color: var(--bg-color);
+        }
+
+        .content-area {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* [修改] 表单和输入框的亮色主题 */
+        .form-control {
+            background-color: var(--bg-secondary);
+            border-color: var(--border-color);
+            color: var(--text-color);
+        }
+        .form-control:focus {
+            background-color: var(--bg-secondary);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.25rem rgba(0, 122, 204, 0.25);
+            color: var(--text-color);
+        }
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        .btn-primary:hover {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+
+        /* 表格区域 */
+        .table-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            min-height: 200px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+
+        /* [修改] 表格的亮色主题 */
+        .table {
+            --bs-table-bg: var(--bg-secondary);
+            --bs-table-color: var(--text-color);
+            --bs-table-border-color: var(--border-color);
+            --bs-table-striped-bg: rgba(0, 0, 0, 0.03); /* [修改] 调整透明度 */
+            --bs-table-hover-bg: rgba(0, 0, 0, 0.05); /* [修改] 调整透明度 */
+        }
+
+        .table thead {
+            position: sticky;
+            top: 0;
+            background-color: var(--bg-secondary);
+            z-index: 1;
+        }
+
+        /* 按钮 (Bootstrap 默认的亮色主题 outline 样式已足够，无需覆盖) */
+
+        /* [修改] 加载和提示 */
+        .toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 1090; }
+        #loading-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 255, 255, 0.7); /* [修改] 亮色遮罩 */
+            display: none;
+            justify-content: center; align-items: center; z-index: 10;
+            border-radius: 8px;
+        }
+        #loading-overlay.show { display: flex; }
+        /* [新增] 亮色主题下的 Spinner 颜色 */
+        #loading-overlay .spinner-border {
+            color: var(--primary-color) !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header class="header">
+        <span><i class="bi bi-shield-check"></i> IP 白名单配置</span>
+        <a href="index.html" class="btn btn-sm btn-outline-light" title="返回主页"><i class="bi bi-house-door"></i></a>
+    </header>
+
+    <div class="content-area position-relative">
+        <!-- 加载遮罩 -->
+        <div id="loading-overlay">
+            <div class="spinner-border text-light" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <!-- 错误提示 -->
+        <div id="error-alert" class="alert alert-danger d-none" role="alert"></div>
+
+        <!-- 1. 新增区域 -->
+        <label class="form-label">新增 IP 地址</label>
+        <div class="input-group mb-3">
+            <input type="text" id="add-ip-input" class="form-control" placeholder="例如: 192.168.1.100 或 ::1">
+            <button class="btn btn-outline-secondary" type="button" id="add-ip-btn"><i class="bi bi-plus-lg"></i> 添加到列表</button>
+        </div>
+
+        <!-- 2. 列表区域 -->
+        <label class="form-label">当前白名单 (共 <span id="ip-count">0</span> 条)</label>
+        <div class="table-container">
+            <table class="table table-hover table-sm">
+                <thead>
+                <tr>
+                    <th scope="col">IP 地址</th>
+                    <th scope="col" style="width: 100px;">操作</th>
+                </tr>
+                </thead>
+                <tbody id="ip-list-tbody">
+                <!-- JS will populate this -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 3. 保存按钮 -->
+        <button class="btn btn-primary w-100 mt-3" id="save-btn">
+            <i class="bi bi-save"></i> 保存所有更改
+        </button>
+    </div>
+</div>
+
+<!-- Toast 容器 -->
+<div class="toast-container"></div>
+
+<!-- 引入 Bootstrap JS -->
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // DOM 元素
+        const addIpInput = document.getElementById('add-ip-input');
+        const addIpBtn = document.getElementById('add-ip-btn');
+        const ipListTbody = document.getElementById('ip-list-tbody');
+        const saveBtn = document.getElementById('save-btn');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const errorAlert = document.getElementById('error-alert');
+        const toastContainer = document.querySelector('.toast-container');
+        const ipCountEl = document.getElementById('ip-count');
+
+        const API_URL = '/tmis/api/system/whitelist';
+        let currentIpList = []; // 内存中的IP列表
+
+        // --- 核心工具函数 ---
+
+        /**
+         * 获取认证头
+         */
+        function getAuthHeaders() {
+            const token = localStorage.getItem('jwt_token');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            };
+        }
+
+        /**
+         * 显示/隐藏加载遮罩
+         */
+        function showLoading(isLoading) {
+            loadingOverlay.classList.toggle('show', isLoading);
+        }
+
+        /**
+         * 显示错误消息
+         * [修改] 修复了此函数中的逻辑
+         */
+        function showError(message) {
+            errorAlert.textContent = message;
+            if (message && message.trim() !== '') {
+                // 如果有错误消息，则显示
+                errorAlert.classList.remove('d-none');
+            } else {
+                // 如果消息为空，则隐藏
+                errorAlert.classList.add('d-none');
+            }
+        }
+
+        /**
+         * 显示 Toast 提示
+         */
+        function showToast(message, type = 'success') {
+            const toastId = 'toast-' + Date.now();
+            const toastTypeClass = type === 'success' ? 'text-bg-success' : 'text-bg-danger';
+            const toastHtml = `
+                    <div id="${toastId}" class="toast align-items-center ${toastTypeClass} border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                ${message}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                    </div>`;
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            const toastEl = document.getElementById(toastId);
+            const bsToast = new bootstrap.Toast(toastEl, { delay: 3000 });
+            bsToast.show();
+            toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+        }
+
+        // --- 核心业务逻辑 ---
+
+        /**
+         * 重新渲染整个表格
+         */
+        function renderTable() {
+            ipListTbody.innerHTML = ''; // 清空
+            ipCountEl.textContent = currentIpList.length;
+
+            if (currentIpList.length === 0) {
+                ipListTbody.innerHTML = '<tr><td colspan="2" class="text-center text-secondary p-4">白名单为空</td></tr>';
+                return;
+            }
+
+            currentIpList.forEach(ip => {
+                const tr = document.createElement('tr');
+                tr.dataset.ip = ip;
+                tr.innerHTML = `
+                        <td class="align-middle">${ip}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-warning btn-edit" data-ip="${ip}" title="修改">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger btn-delete" data-ip="${ip}" title="删除">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                ipListTbody.appendChild(tr);
+            });
+        }
+
+        /**
+         * 从后端加载白名单
+         */
+        async function loadWhitelist() {
+            showLoading(true);
+            showError(''); // 清除旧错误 (现在会正确隐藏)
+            try {
+                const response = await fetch(API_URL, {
+                    headers: getAuthHeaders()
+                });
+
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error('认证失败。请先登录主应用 (index.html) 再访问此页面。');
+                }
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(`加载失败: ${errorData.message || response.statusText}`);
+                }
+
+                const ipList = await response.json();
+                currentIpList = [...ipList].sort(); // 转换为数组并排序
+                renderTable();
+
+            } catch (error) {
+                console.error('加载白名单失败:', error);
+                showError(error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        /**
+         * 处理“添加到列表”按钮点击
+         */
+        function handleAdd() {
+            const ip = addIpInput.value.trim();
+            if (!ip) {
+                showToast('IP 地址不能为空', 'danger');
+                return;
+            }
+
+            if (currentIpList.includes(ip)) {
+                showToast('该 IP 地址已存在于列表中', 'danger');
+                return;
+            }
+
+            currentIpList.push(ip);
+            currentIpList.sort(); // 保持排序
+            renderTable();
+            addIpInput.value = '';
+            showToast(`已添加 "${ip}"。请记得保存。`, 'success');
+        }
+
+        /**
+         * 处理表格中的点击事件（修改/删除）
+         */
+        function handleListClick(e) {
+            const target = e.target.closest('button');
+            if (!target) return;
+
+            const ip = target.dataset.ip;
+
+            if (target.classList.contains('btn-delete')) {
+                // --- 删除操作 ---
+                if (confirm(`确定要从列表中删除 "${ip}" 吗？`)) {
+                    currentIpList = currentIpList.filter(item => item !== ip);
+                    renderTable();
+                    showToast(`已删除 "${ip}"。请记得保存。`, 'success');
+                }
+            } else if (target.classList.contains('btn-edit')) {
+                // --- 修改操作 ---
+                const newIp = prompt(`修改 IP 地址:`, ip);
+
+                if (newIp && newIp.trim() !== ip) {
+                    const trimmedNewIp = newIp.trim();
+                    // 检查新 IP 是否已存在
+                    if (currentIpList.includes(trimmedNewIp)) {
+                        showToast(`修改失败: IP "${trimmedNewIp}" 已存在。`, 'danger');
+                        return;
+                    }
+                    // 更新
+                    const index = currentIpList.indexOf(ip);
+                    if (index > -1) {
+                        currentIpList[index] = trimmedNewIp;
+                        currentIpList.sort();
+                        renderTable();
+                        showToast(`已修改 "${ip}" 为 "${trimmedNewIp}"。请记得保存。`, 'success');
+                    }
+                }
+            }
+        }
+
+        /**
+         * 处理“保存所有更改”按钮点击
+         */
+        async function saveWhitelist() {
+            showLoading(true);
+            saveBtn.disabled = true;
+            showError(''); // 清除旧错误 (现在会正确隐藏)
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(currentIpList) // 发送内存中的完整列表
+                });
+
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error('认证失败。您的登录已过期，请重新登录主应用。');
+                }
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(`保存失败: ${errorData.message || response.statusText}`);
+                }
+
+                const result = await response.json();
+                showToast(`保存成功！共 ${result.count} 个 IP 地址。`, 'success');
+                // 重新加载以确保同步
+                loadWhitelist();
+
+            } catch (error) {
+                console.error('保存白名单失败:', error);
+                showError(error.message);
+            } finally {
+                showLoading(false);
+                saveBtn.disabled = false;
+            }
+        }
+
+        // --- 事件绑定 ---
+        addIpBtn.addEventListener('click', handleAdd);
+        addIpInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleAdd();
+        });
+        saveBtn.addEventListener('click', saveWhitelist);
+        ipListTbody.addEventListener('click', handleListClick);
+
+        // --- 初始加载 ---
+        loadWhitelist();
+    });
+</script>
+</body>
+</html>

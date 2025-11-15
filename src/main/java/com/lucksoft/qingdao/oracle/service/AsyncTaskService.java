@@ -51,7 +51,8 @@ public class AsyncTaskService {
     private final Lock rotationalCompletionLock = new ReentrantLock();
     private final Lock rotationalScoreLock = new ReentrantLock();
     private final Lock haltCompletionLock = new ReentrantLock();
-
+    // [新增] 故障分析报告的并发锁
+    private final Lock faultAnalysisLock = new ReentrantLock();
     // --- Oracle 推送服务 (Java -> Kafka) ---
     @Autowired
     private OracleDataService oracleDataService;
@@ -71,12 +72,23 @@ public class AsyncTaskService {
     private TmisRotationalScoreService tmisRotationalScoreService;
     @Autowired
     private TmisHaltCompletionService tmisHaltCompletionService;
-
+    @Autowired
+    private TmisFaultAnalysisReportService tmisFaultAnalysisReportService;
 
     // ===================================================================
     // [对外] 1. 提交任务 (Submitter Methods)
     // ===================================================================
 
+
+    /**
+     * [对外] 1i. 提交 Kafka 接口 11 (故障分析报告)
+     */
+    public String submitFaultAnalysisReport(FaultAnalysisReportDTO dto) {
+        String taskId = UUID.randomUUID().toString();
+        updateTaskStatus(taskId, TaskStatus.PENDING, "Task submitted for FaultAnalysisReport: " + dto.getId(), null);
+        processFaultAnalysisReport(taskId, dto);
+        return taskId;
+    }
     /**
      * [对外] 1a. 提交一个由 Oracle 触发的任务
      */
@@ -193,6 +205,29 @@ public class AsyncTaskService {
             return notFound;
         }
         return (Map<String, Object>) status;
+    }
+
+
+
+    /**
+     * [新] 异步处理 Kafka 接口 11 (故障分析报告)
+     */
+    @Async
+    public void processFaultAnalysisReport(String taskId, FaultAnalysisReportDTO dto) {
+        updateTaskStatus(taskId, TaskStatus.RUNNING, "Acquiring lock for FaultAnalysisReport: " + dto.getId(), null);
+        if (!faultAnalysisLock.tryLock()) {
+            updateTaskStatus(taskId, TaskStatus.SKIPPED, "Skipped (Another FaultAnalysisReport task is processing)", null);
+            return;
+        }
+        try {
+            tmisFaultAnalysisReportService.processFaultAnalysisReport(dto);
+            updateTaskStatus(taskId, TaskStatus.SUCCESS, "Processing complete.", null);
+        } catch (Exception e) {
+            log.error("[Task {}] 异步处理故障分析报告失败: {}", taskId, e.getMessage(), e);
+            updateTaskStatus(taskId, TaskStatus.FAILED, e.getMessage(), null);
+        } finally {
+            faultAnalysisLock.unlock();
+        }
     }
 
     public void updateTaskStatus(String taskId, TaskStatus status, String message, Map<String, Object> resultData) {

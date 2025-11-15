@@ -247,7 +247,7 @@ public class OracleDataService {
             log.warn("[{}] TIMS_ID: {} 触发, 但 Redis 中显示已推送过, 将跳过。", "FAULT_REPORT_CODE", timsId);
             return createSkippedResult();
         }
-
+        // FUNGET6HYCNO
         // 1. 从视图查询
         VFaultReportCodeDTO reportCodeDTO = vFaultReportCodeMapper.findByTimsId(timsId);
         if (reportCodeDTO == null) {

@@ -9,12 +9,12 @@ import org.apache.ibatis.mapping.StatementType;
 
 /**
  * Kafka 接口 3: 反馈保养、点检、润滑任务完成得分
- * 负责调用 'tmis.FEEDBACK_MAINTENANCE_TASK_SCORE' 存储过程。
+ * 负责调用 'tmis.FB_MAINT_TASK_SCORE' 存储过程。
  */
 @Mapper
 public interface TmisTaskScoreMapper {
 
-    @Select(value = "{CALL tmis.FEEDBACK_MAINTENANCE_TASK_SCORE(" +
+    @Select(value = "{CALL tmis.FB_MAINT_TASK_SCORE(" +
             "p_task_id => #{dto.taskId, jdbcType=VARCHAR, mode=IN}," +
             "p_task_type => #{dto.type, jdbcType=INTEGER, mode=IN}," +
             "p_score => #{dto.score, jdbcType=VARCHAR, mode=IN}," +

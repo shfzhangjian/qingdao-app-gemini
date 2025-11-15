@@ -45,7 +45,7 @@ public class SsoController {
         } else {
             log.warn("票据 '{}' 无效", ticket);
             // 票据无效，可以重定向到错误页或统一登录页
-            response.sendRedirect("/tmis/login.html?error=invalid_ticket");
+            response.sendRedirect("login.html?error=invalid_ticket");
             return;
         }
 
@@ -61,12 +61,12 @@ public class SsoController {
 
             // --- 重定向到中转页面，并通过URL hash安全地传递Token ---
             // 使用 hash 可以防止 token 出现在服务器日志或浏览器历史记录中。
-            String redirectUrl = "/tmis/sso.html#" + token;
+            String redirectUrl = "sso.html#" + token;
             response.sendRedirect(redirectUrl);
 
         } catch (Exception e) {
             log.error("为用户 '{}' 执行SSO登录流程失败", username, e);
-            response.sendRedirect("/tmis/login.html?error=sso_failed");
+            response.sendRedirect("login.html?error=sso_failed");
         }
     }
 }

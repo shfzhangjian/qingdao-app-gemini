@@ -9,12 +9,12 @@ import org.apache.ibatis.mapping.StatementType;
 
 /**
  * Kafka 接口 14: 反馈停产检修计划任务完成情况
- * 负责调用 'tmis.FEEDBACK_COMPLETED_PRODUCTION_HALT_MAINTENANCE_TASK' 存储过程。
+ * 负责调用 'tmis.FB_COMPLETED_HALT_TASK' 存储过程。
  */
 @Mapper
 public interface TmisHaltCompletionMapper {
 
-    @Select(value = "{CALL tmis.FEEDBACK_COMPLETED_PRODUCTION_HALT_MAINTENANCE_TASK(" +
+    @Select(value = "{CALL tmis.FB_COMPLETED_HALT_TASK(" +
             "p_task_id => #{dto.taskId, jdbcType=VARCHAR, mode=IN}," +
             "p_complete_user => #{dto.completeUser, jdbcType=VARCHAR, mode=IN}," +
             "p_complete_date_time => #{dto.completeDateTime, jdbcType=VARCHAR, mode=IN}" +

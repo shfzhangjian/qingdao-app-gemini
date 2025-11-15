@@ -48,9 +48,9 @@ public class UserEquipmentPushJob {
     /**
      * 自动推送包机信息。
      * cron = "0 0 0 * * ?" 表示在每天凌晨 00:00:00 执行。
-     */
     @Scheduled(cron = "0 0 0 * * ?") // 每天凌晨0点执行
-    public void pushAllUserEquipmentDaily() {
+     */
+    public void runPushJob() {
         log.info("--- [定时任务] 开始执行：推送每日包机信息 ---");
 
         try {

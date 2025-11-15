@@ -1,8 +1,8 @@
 /**
  * 源码路径: js/app.js
  * 功能说明: 应用的主入口文件，负责初始化、路由管理、页面调度和主框架渲染。
+ * 版本变动:
  * v1.7.0 - 2025-10-15: Integrated with AuthManager for re-authentication and UI updates.
- * v1.8.0 - 2025-11-14: [新增] IP白名单自动登录逻辑
  */
 import menuConfig from './config/menu.js';
 import Breadcrumb from './components/Breadcrumb.js';
@@ -21,112 +21,35 @@ class App {
         this.viewInstances = new Map();
         this.breadcrumb = new Breadcrumb();
         this.themeToggler = document.getElementById('theme-toggler');
-        // [修改] 移除 this.userNameDisplay，改为在 updateUserInfo 中直接查询
+        this.userNameDisplay = document.getElementById('user-name-display'); // Added for username updates
 
-        this.init(); // init 现在是 async
+        this.init();
     }
 
-    /**
-     * [修改] init() 方法现在是 async，用于处理IP登录
-     */
-    async init() {
-        // 1. 在执行任何操作前，首先检查 URL 参数
-        const urlParams = new URLSearchParams(window.location.search);
-        const loginid = urlParams.get('loginid');
-        const view = urlParams.get('view');
-        const currentLoginId = localStorage.getItem('current_loginid');
-
-        let ipLoginUser = null; // 用于存储IP登录成功后的用户信息
-
-        // 2. [新增] 执行你的核心需求：
-        // 仅当 URL 提供了 loginid，且该 loginid 与 localStorage 中已存的 loginid 不一致时，
-        // 才触发 IP 自动登录流程。
-        if (loginid && loginid !== currentLoginId) {
-            console.log(`[App] 检测到 URL loginid (${loginid}) 与当前用户 (${currentLoginId}) 不符。`);
-            console.log("[App] 正在尝试 IP 白名单自动登录...");
-            try {
-                // 3. 调用新的后端端点
-                const response = await fetch(`api/system/auth/ip-login?loginid=${loginid}`);
-
-                if (response.ok) {
-                    // 4. IP登录成功 (IP在白名单中, 用户有效)
-                    const data = await response.json(); // LoginResponse { token, user }
-                    localStorage.setItem('jwt_token', data.token);
-                    localStorage.setItem('current_loginid', data.user.loginid);
-                    ipLoginUser = data.user; // 存储用户信息，以便后续更新UI
-                    console.log(`[App] IP 登录成功: ${loginid}。已存储新 Token。`);
-
-                    // 5. 清理 URL，防止下次刷新时再次触发登录
-                    this.removeLoginParamsFromURL();
-
-                } else {
-                    // 6. IP登录失败 (IP不在白名单, 或用户无效)
-                    const errorData = await response.json();
-                    console.error(`[App] IP 自动登录失败 (HTTP ${response.status}):`, errorData);
-                    // 弹窗提示用户，然后继续走标准流程
-                    Modal.alert(`IP 自动登录失败: ${errorData.message || errorData.error}`);
-                    // 清理URL，防止刷新时再次失败
-                    this.removeLoginParamsFromURL();
-                }
-
-            } catch (error) {
-                console.error("[App] IP 自动登录请求本身失败:", error);
-                Modal.alert(`IP 自动登录请求失败: ${error.message}`);
-            }
-        }
-
-        // 7. 继续执行标准的应用初始化
-        this.continueInit(view, ipLoginUser);
-    }
-
-    /**
-     * [新增] 从 URL 中移除 loginid 参数，防止刷新时重复登录
-     */
-    removeLoginParamsFromURL() {
-        const url = new URL(window.location);
-        url.searchParams.delete('loginid');
-        // 保留 view 等其他参数
-        window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-    }
-
-    /**
-     * [重构] 原始的 init() 方法被重构为 continueInit()
-     * @param {string} viewParam - 'view' URL 参数
-     * @param {object | null} preloadedUser - 如果IP登录成功，则传入用户信息
-     */
-    continueInit(viewParam, preloadedUser = null) {
+    init() {
         this._initTheme();
 
-        const isContentOnly = viewParam === 'content';
+        const urlParams = new URLSearchParams(window.location.search);
+        const isContentOnly = urlParams.get('view') === 'content';
 
         if (isContentOnly) {
             this.appBody.classList.add('content-only-mode');
         } else {
-            this.renderTopNav(); // 创建 Header DOM
+            this.renderTopNav();
             this.sidebarToggle.addEventListener('click', () => this.toggleSidebar());
-            this._attachHeaderListeners(preloadedUser); // 附加监听器并加载用户信息
+            this._attachHeaderListeners();
         }
 
         window.addEventListener('hashchange', () => this.handleRouteChange());
-        // [修改] 'load' 事件很可能已经触发，我们不再依赖它来初始化
-        // window.addEventListener('load', () => this.handleRouteChange());
+        window.addEventListener('load', () => this.handleRouteChange());
 
-        // 监听 AuthManager 发出的事件 (用于多标签页同步)
+        // [Key Change] Listen for user switch events to update UI
         window.addEventListener('userSwitched', (e) => {
             this.updateUserInfo(e.detail.user);
         });
-
-        // [关键修复]
-        // 无论IP登录是否发生，都在 continueInit 的末尾
-        // 立即调用 handleRouteChange() 来解析当前 hash 并渲染视图。
-        // 这解决了IP登录后白屏的问题，因为它不再依赖于一个已经触发过的 'load' 事件。
-        this.handleRouteChange();
     }
 
-    /**
-     * [修改] 接收 preloadedUser，避免重复发起 /info 请求
-     */
-    _attachHeaderListeners(preloadedUser = null) {
+    _attachHeaderListeners() {
         // Theme Toggler
         this.themeToggler.addEventListener('click', (e) => {
             e.preventDefault();
@@ -142,51 +65,21 @@ class App {
                 if (confirmed) {
                     console.log("User confirmed logout. Clearing token...");
                     localStorage.removeItem('jwt_token');
-                    localStorage.removeItem('current_loginid'); // [新增] 清除已存用户
                     Modal.alert('您已成功退出。');
-                    window.location.href = 'login.html'; // [修改] 强制重定向到登录页
+                    // In a real app, you might want to redirect:
+                    // window.location.href = '/login.html';
                 }
             });
-        }
-
-        // [修改] 用户信息加载逻辑
-        if (preloadedUser) {
-            // 1. 如果通过 IP 登录成功，直接使用该用户信息更新UI
-            console.log("[App] 使用IP登录的预加载用户信息更新UI。");
-            this.updateUserInfo(preloadedUser);
-        } else {
-            // 2. 否则，按原流程检查 localStorage 中是否有 token
-            const token = localStorage.getItem('jwt_token');
-            if (token) {
-                // 3. 如果有 token，异步加载 /info
-                (async () => {
-                    try {
-                        console.log("[App] 检测到现有 Token，正在获取用户信息...");
-                        // 动态导入 apiFetch
-                        const api = (await import('./services/api.js')).apiFetch;
-                        const userInfo = await api('api/system/auth/info');
-                        if (userInfo && userInfo.user) {
-                            this.updateUserInfo(userInfo.user);
-                            // 确保 localStorage 与 token 同步
-                            localStorage.setItem('current_loginid', userInfo.user.loginid);
-                        }
-                    } catch (error) {
-                        console.error("加载用户信息失败:", error);
-                        // api.js 中的 AuthManager 会自动处理 401/403 错误并弹出登录框
-                    }
-                })();
-            }
         }
     }
 
     /**
-     * [修改] 更新 updateUserInfo 来查询正确的元素
+     * [Key Change] Updates the username display in the header.
+     * @param {object} user - The user object from the login response.
      */
     updateUserInfo(user) {
-        // Header 中的用户名元素
-        const userNameEl = document.querySelector('.dropdown .ms-2');
-        if (userNameEl && user) {
-            userNameEl.textContent = user.name || user.loginid;
+        if (this.userNameDisplay && user) {
+            this.userNameDisplay.textContent = user.name || user.loginid;
         }
     }
 
@@ -243,7 +136,7 @@ class App {
     }
 
     findFirstLeaf(menuItem) {
-        if (!menuItem || !menuItem.children || menuItem.children.length === 0) {
+        if (!menuItem.children || menuItem.children.length === 0) {
             return menuItem;
         }
         return this.findFirstLeaf(menuItem.children[0]);
@@ -395,3 +288,4 @@ class App {
 }
 
 new App(menuConfig);
+

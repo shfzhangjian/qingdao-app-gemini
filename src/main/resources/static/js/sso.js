@@ -24,6 +24,6 @@ window.addEventListener('load', () => {
     } else {
         console.error("SSO: 未在URL hash中找到Token，认证失败。");
         // 如果没有Token，跳转到标准的登录页并提示错误
-        window.location.replace('/tmis/login.html?error=sso_token_missing');
+        window.location.replace('/login.html?error=sso_token_missing');
     }
 });

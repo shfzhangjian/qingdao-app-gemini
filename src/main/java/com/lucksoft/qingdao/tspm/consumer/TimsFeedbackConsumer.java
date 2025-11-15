@@ -228,8 +228,9 @@ public class TimsFeedbackConsumer {
                 Map<String, Object> dataMap = objectMapper.convertValue(report, new TypeReference<Map<String, Object>>() {});
                 cacheService.addData(topic, dataMap);
 
-                // [TODO] 缺少此 DTO 的存储过程调用逻辑
+
                 log.warn("接收到故障分析报告 (ID: {})，但未实现存储过程调用。", report.getId());
+                asyncTaskService.submitFaultAnalysisReport(report);
             }
         } catch (Exception e) {
             String errorMessage = "消息处理失败: " + e.getMessage() + ", 原始消息: " + message;

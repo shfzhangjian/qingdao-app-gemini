@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TIMS 模拟器 (向 TsPM 推送)</title>
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+            margin-top: 2rem;
+        }
+        .card-header {
+            background-color: #003366;
+            color: white;
+        }
+        textarea {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            min-height: 250px;
+        }
+        .toast-container {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 1050;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <h4 class="mb-0"><i class="bi bi-broadcast"></i> TIMS 模拟器 (向 TsPM 推送)</h4>
+        </div>
+        <div class="card-body">
+            <p class="card-text text-muted">
+                在此页面模拟 TIMS 系统向 TsPM 发送 Kafka 消息。请在旁边的浏览器窗口打开 <code>simulate.html</code> 页面以查看 <code>[RECEIVE]</code> 日志。
+            </p>
+            <div class="mb-3">
+                <label for="topic-select" class="form-label fw-bold">1. 选择要模拟的 Kafka 主题 (TIMS -> TsPM)</label>
+                <select id="topic-select" class="form-select">
+                    <!-- 选项将由 JS 动态填充 -->
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="payload-textarea" class="form-label fw-bold">2. 粘贴模拟的 JSON (必须是数组格式)</label>
+                <textarea id="payload-textarea" class="form-control" rows="10"></textarea>
+            </div>
+
+            <button id="send-btn" class="btn btn-primary w-100 btn-lg">
+                <i class="bi bi-send-fill"></i> 发送模拟消息
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast 容器 -->
+<div class="toast-container"></div>
+
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const topicSelect = document.getElementById('topic-select');
+        const payloadTextarea = document.getElementById('payload-textarea');
+        const sendBtn = document.getElementById('send-btn');
+        const toastContainer = document.querySelector('.toast-container');
+
+        // TIMS -> TsPM 的主题列表
+        const topics = {
+            'tims.feedback.completed.maintenance.task': '接口 2: 接收任务完成情况',
+            'tims.feedback.maintenance.task.score': '接口 3: 接收任务得分',
+            'tims.create.fault.report': '接口 4/10: 接收故障报告',
+            'tims.recommend.rotational.task': '接口 6: 接收推荐任务',
+            'tims.feedback.completed.rotational.task': '接口 8: 接收轮保完成',
+            'tims.feedback.rotational.task.score': '接口 9: 接收轮保得分',
+            'tims.create.fault.analysis.report': '接口 11: 接收故障分析',
+            'tims.feedback.completed.production.halt.maintenance.task': '接口 14: 接收停产检修完成'
+        };
+
+        // 默认的 JSON 示例
+        const defaultPayloads = {
+            'tims.feedback.completed.maintenance.task': JSON.stringify([
+                {
+                    "taskId": "T-SIMULATED-123",
+                    "completeUser": "模拟器用户",
+                    "completeDateTime": new Date().toISOString().slice(0, 19).replace('T', ' '),
+                    "inspectionActualValue": 10.5,
+                    "type": 1
+                }
+            ], null, 2),
+            'tims.feedback.maintenance.task.score': JSON.stringify([
+                {
+                    "taskId": "T-SIMULATED-123",
+                    "score": 95,
+                    "type": 1,
+                    "rectificationContent": "模拟器测试：无整改内容"
+                }
+            ], null, 2),
+            'tims.create.fault.report': JSON.stringify([
+                {
+                    "id": 9999, // TIMS 系统的报告主键
+                    "name": "模拟故障报告",
+                    "equipmentCode": "EQ-SIM-001",
+                    "major": "电气",
+                    "faultSource": "点检异常",
+                    "reporter": "模拟器用户",
+                    "debriefingTime": new Date().toISOString().slice(0, 19).replace('T', ' '),
+                    "faultPhenomenon": "模拟的故障现象",
+                    "haltStartTime": new Date().toISOString().slice(0, 19).replace('T', ' ')
+                }
+            ], null, 2),
+            // 其他主题的默认值...
+            'tims.recommend.rotational.task': JSON.stringify([{"planId":"REC-001","equipmentCode":"EQ-SIM-001","project":"模拟推荐项目","content":"检查模拟部件","standard":"模拟标准","createDateTime":"2025-11-14 10:00:00"}], null, 2),
+            'tims.feedback.completed.rotational.task': JSON.stringify([{"taskId":"T-ROTATIONAL-SIM-001","completeUser":"模拟器用户","completeDateTime":"2025-11-14 10:00:00","type":3}], null, 2),
+            'tims.feedback.rotational.task.score': JSON.stringify([{"taskId":"T-ROTATIONAL-SIM-001","type":3,"score":100}], null, 2),
+            'tims.create.fault.analysis.report': JSON.stringify([{"id":9998,"name":"模拟故障分析报告","equipmentCode":"EQ-SIM-001","attribute":"属性A","category":"分类B","faultNature":"性质C","teamName":"班组A","reporter":"模拟器用户","debriefingTime":"2025-11-14 10:00:00","equipmentPart":"模拟部位","faultPhenomenon":"模拟分析：现象","faultReason":"模拟分析：原因","measures":"模拟分析：措施","haltStartTime":"2025-11-14 08:00:00","haltEndTime":"2025-11-14 09:30:00","haltDuration":1.5,"faultSiteDesc":"模拟现场描述","faultCausesAnalysis":"模拟原因分析"}], null, 2),
+            'tims.feedback.completed.production.halt.maintenance.task': JSON.stringify([{"taskId":"T-HALT-SIM-001","completeUser":"模拟器用户","completeDateTime":"2025-11-14 10:00:00"}], null, 2)
+        };
+
+        // 填充下拉框
+        for (const [topic, description] of Object.entries(topics)) {
+            const option = document.createElement('option');
+            option.value = topic;
+            option.textContent = `${description} (${topic})`;
+            topicSelect.appendChild(option);
+        }
+
+        // 联动更新 Textarea
+        topicSelect.addEventListener('change', () => {
+            const selectedTopic = topicSelect.value;
+            payloadTextarea.value = defaultPayloads[selectedTopic] || '[]';
+        });
+
+        // 触发一次 change 来加载默认值
+        topicSelect.dispatchEvent(new Event('change'));
+
+        // 发送按钮点击事件
+        sendBtn.addEventListener('click', async () => {
+            const topic = topicSelect.value;
+            const payload = payloadTextarea.value;
+
+            if (!payload.trim().startsWith('[')) {
+                showToast('JSON 格式错误', '必须以 [ 开头的数组格式。', 'danger');
+                return;
+            }
+
+            const originalBtnHtml = sendBtn.innerHTML;
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在发送...';
+
+            try {
+                const response = await fetch('/api/tims/push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic: topic, payload: payload })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showToast('发送成功', result.success, 'success');
+                } else {
+                    throw new Error(result.error || '未知错误');
+                }
+
+            } catch (error) {
+                showToast('发送失败', error.message, 'danger');
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = originalBtnHtml;
+            }
+        });
+
+        // 显示 Toast
+        function showToast(title, message, type = 'success') {
+            const toastId = 'toast-' + Date.now();
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <strong>${title}</strong><br>${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { delay: 5000 });
+            toast.show();
+            toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+        }
+    });
+</script>
+
+</body>
+</html>

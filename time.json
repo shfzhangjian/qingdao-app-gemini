@@ -1,0 +1,3 @@
+{
+  "cronExpressions" : [ "0 47 10 * * ?" ]
+}

@@ -180,4 +180,48 @@ public class UserService {
     public boolean deleteUser(Long id) {
         return userMapper.deleteById(id) > 0;
     }
+
+    /**
+     * 【新增】用户免密登录逻辑
+     * @param loginid 登录账号
+     * @return 登录响应，包含Token和用户信息
+     */
+    public LoginResponse loginWithoutPassword(String loginid) {
+        // 1. 验证用户
+        User user = userMapper.findByLoginId(loginid);
+        if (user == null) {
+            throw new RuntimeException("用户不存在: " + loginid);
+        }
+        if (!"1".equals(user.getStatus())) {
+            throw new RuntimeException("用户已被禁用: " + loginid);
+        }
+
+        // 2. 获取角色
+        List<Role> roles = userRoleMapper.findRolesByUserId(user.getId());
+        if (roles.isEmpty()) {
+            throw new RuntimeException("用户未分配任何角色");
+        }
+
+        // 3. 获取所有角色的ID
+        List<Long> roleIds = roles.stream().map(Role::getId).collect(Collectors.toList());
+
+        // 4. 根据角色获取所有可访问的菜单
+        List<Menu> accessibleMenus = menuMapper.findMenusByRoleIds(roleIds);
+
+        // 5. 将菜单列表转换为树形结构
+        List<Menu> menuTree = buildMenuTree(accessibleMenus);
+
+        // 6. 生成JWT Token
+        String token = jwtTokenUtil.generateToken(user);
+
+        // 7. 将完整的用户信息（包括树形菜单）存入Redis
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUser(user);
+        userInfo.setRoles(roles);
+        userInfo.setMenuTree(menuTree);
+        redisTemplate.opsForValue().set("user_token:" + token, userInfo, 3600, TimeUnit.SECONDS); // 缓存1小时
+
+        // 8. 返回Token和基本用户信息给前端
+        return new LoginResponse(token, user);
+    }
 }

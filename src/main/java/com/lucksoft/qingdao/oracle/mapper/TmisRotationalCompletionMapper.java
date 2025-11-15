@@ -9,12 +9,12 @@ import org.apache.ibatis.mapping.StatementType;
 
 /**
  * Kafka 接口 8: 反馈轮保任务完成情况
- * 负责调用 'tmis.FEEDBACK_COMPLETED_ROTATIONAL_TASK' 存储过程。
+ * 负责调用 'tmis.FB_COMPLETED_ROT_TASK' 存储过程。
  */
 @Mapper
 public interface TmisRotationalCompletionMapper {
 
-    @Select(value = "{CALL tmis.FEEDBACK_COMPLETED_ROTATIONAL_TASK(" +
+    @Select(value = "{CALL tmis.FB_COMPLETED_ROT_TASK(" +
             "p_task_id => #{dto.taskId, jdbcType=VARCHAR, mode=IN}," +
             "p_task_type => #{dto.type, jdbcType=INTEGER, mode=IN}," +
             "p_complete_user => #{dto.completeUser, jdbcType=VARCHAR, mode=IN}," +

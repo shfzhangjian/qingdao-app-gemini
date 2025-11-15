@@ -56,7 +56,21 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"><fileNamePattern>${LOG_PATH}/tims.feedback.completed.production.halt.maintenance.task-%d{yyyy-MM-dd}.log.gz</fileNamePattern><maxHistory>7</maxHistory></rollingPolicy>
         <encoder><pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern></encoder>
     </appender>
-
+    <!-- 这个 Appender 专门用于记录所有 TsPM 主动推送到 Kafka 的 JSON 内容 -->
+    <appender name="KAFKA_PRODUCER_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/kafka-producer.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/kafka-producer-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxHistory>7</maxHistory>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+        </rollingPolicy>
+        <!-- 格式只包含时间和消息内容 -->
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+    </appender>
     <!-- 3. 动态SQL查询服务专用 Appender -->
     <appender name="SQL_QUERY_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/sql-query.log</file>
@@ -68,7 +82,10 @@
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
-
+    <!-- 名为 "kafka.producer" 的 Logger 将会把日志定向到 KAFKA_PRODUCER_FILE -->
+    <logger name="kafka.producer" level="INFO" additivity="false">
+        <appender-ref ref="KAFKA_PRODUCER_FILE"/>
+    </logger>
     <!-- 4. 日志记录器 Loggers -->
     <!-- Kafka消费者专用Loggers -->
     <logger name="kafka.consumer.task_completion" level="INFO" additivity="false"><appender-ref ref="TASK_COMPLETION_FEEDBACK_FILE"/></logger>
