@@ -209,10 +209,31 @@ class App {
         }
     }
 
-    _initTheme() {
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        this.appBody.classList.add(`theme-${savedTheme}`);
-        this._updateThemeIcon(savedTheme);
+    _initTheme(themeFromUrl = null) {
+        let finalTheme = 'dark'; // 默认主题
+
+        // 1. 检查 URL 参数 (最高优先级)
+        if (themeFromUrl === 'light' || themeFromUrl === 'dark') {
+            finalTheme = themeFromUrl;
+            // 注意：我们不将 URL 参数保存到 localStorage，
+            // 因为它应该是临时的，以便在下次正常访问时恢复用户保存的设置。
+        } else {
+            // 2. 如果 URL 没有指定，则检查 localStorage
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'light' || savedTheme === 'dark') {
+                finalTheme = savedTheme;
+            }
+        }
+
+        // 3. 应用主题
+        // 先移除所有可能存在的主题类，以防冲突
+        this.appBody.classList.remove('theme-light', 'theme-dark');
+        this.appBody.classList.add(`theme-${finalTheme}`);
+
+        // 4. 更新切换按钮的图标 (仅当按钮存在时)
+        if (this.themeToggler) {
+            this._updateThemeIcon(finalTheme);
+        }
     }
 
     _toggleTheme() {

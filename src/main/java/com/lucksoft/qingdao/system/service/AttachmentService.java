@@ -24,7 +24,7 @@ public class AttachmentService {
     @Autowired
     private AttachmentMapper attachmentMapper;
 
-    // 从 application.properties 中读取文件上传路径
+    // 从 application-prod.properties 中读取文件上传路径
     @Value("${file.upload-dir}")
     private String uploadDir;
 

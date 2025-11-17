@@ -98,7 +98,7 @@ class AuthManager {
             errorDiv.style.display = 'none';
 
             try {
-                const response = await fetch('api/system/auth/login', {
+                const response = await fetch('/tmis/api/system/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ loginid: username, password: password })
