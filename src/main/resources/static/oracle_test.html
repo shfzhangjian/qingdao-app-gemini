@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Oracle API 推送模拟器</title>
     <!-- 引入 Bootstrap CSS -->
-    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <link href="/tmis/libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/tmis/libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
     <style>
         :root {
             --primary-color: #005A9C;
@@ -198,7 +198,7 @@
 <div id="toast-container" class="toast-container"></div>
 
 <!-- [新] 引入 Bootstrap JS (Tab功能需要) -->
-<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/tmis/libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const apiButtonContainer = document.getElementById('api-button-container');
@@ -232,7 +232,7 @@
                     // --- (1a) 无参数stype按钮 ---
                     finalStype = stype;
                     apiPayload = { stype: finalStype };
-                    apiUrl = 'api/oracle/receive';
+                    apiUrl = '/tmis/api/oracle/receive';
                     fetchOptions.body = JSON.stringify(apiPayload);
 
                 } else if (stypePrefix && paramInputId) {
@@ -245,18 +245,18 @@
                     }
                     finalStype = `${stypePrefix}:${paramValue}`;
                     apiPayload = { stype: finalStype };
-                    apiUrl = 'api/oracle/receive';
+                    apiUrl = '/tmis/api/oracle/receive';
                     fetchOptions.body = JSON.stringify(apiPayload);
 
                 } else if (button.id === 'push-all-bao-ji-btn') {
                     // --- (2) 手动推送包机 ---
                     if (!confirm('确定要查询所有包机信息并推送到Kafka吗？\n这将推送全量数据。')) return;
-                    apiUrl = 'api/push/user-equipment-all';
+                    apiUrl = '/tmis/api/push/user-equipment-all';
 
                 } else if (button.id === 'clear-cache-btn') {
                     // --- (3) 清空缓存 ---
                     if (!confirm('确定要清空所有 Oracle 推送任务的 Redis 缓存吗？\n这将允许所有任务被重新推送。')) return;
-                    apiUrl = 'api/oracle/clear-push-cache';
+                    apiUrl = '/tmis/api/oracle/clear-push-cache';
 
                 } else {
                     // 不是我们关心的按钮
@@ -336,7 +336,7 @@
                 }
 
                 try {
-                    const response = await fetch(`api/oracle/task-status/${taskId}`);
+                    const response = await fetch(`/tmis/api/oracle/task-status/${taskId}`);
                     const data = await response.json();
 
                     if (!response.ok) {

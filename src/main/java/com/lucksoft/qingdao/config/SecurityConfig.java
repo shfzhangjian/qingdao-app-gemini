@@ -48,6 +48,8 @@ public class SecurityConfig {
                         // Secure new kanban endpoints
                         .antMatchers("/api/kb/**").authenticated()
                         .antMatchers("/api/trigger/**", "/api/oracle/**").hasRole("API")
+                        .antMatchers("/performance_opt/**", "/execution_board/**", "/running_opt/**", "/lifecycle_mgmt/**", "/maintenance_mgmt/**").permitAll()
+
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

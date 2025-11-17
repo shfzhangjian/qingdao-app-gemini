@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>系统登录</title>
-    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/tmis/libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <link rel="stylesheet" href="/tmis/libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
     <style>
         body {
             display: flex;
@@ -47,7 +47,7 @@
 </div>
 
 <!-- jQuery -->
-<script src="libs/jquery-3.7.1.min.js"></script>
+<script src="/tmis/libs/jquery-3.7.1.min.js"></script>
 <script>
     $('#loginForm').on('submit', function(e) {
         e.preventDefault(); // 阻止表单默认提交行为
@@ -59,7 +59,7 @@
         loginButton.prop('disabled', true).text('登录中...');
 
         // 【修改】使用 fetch API 调用后台登录接口
-        fetch('api/system/auth/login', {
+        fetch('/tmis/api/system/auth/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -78,7 +78,7 @@
                 // 我们只将 token 存入 localStorage
                 localStorage.setItem('authToken', data.token);
                 // 跳转到主页面
-                window.location.href = 'index.html';
+                window.location.href = '/tmis/index.html';
             })
             .catch(error => {
                 // 捕获并显示错误信息

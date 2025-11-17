@@ -12,6 +12,7 @@ import AuthManager from '../components/AuthManager.js';
  * @returns {Promise<any>} - 解析后的JSON数据或Blob对象
  */
 export async function apiFetch(url, options = {}, isRetry = false) {
+    const absoluteUrl = url.startsWith('/') ? url : `/tmis/${url}`;
     const token = localStorage.getItem('jwt_token');
     const headers = {
         'Content-Type': 'application/json',
@@ -22,7 +23,7 @@ export async function apiFetch(url, options = {}, isRetry = false) {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(absoluteUrl, { ...options, headers });
 
     if (!response.ok) {
         // [Key Change] Handle authentication errors
@@ -31,7 +32,7 @@ export async function apiFetch(url, options = {}, isRetry = false) {
                 // Request new credentials via the AuthManager
                 const { token: newToken } = await AuthManager.requestCredentials();
                 // If successful, retry the original request with the new token
-                return apiFetch(url, options, true);
+                return apiFetch(absoluteUrl, options, true);
             } catch (authError) {
                 // If user cancels login, throw a user-friendly error
                 throw new Error("认证失败或会话已过期，请重新登录。");

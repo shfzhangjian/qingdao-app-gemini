@@ -3,6 +3,8 @@
  * 功能说明: 应用的主入口文件，负责初始化、路由管理、页面调度和主框架渲染。
  * v1.7.0 - 2025-10-15: Integrated with AuthManager for re-authentication and UI updates.
  * v1.8.0 - 2025-11-14: [新增] IP白名单自动登录逻辑
+ * v1.9.0 - 2025-11-15: [修改] 切换到 HTML5 History 模式路由
+ * v1.9.1 - 2025-11-16: [修复] 修复了 IP 登录后白屏的问题
  */
 import menuConfig from './config/menu.js';
 import Breadcrumb from './components/Breadcrumb.js';
@@ -21,7 +23,6 @@ class App {
         this.viewInstances = new Map();
         this.breadcrumb = new Breadcrumb();
         this.themeToggler = document.getElementById('theme-toggler');
-        // [修改] 移除 this.userNameDisplay，改为在 updateUserInfo 中直接查询
 
         this.init(); // init 现在是 async
     }
@@ -32,8 +33,9 @@ class App {
     async init() {
         // 1. 在执行任何操作前，首先检查 URL 参数
         const urlParams = new URLSearchParams(window.location.search);
-        const loginid = urlParams.get('loginid');
+        const loginid = urlParams.get('userCode');
         const view = urlParams.get('view');
+        const theme = urlParams.get('theme');
         const currentLoginId = localStorage.getItem('current_loginid');
 
         let ipLoginUser = null; // 用于存储IP登录成功后的用户信息
@@ -46,7 +48,7 @@ class App {
             console.log("[App] 正在尝试 IP 白名单自动登录...");
             try {
                 // 3. 调用新的后端端点
-                const response = await fetch(`api/system/auth/ip-login?loginid=${loginid}`);
+                const response = await fetch(`/tmis/api/system/auth/ip-login?loginid=${loginid}`);
 
                 if (response.ok) {
                     // 4. IP登录成功 (IP在白名单中, 用户有效)
@@ -76,7 +78,7 @@ class App {
         }
 
         // 7. 继续执行标准的应用初始化
-        this.continueInit(view, ipLoginUser);
+        this.continueInit(view, theme, ipLoginUser);
     }
 
     /**
@@ -92,10 +94,11 @@ class App {
     /**
      * [重构] 原始的 init() 方法被重构为 continueInit()
      * @param {string} viewParam - 'view' URL 参数
+     * @param {string} themeParam - 'theme' URL 参数 [新增]
      * @param {object | null} preloadedUser - 如果IP登录成功，则传入用户信息
      */
-    continueInit(viewParam, preloadedUser = null) {
-        this._initTheme();
+    continueInit(viewParam, themeParam, preloadedUser = null) {
+        this._initTheme(themeParam);
 
         const isContentOnly = viewParam === 'content';
 
@@ -107,9 +110,26 @@ class App {
             this._attachHeaderListeners(preloadedUser); // 附加监听器并加载用户信息
         }
 
-        window.addEventListener('hashchange', () => this.handleRouteChange());
-        // [修改] 'load' 事件很可能已经触发，我们不再依赖它来初始化
-        // window.addEventListener('load', () => this.handleRouteChange());
+        // [修改] 监听 'popstate' (浏览器前进/后退)
+        window.addEventListener('popstate', () => this.handleRouteChange());
+
+        // [修改] 监听全局点击事件，以拦截 <a href> 导航
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+
+            // 检查链接是否存在、是否有 href，以及是否是 SPA 内部链接 (以 /tmis/ 开头)
+            // 确保它不是一个外部链接或一个 data-bs-toggle 按钮
+            if (link && link.href && link.pathname.startsWith('/tmis/') && !link.dataset.bsToggle) {
+                e.preventDefault(); // 阻止浏览器默认导航
+
+                // 使用 History API 更新 URL
+                window.history.pushState(null, '', link.href);
+
+                // 手动触发路由处理
+                this.handleRouteChange();
+            }
+        });
+
 
         // 监听 AuthManager 发出的事件 (用于多标签页同步)
         window.addEventListener('userSwitched', (e) => {
@@ -118,8 +138,7 @@ class App {
 
         // [关键修复]
         // 无论IP登录是否发生，都在 continueInit 的末尾
-        // 立即调用 handleRouteChange() 来解析当前 hash 并渲染视图。
-        // 这解决了IP登录后白屏的问题，因为它不再依赖于一个已经触发过的 'load' 事件。
+        // 立即调用 handleRouteChange() 来解析当前 URL 并渲染视图。
         this.handleRouteChange();
     }
 
@@ -236,7 +255,9 @@ class App {
                 const topMenuId = e.target.dataset.id;
                 const firstSubMenu = this.findFirstLeaf(this.menuConfig.find(m => m.id === topMenuId));
                 if (firstSubMenu && firstSubMenu.url) {
-                    window.location.hash = firstSubMenu.url;
+                    // [修改] 使用 History API 导航，而不是设置 hash
+                    window.history.pushState(null, '', firstSubMenu.url);
+                    this.handleRouteChange();
                 }
             }
         });
@@ -286,13 +307,25 @@ class App {
 
     async handleRouteChange() {
         const defaultRoute = this.findFirstLeaf(this.menuConfig[0]);
-        const hash = window.location.hash || (defaultRoute ? defaultRoute.url : '');
-        if (!hash.startsWith('#!/')) {
-            if (defaultRoute && defaultRoute.url) window.location.hash = defaultRoute.url;
-            return;
-        };
 
-        const pathParts = hash.substring(3).split('/');
+        // [修改] 从 window.location.pathname 读取路由
+        let path = window.location.pathname; // 例如: /tmis/performance_opt/metrology_mgmt/tasks
+
+        // [修改] 检查路径是否是 /tmis/ 或 /tmis，如果是，则重定向到默认路由
+        if (path === '/tmis/' || path === '/tmis') {
+            if (defaultRoute && defaultRoute.url) {
+                window.history.replaceState(null, '', defaultRoute.url);
+                path = window.location.pathname; // 更新 path 为新路径
+            } else {
+                return; // 没有默认路由，不执行任何操作
+            }
+        }
+
+        // [修改] 解析路径
+        const contextPath = '/tmis';
+        const routePath = path.startsWith(contextPath) ? path.substring(contextPath.length) : path; // -> /performance_opt/metrology_mgmt/tasks
+        const pathParts = routePath.split('/').filter(p => p.length > 0); // -> ['performance_opt', 'metrology_mgmt', 'tasks']
+
         // 根据当前路由判断是否进入看板模式
         if (pathParts[0] === 'execution_board') {
             this.appBody.classList.add('board-mode');
@@ -306,16 +339,16 @@ class App {
         const breadcrumbContainer = this.contentArea.querySelector('#breadcrumb-container');
         const viewContainer = this.contentArea.querySelector('#view-container');
 
-        const path = this.findPath(pathParts);
-        this.breadcrumb.render(breadcrumbContainer, path);
+        const foundPath = this.findPath(pathParts);
+        this.breadcrumb.render(breadcrumbContainer, foundPath);
 
         if (this.appBody.classList.contains('board-mode')) {
             breadcrumbContainer.style.display = 'none';
         } else {
-            this.breadcrumb.render(breadcrumbContainer, path);
+            this.breadcrumb.render(breadcrumbContainer, foundPath);
         }
 
-        const activeRoute = path[path.length - 1];
+        const activeRoute = foundPath[foundPath.length - 1];
 
         if (!this.appBody.classList.contains('content-only-mode')) {
             const [topMenuId] = pathParts;
@@ -325,7 +358,9 @@ class App {
             }
             this.updateNavActiveState(this.topNav, topMenuId);
             this.renderSidebar(topMenuId);
-            this.updateSidebarActiveState(activeRoute.id);
+            if (activeRoute) {
+                this.updateSidebarActiveState(activeRoute.id);
+            }
         }
 
         if (activeRoute && activeRoute.component) {
