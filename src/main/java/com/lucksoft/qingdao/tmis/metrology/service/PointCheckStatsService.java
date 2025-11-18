@@ -52,8 +52,8 @@ public class PointCheckStatsService {
             PointCheckStatsDTO finalStats = new PointCheckStatsDTO();
             finalStats.setDept(rawStats.getSusedept());
 
-            long yingJianH1 = 0, yiJianH1 = 0, zhengChangH1 = 0;
-            long yingJianH2 = 0, yiJianH2 = 0, zhengChangH2 = 0;
+            long yingJianH1 = 0, yiJianH1 = 0, zhengChangH1 = 0, yiChangH1 = 0; // [FIX] 新增 yiChangH1
+            long yingJianH2 = 0, yiJianH2 = 0, zhengChangH2 = 0, yiChangH2 = 0; // [FIX] 新增 yiChangH2
 
             String category = query.getCategory() != null ? query.getCategory().toUpperCase() : "A";
 
@@ -63,26 +63,35 @@ public class PointCheckStatsService {
                     yingJianH1 = rawStats.getF1() + rawStats.getF2() + rawStats.getF3();
                     yiJianH1 = rawStats.getF1a1() + rawStats.getF2a1() + rawStats.getF3a1();
                     zhengChangH1 = rawStats.getF1a2() + rawStats.getF2a2() + rawStats.getF3a2();
+                    yiChangH1 = rawStats.getF1a3() + rawStats.getF2a3() + rawStats.getF3a3(); // [FIX] 直接累加SQL查出的异常数
+
                     yingJianH2 = rawStats.getF4() + rawStats.getF5() + rawStats.getF6();
                     yiJianH2 = rawStats.getF4a1() + rawStats.getF5a1() + rawStats.getF6a1();
                     zhengChangH2 = rawStats.getF4a2() + rawStats.getF5a2() + rawStats.getF6a2();
+                    yiChangH2 = rawStats.getF4a3() + rawStats.getF5a3() + rawStats.getF6a3(); // [FIX] 直接累加SQL查出的异常数
                     break;
                 case "B": // B类是季度周期, F1-F2为上半年, F3-F4为下半年
                     yingJianH1 = rawStats.getF1() + rawStats.getF2();
                     yiJianH1 = rawStats.getF1a1() + rawStats.getF2a1();
                     zhengChangH1 = rawStats.getF1a2() + rawStats.getF2a2();
+                    yiChangH1 = rawStats.getF1a3() + rawStats.getF2a3(); // [FIX] 直接累加SQL查出的异常数
+
                     yingJianH2 = rawStats.getF3() + rawStats.getF4();
                     yiJianH2 = rawStats.getF3a1() + rawStats.getF4a1();
                     zhengChangH2 = rawStats.getF3a2() + rawStats.getF4a2();
+                    yiChangH2 = rawStats.getF3a3() + rawStats.getF4a3(); // [FIX] 直接累加SQL查出的异常数
                     break;
                 case "C": // C类是半年周期, F1为上半年, F2为下半年
                 default:
                     yingJianH1 = rawStats.getF1();
                     yiJianH1 = rawStats.getF1a1();
                     zhengChangH1 = rawStats.getF1a2();
+                    yiChangH1 = rawStats.getF1a3(); // [FIX] 直接累加SQL查出的异常数
+
                     yingJianH2 = rawStats.getF2();
                     yiJianH2 = rawStats.getF2a1();
                     zhengChangH2 = rawStats.getF2a2();
+                    yiChangH2 = rawStats.getF2a3(); // [FIX] 直接累加SQL查出的异常数
                     break;
             }
 
@@ -90,16 +99,20 @@ public class PointCheckStatsService {
             finalStats.setYingJianShu1(yingJianH1);
             finalStats.setYiJianShu1(yiJianH1);
             finalStats.setZhengChangShu1(zhengChangH1);
-            finalStats.setWeiJianShu1(yingJianH1 - yiJianH1);
-            finalStats.setYiChangShu1(yiJianH1 - zhengChangH1);
+            // [FIX] 增加负数保护，如果已检 > 应检，则未检为0
+            finalStats.setWeiJianShu1(Math.max(0, yingJianH1 - yiJianH1));
+            // [FIX] 增加负数保护，确保异常数不为负
+            finalStats.setYiChangShu1(Math.max(0, yiChangH1));
             finalStats.setZhiXingLv1(yingJianH1 > 0 ? String.format("%.0f%%", (double) yiJianH1 * 100 / yingJianH1) : "0%");
 
             // --- 计算并设置下半年派生数据 ---
             finalStats.setYingJianShu2(yingJianH2);
             finalStats.setYiJianShu2(yiJianH2);
             finalStats.setZhengChangShu2(zhengChangH2);
-            finalStats.setWeiJianShu2(yingJianH2 - yiJianH2);
-            finalStats.setYiChangShu2(yiJianH2 - zhengChangH2);
+            // [FIX] 增加负数保护
+            finalStats.setWeiJianShu2(Math.max(0, yingJianH2 - yiJianH2));
+            // [FIX] 增加负数保护
+            finalStats.setYiChangShu2(Math.max(0, yiChangH2));
             finalStats.setZhiXingLv2(yingJianH2 > 0 ? String.format("%.0f%%", (double) yiJianH2 * 100 / yingJianH2) : "0%");
 
             finalStatsList.add(finalStats);
@@ -108,4 +121,3 @@ public class PointCheckStatsService {
         return finalStatsList;
     }
 }
-

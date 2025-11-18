@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>直接服务测试 (绕过 Kafka)</title>
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+            margin-top: 2rem;
+        }
+        .card-header {
+            background-color: #198754; /* 绿色，以示区别 */
+            color: white;
+        }
+        textarea {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            min-height: 250px;
+        }
+        .toast-container {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 1050;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <h4 class="mb-0"><i class="bi bi-braces"></i> 直接服务测试 (绕过 Kafka)</h4>
+        </div>
+        <div class="card-body">
+            <p class="card-text text-muted">
+                在此页面直接调用后端的 REST 接口，这些接口会**跳过 Kafka** 并直接执行 `AsyncTaskService` 及其关联的 Oracle 存储过程。
+            </p>
+            <div class="mb-3">
+                <label for="api-path-select" class="form-label fw-bold">1. 选择要调用的目标接口</label>
+                <select id="api-path-select" class="form-select">
+                    <!-- 选项将由 JS 动态填充 -->
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="payload-textarea" class="form-label fw-bold">2. 粘贴要发送的 JSON (必须是数组格式)</label>
+                <textarea id="payload-textarea" class="form-control" rows="10"></textarea>
+            </div>
+
+            <button id="send-btn" class="btn btn-success w-100 btn-lg">
+                <i class="bi bi-send-fill"></i> 直接调用服务
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast 容器 -->
+<div class="toast-container"></div>
+
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const apiPathSelect = document.getElementById('api-path-select');
+        const payloadTextarea = document.getElementById('payload-textarea');
+        const sendBtn = document.getElementById('send-btn');
+        const toastContainer = document.querySelector('.toast-container');
+
+        // [MODIFIED] Keys 是 API 路径, Values 是描述
+        const endpoints = {
+            'task-completion': '接口 2: 接收任务完成情况',
+            'task-score': '接口 3: 接收任务得分',
+            'fault-report': '接口 4/10: 接收故障报告',
+            'recommend-task': '接口 6: 接收推荐任务',
+            'rotational-completion': '接口 8: 接收轮保完成',
+            'rotational-score': '接口 9: 接收轮保得分',
+            'fault-analysis': '接口 11: 接收故障分析',
+            'halt-completion': '接口 14: 接收停产检修完成'
+        };
+
+        // [MODIFIED] Keys 匹配上面的 endpoints
+        const defaultPayloads = {
+            'task-completion': JSON.stringify([
+                { "taskId": "T-DIRECT-001", "completeUser": "直接测试用户", "completeDateTime": new Date().toISOString().slice(0, 19).replace('T', ' '), "inspectionActualValue": 10.5, "type": 1 }
+            ], null, 2),
+            'task-score': JSON.stringify([
+                { "taskId": "T-DIRECT-001", "score": 90, "type": 1, "rectificationContent": "直接测试：无整改" }
+            ], null, 2),
+            'fault-report': JSON.stringify([
+                { "id": 8888, "name": "直接测试故障", "equipmentCode": "EQ-DIRECT-001", "major": "电气", "faultSource": "点检异常", "reporter": "直接测试用户", "debriefingTime": new Date().toISOString().slice(0, 19).replace('T', ' '), "faultPhenomenon": "直接测试现象", "haltStartTime": new Date().toISOString().slice(0, 19).replace('T', ' ') }
+            ], null, 2),
+            'recommend-task': JSON.stringify([{"planId":"REC-DIRECT-001","equipmentCode":"EQ-SIM-001","project":"直接测试推荐","content":"检查模拟部件","standard":"模拟标准","createDateTime":"2025-11-14 10:00:00"}], null, 2),
+            'rotational-completion': JSON.stringify([{"taskId":"T-ROT-DIRECT-001","completeUser":"直接测试用户","completeDateTime":"2025-11-14 10:00:00","type":3}], null, 2),
+            'rotational-score': JSON.stringify([{"taskId":"T-ROT-DIRECT-001","type":3,"score":100}], null, 2),
+            'fault-analysis': JSON.stringify([{"id":8887,"name":"直接测试故障分析","equipmentCode":"EQ-SIM-001","attribute":"属性A","category":"分类B","faultNature":"性质C","teamName":"班组A","reporter":"直接测试用户","debriefingTime":"2025-11-14 10:00:00","equipmentPart":"模拟部位","faultPhenomenon":"模拟分析：现象","faultReason":"模拟分析：原因","measures":"模拟分析：措施","haltStartTime":"2025-11-14 08:00:00","haltEndTime":"2025-11-14 09:30:00","haltDuration":1.5,"faultSiteDesc":"模拟现场描述","faultCausesAnalysis":"直接测试原因分析"}], null, 2),
+            'halt-completion': JSON.stringify([{"taskId":"T-HALT-DIRECT-001","completeUser":"直接测试用户","completeDateTime":"2025-11-14 10:00:00"}], null, 2)
+        };
+
+        // 填充下拉框
+        for (const [apiPath, description] of Object.entries(endpoints)) {
+            const option = document.createElement('option');
+            option.value = apiPath; // e.g., 'task-completion'
+            option.textContent = `${description} (/api/direct-test/${apiPath})`;
+            apiPathSelect.appendChild(option);
+        }
+
+        // 联动更新 Textarea
+        apiPathSelect.addEventListener('change', () => {
+            const selectedPath = apiPathSelect.value;
+            payloadTextarea.value = defaultPayloads[selectedPath] || '[]';
+        });
+
+        // 触发一次 change 来加载默认值
+        apiPathSelect.dispatchEvent(new Event('change'));
+
+        // 发送按钮点击事件
+        sendBtn.addEventListener('click', async () => {
+            const apiPath = apiPathSelect.value;
+            const payload = payloadTextarea.value;
+
+            if (!payload.trim().startsWith('[')) {
+                showToast('JSON 格式错误', '必须以 [ 开头的数组格式。', 'danger');
+                return;
+            }
+
+            const originalBtnHtml = sendBtn.innerHTML;
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在调用...';
+
+            try {
+                // [MODIFIED] URL 是动态的，body 是 payload 本身
+                const response = await fetch(`/tmis/api/direct-test/${apiPath}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('jwt_token')}` // [重要] 增加认证
+                    },
+                    body: payload
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showToast('调用成功', result.message || `提交了 ${result.count} 个任务。`, 'success');
+                } else {
+                    throw new Error(result.error || result.message || '未知错误');
+                }
+
+            } catch (error) {
+                showToast('调用失败', error.message, 'danger');
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = originalBtnHtml;
+            }
+        });
+
+        // 显示 Toast
+        function showToast(title, message, type = 'success') {
+            const toastId = 'toast-' + Date.now();
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <strong>${title}</strong><br>${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { delay: 5000 });
+            toast.show();
+            toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+        }
+    });
+</script>
+
+</body>
+</html>

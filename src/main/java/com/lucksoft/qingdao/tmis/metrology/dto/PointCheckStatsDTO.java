@@ -51,7 +51,7 @@ public class PointCheckStatsDTO implements Serializable {
     public long getWeiJianShu1() { return weiJianShu1; }
     public String getZhiXingLv1() { return zhiXingLv1; }
     public long getZhengChangShu1() { return zhengChangShu1; }
-    public long getYiChangShu1() { return yiChangShu1; }
+    public long getYiChangShu1() { return yiChangShu1<0?0:yiChangShu1; }
     public long getYingJianShu2() { return yingJianShu2; }
     public long getYiJianShu2() { return yiJianShu2; }
     public long getWeiJianShu2() { return weiJianShu2; }

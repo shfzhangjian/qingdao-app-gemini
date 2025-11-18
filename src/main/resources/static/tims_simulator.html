@@ -156,7 +156,7 @@
             sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在发送...';
 
             try {
-                const response = await fetch('/api/tims/push', {
+                const response = await fetch('/tmis/api/tims/push', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ topic: topic, payload: payload })

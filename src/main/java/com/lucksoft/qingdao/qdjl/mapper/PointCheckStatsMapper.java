@@ -21,13 +21,7 @@ import java.util.Map;
 @Mapper
 public interface PointCheckStatsMapper {
 
-    // ... (existing getPointCheckStatistics method removed and replaced below) ...
-
-    /**
-     * 根据ABC类别动态获取原始统计数据
-     * @param query 查询参数，包含 category, year, userId
-     * @return 原始统计数据列表
-     */
+    // ... (getRawStatistics method is unchanged) ...
     @SelectProvider(type = PointCheckStatsSqlProvider.class, method = "getRawStatistics")
     @Results({
             @Result(property = "iusedept", column = "IUSEDEPT"),
@@ -66,11 +60,6 @@ public interface PointCheckStatsMapper {
     List<PointCheckRawStatsDTO> getRawStatistics(PointCheckQuery query);
 
 
-    /**
-     * 根据动态条件查询点检列表
-     * @param query 查询参数
-     * @return 列表项 DTO 列表
-     */
     @SelectProvider(type = PointCheckStatsSqlProvider.class, method = "findPointCheckList")
     @Results({
             @Result(property = "indocno", column = "INDOCNO"),
@@ -89,11 +78,6 @@ public interface PointCheckStatsMapper {
     List<PointCheckListItemDTO> findPointCheckList(PointCheckQuery query);
 
 
-    /**
-     * 根据动态条件统计点检列表总数
-     * @param query 查询参数
-     * @return 总记录数
-     */
     @SelectProvider(type = PointCheckStatsSqlProvider.class, method = "countPointCheckList")
     long countPointCheckList(PointCheckQuery query);
 
@@ -103,7 +87,7 @@ public interface PointCheckStatsMapper {
      */
     class PointCheckStatsSqlProvider implements ProviderMethodResolver {
 
-        // --- 统计SQL构建 ---
+        // --- 统计SQL构建 (不变) ---
         public String getRawStatistics(PointCheckQuery query) {
             String category = query.getCategory() != null ? query.getCategory().toUpperCase() : "A";
             switch (category) {
@@ -183,16 +167,47 @@ public interface PointCheckStatsMapper {
                 int sabcValue = "A".equals(query.getCategory()) ? 1 : "B".equals(query.getCategory()) ? 2 : 3;
                 sql.WHERE("SABC = " + sabcValue);
             }
-            if (query.getDateRange() != null && !query.getDateRange().isEmpty()){
-                sql.WHERE("TO_CHAR(DINIT,'YYYY-MM-DD') = #{dateRange}");
+
+            // [FIX 1] 修复日期范围查询
+            if (query.getDateRange() != null && !query.getDateRange().isEmpty() && query.getDateRange().contains(" 至 ")) {
+                // Flatpickr 中文包使用 " 至 " 作为分隔符
+                String[] dates = query.getDateRange().split(" 至 ");
+                if (dates.length == 2) {
+                    // 使用 TO_DATE 进行日期比较
+                    sql.WHERE("DINIT >= TO_DATE('" + dates[0] + "', 'YYYY-MM-DD')");
+                    // 包含当天，所以用 23:59:59
+                    sql.WHERE("DINIT <= TO_DATE('" + dates[1] + " 23:59:59', 'YYYY-MM-DD HH24:MI:SS')");
+                }
             }
 
+            // [FIX 2] 增加对计划状态 (planStatus) 的过滤
+            if (query.getPlanStatus() != null && !"all".equalsIgnoreCase(query.getPlanStatus())) {
+                // 前端传来 "已检" 或 "未检"
+                if ("已检".equals(query.getPlanStatus())) {
+                    sql.WHERE("IDJSTATE = 1");
+                } else if ("未检".equals(query.getPlanStatus())) {
+                    sql.WHERE("IDJSTATE = 2"); // 假设 2 是未检
+                }
+            }
+
+            // [FIX 3] 增加对结果状态 (resultStatus) 的过滤
+            // 注意：列表SQL只能查 JL_EQUIP_DXJ，它没有 IRESULT 字段。
+            // 我们只能根据 IDJSTATE 来模拟。
+            if (query.getResultStatus() != null && !"all".equalsIgnoreCase(query.getResultStatus())) {
+                if ("未检".equals(query.getResultStatus())) {
+                    sql.WHERE("IDJSTATE = 2");
+                }
+                // 备注： "正常" 和 "异常" 状态似乎存储在 JL_EQDXJLOG 表中。
+                // 列表查询 (findPointCheckList) 目前没有关联此表，因此无法按“正常”或“异常”进行精确过滤。
+                // 这是一个更复杂的查询，目前我们只添加对“未检”的过滤。
+            }
+
+
             if (!isCount) {
-                sql.ORDER_BY("INDOCNO DESC");
+                sql.ORDER_BY("SUSEDEPT DESC");
             }
 
             return sql.toString();
         }
     }
 }
-

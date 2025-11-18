@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSPM-TMIS 开发调试面板</title>
+    <!-- 引用项目已有的 Bootstrap 库 -->
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa; /* 亮色背景 */
+        }
+        .card-icon {
+            font-size: 2.5rem;
+        }
+        .card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container my-2">
+
+    <!-- 1. 标题栏 -->
+    <div class="text-center mb-5">
+        <i class="bi bi-tools" style="font-size: 3rem; color: #0d6efd;"></i>
+        <!-- [修改] 调整标题和字号 -->
+        <h1 class="display-10">青岛卷烟厂TSPM-TMIS开发调试面板</h1>
+        <p class="lead text-muted">所有用于开发、测试和配置的工具页面 (调试模式)</p>
+    </div>
+
+    <!-- 2. 工具卡片网格 -->
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+
+        <!-- 卡片 1: Kafka/WS 日志监控 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-terminal-split card-icon text-primary mb-3"></i>
+                    <h5 class="card-title">Kafka 日志监控</h5>
+                    <!-- [修改] 简化描述 -->
+                    <p class="card-text text-muted small">实时查看推送和接收的Kafka消息日志。</p>
+                    <a href="simulate.html" class="btn btn-primary" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 卡片 2: Oracle API 推送模拟器 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-cloud-upload card-icon text-info mb-3"></i>
+                    <h5 class="card-title">Oracle API 推送模拟器</h5>
+                    <!-- [修改] 简化描述 -->
+                    <p class="card-text text-muted small">Oracle数据库向后端接口发送 `保养事件` 触发推送。</p>
+                    <a href="oracle_test.html" class="btn btn-info text-white" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 卡片 3: TIMS Kafka 模拟器 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-broadcast card-icon text-warning mb-3"></i>
+                    <h5 class="card-title">TIMS Kafka 模拟器</h5>
+                    <!-- [修改] 简化描述 -->
+                    <p class="card-text text-muted small">模拟 TIMS 系统向 Kafka 主题发送消息，测试消费者逻辑。</p>
+                    <a href="tims_simulator.html" class="btn btn-warning" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 卡片 4: 直接服务测试 (绕过Kafka) -->
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-braces card-icon text-success mb-3"></i>
+                    <h5 class="card-title">直接服务测试 (绕过Kafka)</h5>
+                    <!-- [修改] 简化描述 -->
+                    <p class="card-text text-muted small">直接调用后端的测试接口，测试异步服务和 Oracle 存储过程。</p>
+                    <a href="direct_test.html" class="btn btn-success" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 卡片 5: 动态定时任务配置 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-clock-history card-icon text-secondary mb-3"></i>
+                    <h5 class="card-title">动态定时任务配置</h5>
+                    <!-- [修改] 简化描述 -->
+                    <p class="card-text text-muted small">修改并热重载 `time.json`，用于配置定时推送任务的 Cron 表达式。</p>
+                    <a href="schedule_config.html" class="btn btn-secondary" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 卡片 6: IP 白名单配置 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-shield-check card-icon text-dark mb-3"></i>
+                    <h5 class="card-title">IP 白名单配置</h5>
+                    <!-- [修改] 简化描述 -->
+                    <p class="card-text text-muted small">配置 `ip-whitelist.json`，用于IP自动登录功能。</p>
+                    <a href="whitelist-config.html" class="btn btn-dark" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 卡片 7: SSO Token 生成工具 -->
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-key-fill card-icon text-danger mb-3"></i>
+                    <h5 class="card-title">SSO Token 生成工具</h5>
+                    <!-- [修改] 简化描述 -->
+                    <p class="card-text text-muted small">通过用户名密码登录，生成一个用于单点登录跳转的带 Token 的 URL。</p>
+                    <a href="gen_token.html" class="btn btn-danger" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+    </div> <!-- /row -->
+
+    <!-- 3. 页脚链接 -->
+    <div class="text-center text-muted mt-5">
+        <p>主应用入口: <a href="index.html">index.html</a> | 登录页: <a href="login.html">login.html</a></p>
+    </div>
+
+</div> <!-- /container -->
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

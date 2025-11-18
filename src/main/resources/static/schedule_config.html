@@ -49,11 +49,11 @@
 <div class="container">
     <div class="card shadow-sm">
         <div class="card-header">
-            <h4 class="mb-0"><i class="bi bi-clock-history"></i> 动态定时任务配置 (time.json)</h4>
+            <h4 class="mb-0"><i class="bi bi-clock-history"></i> 动态定时任务配置</h4>
         </div>
         <div class="card-body">
             <p class="card-text text-muted">
-                管理包机信息定时推送 (`UserEquipmentPushJob`) 的 Cron 表达式。
+                管理包机信息定时推送  的 Cron 表达式。
                 <br>
                 Cron 格式: `秒 分 时 日 月 周` (例如: `0 0 1 * * ?` 表示每天凌晨1点)
             </p>
@@ -107,7 +107,7 @@
         const configForm = document.getElementById('config-form');
         const toastContainer = document.querySelector('.toast-container');
 
-        const API_URL = '/api/schedule/config';
+        const API_URL = '/tmis/api/schedule/config';
 
         /**
          * 获取 JWT Token

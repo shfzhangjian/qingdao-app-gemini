@@ -43,6 +43,10 @@ public class SecurityConfig {
                         .antMatchers("/api/push/**").permitAll()
                         .antMatchers("/api/oracle/task-status/**").permitAll()
                         .antMatchers("/api/schedule/**").permitAll()
+
+                                .antMatchers("/test_index.html").permitAll()
+                                .antMatchers("/direct_test.html").permitAll() // [新] 允许访问新的测试页面
+                        .antMatchers("/api/direct-test/**").permitAll() // [新] 允许访问新的测试API
                         // Existing public endpoints
                         .antMatchers("/api/maintainbook/**","/api/oracle/**","/oracle_test.html", "/api/tspm/simulate/**","/api/tspm/generate-json/**","/api/tspm/received-data/**", "/api/tspm/logs").permitAll()
                         // Secure new kanban endpoints

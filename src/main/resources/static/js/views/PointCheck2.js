@@ -4,7 +4,8 @@
  * - 采用了全新的单行、左对齐、胶囊(Pills)风格Tab的UI布局。
  * - 彻底修复了列表视图下反复出现的“无限加载”Bug。
  * 版本变动:
- * v4.3.0 - 2025-11-17: [修复] 增加下钻时对上半年/下半年的判断，自动更新列表视图的日期范围。
+ * v4.2.0 - 2025-10-15: [修复] 重构了交叉高亮逻辑，使用事件委托模式解决了下钻返回后事件丢失的问题。
+ * v4.3.0 - 2025-11-16: [修复] 修复了在“下钻”操作时因竞态条件导致的 'updateView of null' 错误。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import DatePicker from '../components/DatePicker.js';
@@ -19,12 +20,10 @@ export default class PointCheck {
         this.dataTable = null;
         this.datePicker = null;
 
-        // [修改] 默认日期范围改为读取当前年
-        const currentYear = new Date().getFullYear();
         this.currentState = {
             viewMode: 'statistics',
             category: 'all',
-            dateRange: `${currentYear}-01-01 至 ${currentYear}-12-31`, // 默认当年
+            dateRange: '2025-01-01 to 2025-12-31',
             department: '',
             planStatus: 'all',
             resultStatus: 'all'
@@ -51,13 +50,6 @@ export default class PointCheck {
     }
 
     _renderHeader() {
-        // ... (省略部分代码)
-        // [修改] 确保 flatpickr 实例能正确销毁和重建
-        if (this.datePicker && this.datePicker.instance) {
-            this.datePicker.instance.destroy();
-            this.datePicker = null;
-        }
-
         const { viewMode, category, department, planStatus, resultStatus } = this.currentState;
         const isListMode = viewMode === 'list';
         const listFiltersVisibility = isListMode ? '' : 'd-none';
@@ -99,34 +91,38 @@ export default class PointCheck {
             </div>
         `;
 
-        // [修改] 重新初始化 DatePicker
+        if (this.datePicker) this.datePicker.destroy();
         const dateInput = this.headerContainer.querySelector('#point-check-daterange');
-        if (dateInput) {
-            this.datePicker = new DatePicker(dateInput, {
-                mode: 'range',
-                defaultDate: this.currentState.dateRange.split(' 至 '),
-                onChange: (selectedDates, dateStr) => {
-                    if (selectedDates.length === 2) {
-                        this.currentState.dateRange = dateStr;
-                    }
-                }
-            });
-        }
+        this.datePicker = new DatePicker(dateInput, {
+            mode: 'range',
+            defaultDate: this.currentState.dateRange.split(' to '),
+            onChange: (selectedDates, dateStr) => { if (selectedDates.length === 2) this.currentState.dateRange = dateStr; }
+        });
     }
 
+    /**
+     * [修改] 简化 _updateView，只调用 _loadData。
+     * _loadData 现在将全权负责渲染。
+     */
     _updateView() {
-        if (this.currentState.viewMode === 'list') {
-            this._renderListViewSkeleton();
-        }
         this._loadData();
     }
 
     async _loadData() {
         const { viewMode } = this.currentState;
 
-        if (viewMode === 'list' && this.dataTable) {
+        // [修改] 统一在这里处理加载状态
+        if (viewMode === 'list') {
+            // 如果是列表模式，但 dataTable 还不存在，先渲染骨架
+            if (!this.dataTable) {
+                this._renderListViewSkeleton();
+            }
             this.dataTable.toggleLoading(true);
-        } else if (viewMode === 'statistics') {
+        } else {
+            // 如果是统计模式，销毁 dataTable 实例并显示 spinner
+            if (this.dataTable) {
+                this.dataTable = null;
+            }
             this.contentContainer.innerHTML = `<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border" role="status"></div></div>`;
         }
 
@@ -135,19 +131,12 @@ export default class PointCheck {
 
             if (viewMode === 'statistics') {
                 const statsData = await getPointCheckStatistics(baseParams);
-
-                // [RACE CONDITION FIX]
-                // 检查：如果在等待数据时，用户已经切换回了列表视图，则不要渲染统计数据
-                if (this.currentState.viewMode === 'statistics') {
-                    this._renderStatisticsView(statsData);
+                this._renderStatisticsView(statsData);
+            } else {
+                // [修改] 确保 dataTable 实例在加载数据前一定存在
+                if (!this.dataTable) {
+                    this._renderListViewSkeleton();
                 }
-
-            } else { // viewMode === 'list'
-                if (!this.dataTable) this._renderListViewSkeleton();
-
-                // [RACE CONDITION FIX]
-                // 必须在 await 之前，用一个局部变量保存当前的 dataTable 实例
-                const currentDataTableInstance = this.dataTable;
 
                 const tableState = this.dataTable.state;
                 const params = {
@@ -160,33 +149,19 @@ export default class PointCheck {
                     sortBy: tableState.sortBy,
                     sortOrder: tableState.sortOrder
                 };
-
                 const pageResult = await getPointCheckList(params);
 
-                // [RACE CONDITION FIX]
-                // 检查：
-                // 1. this.currentState.viewMode 是否仍然是 'list'
-                // 2. this.dataTable (当前实例) 是否等于我们发起请求时的实例 (currentDataTableInstance)
-                // 3. 实例是否不为 null
-                // 如果用户在 await 期间点击了 "统计" 标签，this.dataTable 会变为 null，导致此检查失败，从而安全地跳过 updateView。
-                if (this.currentState.viewMode === 'list' && this.dataTable && this.dataTable === currentDataTableInstance) {
+                // [修改] 增加一个检查，万一在 await 期间 this.dataTable 被切换回 'statistics' 销毁了
+                if (this.dataTable && this.currentState.viewMode === 'list') {
                     this.dataTable.updateView(pageResult);
-                } else {
-                    console.warn("PointCheck: Data loaded, but view has changed. Skipping updateView.");
                 }
             }
         } catch (error) {
-            // [RACE CONDITION FIX]
-            // 只有在当前视图仍然是请求失败的视图时，才显示错误
-            if (this.currentState.viewMode === viewMode) {
-                console.error("加载点检数据失败:", error);
-                this.contentContainer.innerHTML = `<div class="alert alert-danger">数据加载失败: ${error.message}</div>`;
-            } else {
-                console.warn("A background data load failed, but view has changed. Ignoring error.", error);
-            }
+            console.error("加载点检数据失败:", error);
+            // [修改] 修复了这里的错误消息，现在它会显示真正的 API 错误
+            this.contentContainer.innerHTML = `<div class="alert alert-danger">数据加载失败: ${error.message}</div>`;
         } finally {
-            // [RACE CONDITION FIX]
-            // 只有在 dataTable 实例仍然存在时才隐藏加载动画
+            // [修改] 确保 dataTable 存在且是列表模式再关闭加载
             if (viewMode === 'list' && this.dataTable) {
                 this.dataTable.toggleLoading(false);
             }
@@ -201,22 +176,18 @@ export default class PointCheck {
         const tableRows = data.map(row => `
             <tr>
                 <td class="text-start ps-3">${row.dept}</td>
-                
-                <!-- [修改] 为上半年的所有链接添加 data-half="h1" -->
-                <td><a href="#" class="drill-down" data-half="h1" data-department="${row.dept}" data-plan-status="all">[${row.yingJianShu1}]</a></td>
-                <td><a href="#" class="drill-down" data-half="h1" data-department="${row.dept}" data-plan-status="已检">[${row.yiJianShu1}]</a></td>
-                <td><a href="#" class="drill-down" data-half="h1" data-department="${row.dept}" data-plan-status="未检">[${row.weiJianShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="all">[${row.yingJianShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="已检">[${row.yiJianShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="未检">[${row.weiJianShu1}]</a></td>
                 <td>${row.zhiXingLv1}</td>
-                <td><a href="#" class="drill-down" data-half="h1" data-department="${row.dept}" data-result-status="正常">[${row.zhengChangShu1}]</a></td>
-                <td><a href="#" class="drill-down" data-half="h1" data-department="${row.dept}" data-result-status="异常">[${row.yiChangShu1}]</a></td>
-
-                <!-- [修改] 为下半年的所有链接添加 data-half="h2" -->
-                <td><a href="#" class="drill-down" data-half="h2" data-department="${row.dept}" data-plan-status="all">[${row.yingJianShu2}]</a></td>
-                <td><a href="#" class="drill-down" data-half="h2" data-department="${row.dept}" data-plan-status="已检">[${row.yiJianShu2}]</a></td>
-                <td><a href="#" class="drill-down" data-half="h2" data-department="${row.dept}" data-plan-status="未检">[${row.weiJianShu2}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-result-status="正常">[${row.zhengChangShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-result-status="异常">[${row.yiChangShu1}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="all">[${row.yingJianShu2}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="已检">[${row.yiJianShu2}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-plan-status="未检">[${row.weiJianShu2}]</a></td>
                 <td>${row.zhiXingLv2}</td>
-                <td><a href="#" class="drill-down" data-half="h2" data-department="${row.dept}" data-result-status="正常">[${row.zhengChangShu2}]</a></td>
-                <td><a href="#" class="drill-down" data-half="h2" data-department="${row.dept}" data-result-status="异常">[${row.yiChangShu2}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-result-status="正常">[${row.zhengChangShu2}]</a></td>
+                <td><a href="#" class="drill-down" data-department="${row.dept}" data-result-status="异常">[${row.yiChangShu2}]</a></td>
             </tr>
         `).join('');
 
@@ -234,7 +205,7 @@ export default class PointCheck {
     }
 
     _renderListViewSkeleton() {
-        if (this.dataTable) return;
+        if (this.dataTable) return; // 如果实例已存在，不重新渲染
         const columns = [
             { key: 'department', title: '部门', visible: true, sortable: true },
             { key: 'deviceName', title: '设备名称', visible: true, sortable: true },
@@ -247,12 +218,20 @@ export default class PointCheck {
             columns, data: [], actions: [],
             options: {
                 uniformRowHeight: true,
-                configurable: false, // [修改] 列表视图的配置列按钮在Header中，所以这里禁用组件自带的
+                configurable: false,
                 storageKey: 'pointCheckListTable',
                 selectable: 'multiple'
             }
         });
         this.dataTable.render(this.contentContainer);
+
+        // [重要] 在创建 dataTable 时，必须立即附加 queryChange 监听器
+        // 否则切换到列表视图后分页会失效
+        this.contentContainer.addEventListener('queryChange', () => {
+            if (this.currentState.viewMode === 'list') {
+                this._loadData();
+            }
+        });
     }
 
     _attachEventListeners() {
@@ -262,20 +241,14 @@ export default class PointCheck {
             if (!button) return;
 
             if (button.dataset.view) {
+                // [修改] 切换视图时，只更新状态并调用 _loadData
+                // 不再手动设置 this.dataTable = null
                 this.currentState.viewMode = button.dataset.view;
-                this.dataTable = null;
-                // [修改] 切换视图时，重置日期为全年
-                const year = this.currentState.dateRange.substring(0, 4);
-                this.currentState.dateRange = `${year}-01-01 至 ${year}-12-31`;
-
+                // this.dataTable = null; // <-- [已移除]
                 this._renderHeader();
-                this._updateView();
+                this._loadData(); // <-- [修改] 直接调用 _loadData
             } else if (button.id === 'query-btn') {
                 if (this.dataTable) this.dataTable.state.pageNum = 1;
-                // [修改] 查询时，从新渲染的 datePicker 实例获取值
-                if (this.datePicker) {
-                    this.currentState.dateRange = this.datePicker.instance.input.value;
-                }
                 this.currentState.category = this.headerContainer.querySelector('#category-filter').value;
                 const deptInput = this.headerContainer.querySelector('#department-filter');
                 if (deptInput) this.currentState.department = deptInput.value;
@@ -314,33 +287,21 @@ export default class PointCheck {
             const drillDownLink = e.target.closest('a.drill-down');
             if (drillDownLink) {
                 e.preventDefault();
-                e.stopPropagation(); // 阻止 app.js 的全局路由
-
-                // [修改] 核心逻辑：根据 data-half 更新日期范围
-                const half = drillDownLink.dataset.half;
-                const year = this.currentState.dateRange.substring(0, 4); // 提取当前年份
-
-                if (half === 'h1') {
-                    // 点击了上半年
-                    this.currentState.dateRange = `${year}-01-01 至 ${year}-06-30`;
-                } else if (half === 'h2') {
-                    // 点击了下半年
-                    this.currentState.dateRange = `${year}-07-01 至 ${year}-12-31`;
-                }
-                // 如果没有 data-half 属性（例如点击部门名称），则日期范围保持不变（全年）
-
+                e.stopPropagation();
                 this.currentState.department = drillDownLink.dataset.department || '';
                 this.currentState.planStatus = drillDownLink.dataset.planStatus || 'all';
                 this.currentState.resultStatus = drillDownLink.dataset.resultStatus || 'all';
                 this.currentState.viewMode = 'list';
-                this.dataTable = null;
 
-                this._renderHeader(); // [关键] 使用更新后的 currentState 重新渲染头部
-                this._updateView();
+                // [修改] 不再设置 this.dataTable = null
+                // this.dataTable = null; // <-- [已移除]
+
+                this._renderHeader();
+                this._loadData(); // <-- [修改] 直接调用 _loadData
             }
         });
 
-        // [核心修复] 使用事件委托处理统计表格的交叉高亮
+        // [修改] 交叉高亮事件监听器保持不变
         this.contentContainer.addEventListener('mouseover', e => {
             if (this.currentState.viewMode !== 'statistics') return;
             const cell = e.target.closest('td');
@@ -375,11 +336,7 @@ export default class PointCheck {
             highlightedCells.forEach(c => c.classList.remove('cell-highlight'));
         });
 
-        // DataTable组件的自定义事件
-        this.contentContainer.addEventListener('queryChange', () => {
-            if (this.currentState.viewMode === 'list') {
-                this._loadData();
-            }
-        });
+        // [修改] queryChange 监听器已移至 _renderListViewSkeleton
+        // 这样可以确保在 dataTable 实例被创建时，监听器才被附加
     }
 }

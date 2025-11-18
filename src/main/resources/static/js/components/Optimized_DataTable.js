@@ -68,6 +68,7 @@ export default class DataTable {
             const pageLink = e.target.closest('.page-link[data-page]');
             if (pageLink && !pageLink.parentElement.classList.contains('disabled')) {
                 e.preventDefault();
+                e.stopPropagation();
                 this.state.pageNum = parseInt(pageLink.dataset.page, 10);
                 this.container.dispatchEvent(new CustomEvent('queryChange', { detail: { pageNum: this.state.pageNum }, bubbles: true }));
             }
