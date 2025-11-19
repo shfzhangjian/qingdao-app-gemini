@@ -4,6 +4,7 @@ import com.lucksoft.qingdao.tmis.metrology.dto.MetrologyTaskDTO;
 import com.lucksoft.qingdao.tmis.metrology.dto.TaskQuery;
 import com.lucksoft.qingdao.tmis.metrology.dto.UpdateTaskRequestDTO;
 import org.apache.ibatis.annotations.*;
+import org.apache.ibatis.mapping.StatementType;
 
 import java.util.List;
 
@@ -79,5 +80,38 @@ public interface MetrologyTaskMapper {
             "</foreach>" +
             "</script>")
     int updateTask(@Param("req") UpdateTaskRequestDTO req);
-}
 
+    /**
+     * 查询指定列的去重值，用于前端下拉补全。
+     * 注意：columnName 由 Service 层校验，防止 SQL 注入。
+     */
+    @Select("SELECT DISTINCT ${columnName} FROM V_JL_EQUIP_DXJ WHERE ${columnName} IS NOT NULL ORDER BY NLSSORT(${columnName}, 'NLS_SORT=SCHINESE_PINYIN_M')")
+    List<String> findDistinctValues(@Param("columnName") String columnName);
+
+    /**
+     * [新增] 调用 tmis.update_jl_task 存储过程。
+     * 假设存储过程签名为:
+     * PROCEDURE update_jl_task(
+     * p_ids_str IN VARCHAR2,      -- 逗号分隔的ID字符串
+     * p_result  IN VARCHAR2,      -- 检查结果 (正常/异常)
+     * p_remark  IN VARCHAR2,      -- 备注/异常描述
+     * p_loginid IN VARCHAR2,      -- 操作员账号
+     * p_username IN VARCHAR2      -- 操作员姓名
+     * )
+     */
+    @Update("{CALL tmis.update_jl_task(" +
+            "#{idsStr, jdbcType=VARCHAR, mode=IN}, " +
+            "#{result, jdbcType=VARCHAR, mode=IN}, " +
+            "#{remark, jdbcType=VARCHAR, mode=IN}, " +
+            "#{loginId, jdbcType=VARCHAR, mode=IN}, " +
+            "#{userName, jdbcType=VARCHAR, mode=IN}" +
+            ")}")
+    @Options(statementType = StatementType.CALLABLE)
+    void callUpdateJlTaskProcedure(
+            @Param("idsStr") String idsStr,
+            @Param("result") String result,
+            @Param("remark") String remark,
+            @Param("loginId") String loginId,
+            @Param("userName") String userName
+    );
+}

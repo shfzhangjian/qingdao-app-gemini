@@ -1,5 +1,6 @@
 package com.lucksoft.qingdao.tmis.metrology.controller;
 
+import com.github.pagehelper.PageHelper;
 import com.lucksoft.qingdao.system.util.AuthUtil;
 import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckQuery;
 import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckStatsDTO;
@@ -51,7 +52,7 @@ public class PointCheckStatsController {
             log.warn("无法获取当前用户信息，查询将不过滤用户。");
         }
 
-
+        PageHelper.clearPage();
         List<PointCheckStatsDTO> stats = pointCheckStatsService.getStatistics(query);
         return ResponseEntity.ok(stats);
     }

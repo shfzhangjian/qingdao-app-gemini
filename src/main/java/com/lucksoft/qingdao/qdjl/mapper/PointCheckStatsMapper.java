@@ -21,7 +21,11 @@ import java.util.Map;
 @Mapper
 public interface PointCheckStatsMapper {
 
-    // ... (getRawStatistics method is unchanged) ...
+    /**
+     * [修复 1]
+     * PageHelper 在执行此方法前，会先寻找 getRawStatistics_COUNT 方法。
+     * 我们不再需要 @Page(count=false) 注解。
+     */
     @SelectProvider(type = PointCheckStatsSqlProvider.class, method = "getRawStatistics")
     @Results({
             @Result(property = "iusedept", column = "IUSEDEPT"),
@@ -59,7 +63,21 @@ public interface PointCheckStatsMapper {
     })
     List<PointCheckRawStatsDTO> getRawStatistics(PointCheckQuery query);
 
+    /**
+     * [修复 2]
+     * 新增此方法，方法名必须是 (原方法名 + "_COUNT")。
+     * PageHelper (1.x) 会自动找到并执行这个方法，而不是它自己生成COUNT SQL。
+     * 这个SQL查询的是统计结果的真实行数（即部门数），速度极快。
+     */
+    @SelectProvider(type = PointCheckStatsSqlProvider.class, method = "getRawStatisticsCount")
+    long getRawStatistics_COUNT(PointCheckQuery query);
 
+
+    /**
+     * 根据动态条件查询点检列表
+     * @param query 查询参数
+     * @return 列表项 DTO 列表
+     */
     @SelectProvider(type = PointCheckStatsSqlProvider.class, method = "findPointCheckList")
     @Results({
             @Result(property = "indocno", column = "INDOCNO"),
@@ -78,6 +96,11 @@ public interface PointCheckStatsMapper {
     List<PointCheckListItemDTO> findPointCheckList(PointCheckQuery query);
 
 
+    /**
+     * 根据动态条件统计点检列表总数
+     * @param query 查询参数
+     * @return 总记录数
+     */
     @SelectProvider(type = PointCheckStatsSqlProvider.class, method = "countPointCheckList")
     long countPointCheckList(PointCheckQuery query);
 
@@ -87,7 +110,7 @@ public interface PointCheckStatsMapper {
      */
     class PointCheckStatsSqlProvider implements ProviderMethodResolver {
 
-        // --- 统计SQL构建 (不变) ---
+        // --- 统计SQL构建 ---
         public String getRawStatistics(PointCheckQuery query) {
             String category = query.getCategory() != null ? query.getCategory().toUpperCase() : "A";
             switch (category) {
@@ -123,14 +146,37 @@ public interface PointCheckStatsMapper {
             sql.SELECT(selects.toString());
             sql.FROM("JL_EQUIP V");
             sql.WHERE("V.istate = 1", "NVL(V.IDEL,0) = 0", "nvl(length(V.IUSEDEPT),0) > 0");
-            // 注意: 此处的用户权限过滤逻辑需要根据您的实际USERS表和权限设计进行调整
-            // sql.WHERE("EXISTS (SELECT 1 FROM USERS B WHERE B.ID=#{userId} AND INSTR(decode('', 'true', ','||B.IDEPTSEE||',', '', ','||B.DEP_SCOPE_ID||','), ','||V.IUSEDEPT||',') > 0)");
+
+            // [修复 3] 确保统计SQL也包含用户ID过滤
+            if (userId != null) {
+                // 注意: 此处的用户权限过滤逻辑需要根据您的实际USERS表和权限设计进行调整
+                sql.WHERE("EXISTS (SELECT 1 FROM USERS B WHERE B.ID=#{userId} AND INSTR(decode('', 'true', ','||B.IDEPTSEE||',', '', ','||B.DEP_SCOPE_ID||','), ','||V.IUSEDEPT||',') > 0)");
+            }
 
             return "SELECT A.* FROM (" + sql.toString() + ") A ORDER BY A.IUSEDEPT";
         }
 
+        /**
+         * [修复 4]
+         * 为 getRawStatistics_COUNT 接口提供一个快速的、替换的 COUNT SQL。
+         * 这个SQL只计算符合条件的部门数。
+         */
+        public String getRawStatisticsCount(PointCheckQuery query) {
+            SQL sql = new SQL();
+            sql.SELECT("COUNT(DISTINCT V.IUSEDEPT)");
+            sql.FROM("JL_EQUIP V");
+            sql.WHERE("V.istate = 1", "NVL(V.IDEL,0) = 0", "nvl(length(V.IUSEDEPT),0) > 0");
 
-        // --- 列表SQL构建 ---
+            // [修复 5] 确保 COUNT SQL 也包含用户ID过滤
+            if (query.getUserId() != null) {
+                sql.WHERE("EXISTS (SELECT 1 FROM USERS B WHERE B.ID=#{userId} AND INSTR(decode('', 'true', ','||B.IDEPTSEE||',', '', ','||B.DEP_SCOPE_ID||','), ','||V.IUSEDEPT||',') > 0)");
+            }
+
+            return sql.toString();
+        }
+
+
+        // --- 列表SQL构建 (已在上一轮修复) ---
         public String findPointCheckList(PointCheckQuery query) {
             return buildListSql(query, false);
         }
@@ -204,7 +250,7 @@ public interface PointCheckStatsMapper {
 
 
             if (!isCount) {
-                sql.ORDER_BY("SUSEDEPT DESC");
+                sql.ORDER_BY("INDOCNO DESC");
             }
 
             return sql.toString();

@@ -5,6 +5,7 @@
  * v1.8.0 - 2025-11-14: [新增] IP白名单自动登录逻辑
  * v1.9.0 - 2025-11-15: [修改] 切换到 HTML5 History 模式路由
  * v1.9.1 - 2025-11-16: [修复] 修复了 IP 登录后白屏的问题
+ * v1.9.2 - 2025-11-18: [修复] 增加 isAuthReady 状态管理，修复403/加载竞态条件
  */
 import menuConfig from './config/menu.js';
 import Breadcrumb from './components/Breadcrumb.js';
@@ -23,6 +24,9 @@ class App {
         this.viewInstances = new Map();
         this.breadcrumb = new Breadcrumb();
         this.themeToggler = document.getElementById('theme-toggler');
+
+        this.isAuthReady = false; // [NEW] 1. 添加认证就绪状态
+        this.pendingPath = null; // [NEW] 2. 存储因等待认证而挂起的路径
 
         this.init(); // init 现在是 async
     }
@@ -77,7 +81,7 @@ class App {
             }
         }
 
-        // 7. 继续执行标准的应用初始化
+        // [MODIFIED] 3. init() 现在只调用 continueInit，不直接调用 handleRouteChange
         this.continueInit(view, theme, ipLoginUser);
     }
 
@@ -107,13 +111,17 @@ class App {
         } else {
             this.renderTopNav(); // 创建 Header DOM
             this.sidebarToggle.addEventListener('click', () => this.toggleSidebar());
-            this._attachHeaderListeners(preloadedUser); // 附加监听器并加载用户信息
+            // [MODIFIED] 4. _attachHeaderListeners 现在是 async
+            //    它负责获取用户信息并设置 isAuthReady = true
+            this._attachHeaderListeners(preloadedUser);
         }
 
-        // [修改] 监听 'popstate' (浏览器前进/后退)
-        window.addEventListener('popstate', () => this.handleRouteChange());
+        // [MODIFIED] 5. 路由监听器现在只设置挂起路径，不立即执行
+        window.addEventListener('popstate', () => {
+            this.pendingPath = window.location.pathname; // 存储路径
+            this._processRouteQueue(); // 尝试处理
+        });
 
-        // [修改] 监听全局点击事件，以拦截 <a href> 导航
         document.addEventListener('click', (e) => {
             const link = e.target.closest('a');
 
@@ -125,8 +133,9 @@ class App {
                 // 使用 History API 更新 URL
                 window.history.pushState(null, '', link.href);
 
-                // 手动触发路由处理
-                this.handleRouteChange();
+                // [MODIFIED] 6. 导航点击也只设置挂起路径
+                this.pendingPath = link.pathname; // 存储路径
+                this._processRouteQueue(); // 尝试处理
             }
         });
 
@@ -136,16 +145,29 @@ class App {
             this.updateUserInfo(e.detail.user);
         });
 
-        // [关键修复]
-        // 无论IP登录是否发生，都在 continueInit 的末尾
-        // 立即调用 handleRouteChange() 来解析当前 URL 并渲染视图。
-        this.handleRouteChange();
+        // [MODIFIED] 7. 初始加载时，设置挂起路径
+        this.pendingPath = window.location.pathname;
+        // _processRouteQueue() 会在 _attachHeaderListeners 认证成功后被调用
+        // (不要在这里调用 handleRouteChange)
     }
 
     /**
-     * [修改] 接收 preloadedUser，避免重复发起 /info 请求
+     * [NEW] 8. 尝试处理挂起的路由
+     * 只有在 isAuthReady 为 true 时才真正执行路由
      */
-    _attachHeaderListeners(preloadedUser = null) {
+    _processRouteQueue() {
+        if (this.isAuthReady && this.pendingPath) {
+            const path_to_load = this.pendingPath;
+            this.pendingPath = null; // 清空队列
+            this.handleRouteChange(path_to_load); // 真正执行路由
+        }
+        // 如果认证未就绪, 则什么也不做, 等待 _attachHeaderListeners 完成
+    }
+
+    /**
+     * [MODIFIED] 9. 修改 _attachHeaderListeners 为 async 并管理 AuthReady 状态
+     */
+    async _attachHeaderListeners(preloadedUser = null) {
         // Theme Toggler
         this.themeToggler.addEventListener('click', (e) => {
             e.preventDefault();
@@ -169,32 +191,40 @@ class App {
         }
 
         // [修改] 用户信息加载逻辑
-        if (preloadedUser) {
-            // 1. 如果通过 IP 登录成功，直接使用该用户信息更新UI
-            console.log("[App] 使用IP登录的预加载用户信息更新UI。");
-            this.updateUserInfo(preloadedUser);
-        } else {
-            // 2. 否则，按原流程检查 localStorage 中是否有 token
-            const token = localStorage.getItem('jwt_token');
-            if (token) {
-                // 3. 如果有 token，异步加载 /info
-                (async () => {
-                    try {
-                        console.log("[App] 检测到现有 Token，正在获取用户信息...");
-                        // 动态导入 apiFetch
-                        const api = (await import('./services/api.js')).apiFetch;
-                        const userInfo = await api('api/system/auth/info');
-                        if (userInfo && userInfo.user) {
-                            this.updateUserInfo(userInfo.user);
-                            // 确保 localStorage 与 token 同步
-                            localStorage.setItem('current_loginid', userInfo.user.loginid);
-                        }
-                    } catch (error) {
-                        console.error("加载用户信息失败:", error);
-                        // api.js 中的 AuthManager 会自动处理 401/403 错误并弹出登录框
+        try {
+            if (preloadedUser) {
+                // 1. 如果通过 IP 登录成功，直接使用该用户信息更新UI
+                console.log("[App] 使用IP登录的预加载用户信息更新UI。");
+                this.updateUserInfo(preloadedUser);
+            } else {
+                // 2. 否则，按原流程检查 localStorage 中是否有 token
+                const token = localStorage.getItem('jwt_token');
+                if (token) {
+                    // 3. 如果有 token，异步加载 /info
+
+                    console.log("[App] 检测到现有 Token，正在获取用户信息...");
+                    // 动态导入 apiFetch
+                    const api = (await import('./services/api.js')).apiFetch;
+                    const userInfo = await api('api/system/auth/info');
+                    if (userInfo && userInfo.user) {
+                        this.updateUserInfo(userInfo.user);
+                        // 确保 localStorage 与 token 同步
+                        localStorage.setItem('current_loginid', userInfo.user.loginid);
                     }
-                })();
+                } else {
+                    // [NEW] 即使没有 token, 认证也算"就绪" (未登录状态)
+                    console.log("[App] 未检测到 Token, 认证就绪 (未登录)。");
+                }
             }
+        } catch (error) {
+            console.error("加载用户信息失败:", error);
+            // api.js 中的 AuthManager 会自动处理 401/403 错误并弹出登录框
+            // 即使加载失败 (例如401), 认证也算"就绪" (AuthManager会处理)
+        } finally {
+            // [NEW] 10. 无论成功与否, 标记认证已就绪
+            this.isAuthReady = true;
+            // [NEW] 11. 尝试处理在等待认证时挂起的路由
+            this._processRouteQueue();
         }
     }
 
@@ -278,7 +308,9 @@ class App {
                 if (firstSubMenu && firstSubMenu.url) {
                     // [修改] 使用 History API 导航，而不是设置 hash
                     window.history.pushState(null, '', firstSubMenu.url);
-                    this.handleRouteChange();
+                    // [MODIFIED] 导航点击也只设置挂起路径
+                    this.pendingPath = firstSubMenu.url; // 存储路径
+                    this._processRouteQueue(); // 尝试处理
                 }
             }
         });
@@ -326,14 +358,15 @@ class App {
         topMenuItem.children.forEach(child => this.sidebarMenu.appendChild(createMenuItem(child)));
     }
 
-    async handleRouteChange() {
+    /**
+     * [MODIFIED] 12. handleRouteChange 现在接收一个 path 参数
+     */
+    async handleRouteChange(path) {
         const defaultRoute = this.findFirstLeaf(this.menuConfig[0]);
 
-        // [修改] 从 window.location.pathname 读取路由
-        let path = window.location.pathname; // 例如: /tmis/performance_opt/metrology_mgmt/tasks
-
-        // [修改] 检查路径是否是 /tmis/ 或 /tmis，如果是，则重定向到默认路由
-        if (path === '/tmis/' || path === '/tmis') {
+        // [MODIFIED] 13. 不再从 window.location 读取, 而是使用传入的 path
+        // let path = window.location.pathname;
+        if (!path || path === '/tmis/' || path === '/tmis') {
             if (defaultRoute && defaultRoute.url) {
                 window.history.replaceState(null, '', defaultRoute.url);
                 path = window.location.pathname; // 更新 path 为新路径

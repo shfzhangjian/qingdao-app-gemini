@@ -13,6 +13,7 @@
         .container {
             max-width: 800px;
             margin-top: 2rem;
+            margin-bottom: 2rem;
         }
         .card-header {
             background-color: #003366;
@@ -24,24 +25,36 @@
             gap: 10px;
             margin-bottom: 10px;
         }
-        .cron-item input {
-            .cron-item .form-select {
-                flex: 1 1 80px; /* 允许下拉框缩小 */
-                min-width: 80px;
-            }
-            .cron-item .btn {
-                flex-shrink: 0;
-            }
-            .cron-labels {
-                display: grid;
-                grid-template-columns: 90px 90px 90px 90px 90px 1fr;
-                gap: 10px;
-                padding: 0 10px 0 50px; /* 对齐输入框 */
-                font-size: 0.75rem;
-                font-weight: bold;
-                color: #6c757d;
-                margin-bottom: 5px;
-            }
+        .cron-item .form-select {
+            flex: 1 1 80px; /* 允许下拉框缩小 */
+            min-width: 80px;
+        }
+        .cron-item .btn {
+            flex-shrink: 0;
+        }
+        .cron-labels {
+            display: grid;
+            grid-template-columns: 90px 90px 90px 90px 90px 1fr;
+            gap: 10px;
+            padding: 0 10px 0 50px; /* 对齐输入框 */
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+        .task-section {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            background-color: white;
+        }
+        .task-section h5 {
+            margin-bottom: 1rem;
+            color: #003366;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -51,11 +64,11 @@
         <div class="card-header">
             <h4 class="mb-0"><i class="bi bi-clock-history"></i> 动态定时任务配置</h4>
         </div>
-        <div class="card-body">
-            <p class="card-text text-muted">
-                管理包机信息定时推送  的 Cron 表达式。
+        <div class="card-body bg-light">
+            <p class="card-text text-muted mb-4">
+                管理系统各项后台任务的执行时间。
                 <br>
-                Cron 格式: `秒 分 时 日 月 周` (例如: `0 0 1 * * ?` 表示每天凌晨1点)
+                Cron 格式: `秒(0) 分 时 日 月 周` (例如: `0 0 1 * * ?` 表示每天凌晨1点)
             </p>
 
             <div id="loading-spinner" class="text-center my-3 d-none">
@@ -68,26 +81,53 @@
             <div id="error-alert" class="alert alert-danger d-none" role="alert"></div>
 
             <div id="config-form" class="d-none">
-                <div id="cron-list" class="mb-3">
-                    <!-- Cron 表达式输入框将在这里动态生成 -->
+
+                <!-- 任务 1: 包机信息推送 -->
+                <div class="task-section">
+                    <h5><i class="bi bi-person-badge me-2"></i>1. 每日包机信息推送</h5>
+                    <p class="small text-muted">对应接口: <code>tims.sync.user.equipment</code></p>
+
+                    <div class="cron-labels d-none" id="cron-labels-1">
+                        <span>分 (0-59)</span>
+                        <span>时 (0-23)</span>
+                        <span>日 (*)</span>
+                        <span>月 (*)</span>
+                        <span>周 (?)</span>
+                    </div>
+                    <div id="cron-list-1" class="mb-3">
+                        <!-- Cron items will be injected here -->
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="createCronInput('cron-list-1', '0 0 1 * * ?')">
+                        <i class="bi bi-plus-lg"></i> 添加时间点
+                    </button>
                 </div>
-                <div id="cron-labels" class="cron-labels d-none">
-                    <span>分 (0-59)</span>
-                    <span>时 (0-23)</span>
-                    <span>日 (*)</span>
-                    <span>月 (*)</span>
-                    <span>周 (?)</span>
+
+                <!-- 任务 2: 轮保任务生成与推送 -->
+                <div class="task-section">
+                    <h5><i class="bi bi-arrow-repeat me-2"></i>2. 轮保任务生成与推送</h5>
+                    <p class="small text-muted">对应过程: <code>tmis.genlb</code> -> 视图 <code>view_lb_task</code></p>
+
+                    <div class="cron-labels d-none" id="cron-labels-2">
+                        <span>分 (0-59)</span>
+                        <span>时 (0-23)</span>
+                        <span>日 (*)</span>
+                        <span>月 (*)</span>
+                        <span>周 (?)</span>
+                    </div>
+                    <div id="cron-list-2" class="mb-3">
+                        <!-- Cron items will be injected here -->
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="createCronInput('cron-list-2', '0 30 6 * * ?')">
+                        <i class="bi bi-plus-lg"></i> 添加时间点
+                    </button>
                 </div>
-                <button id="add-cron-btn" type="button" class="btn btn-sm btn-outline-secondary mb-3">
-                    <i class="bi bi-plus-lg"></i> 添加一个新的时间
+
+                <hr>
+
+                <button id="save-btn" class="btn btn-primary w-100 btn-lg" disabled>
+                    <i class="bi bi-save-fill"></i> 保存并重载所有任务
                 </button>
             </div>
-
-            <hr>
-
-            <button id="save-btn" class="btn btn-primary w-100 btn-lg" disabled>
-                <i class="bi bi-save-fill"></i> 保存并重载定时任务
-            </button>
         </div>
     </div>
 </div>
@@ -97,10 +137,10 @@
 
 <script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
 <script>
+    // 将 createCronInput 暴露到全局作用域以便 HTML onclick 调用
+    window.createCronInput = null;
+
     document.addEventListener('DOMContentLoaded', function () {
-        const cronList = document.getElementById('cron-list');
-        const cronLabels = document.getElementById('cron-labels');
-        const addBtn = document.getElementById('add-cron-btn');
         const saveBtn = document.getElementById('save-btn');
         const loadingSpinner = document.getElementById('loading-spinner');
         const errorAlert = document.getElementById('error-alert');
@@ -113,10 +153,8 @@
          * 获取 JWT Token
          */
         function getToken() {
-            // 尝试从 localStorage 获取（用于 index.html 登录）
             let token = localStorage.getItem('jwt_token');
             if (!token) {
-                // 尝试获取旧版登录 Token (用于 login.html)
                 token = localStorage.getItem('authToken');
             }
             return token;
@@ -158,8 +196,14 @@
 
         /**
          * [重构] 创建 Cron 表达式的下拉选择行
+         * @param {string} containerId - 容器ID
+         * @param {string} cronValue - 初始Cron值
          */
-        function createCronInput(cronValue = '0 0 1 * * ?') {
+        window.createCronInput = function(containerId, cronValue = '0 0 1 * * ?') {
+            const container = document.getElementById(containerId);
+            const labelsId = containerId.replace('list', 'labels'); // e.g. cron-labels-1
+            const labels = document.getElementById(labelsId);
+
             const parts = parseCron(cronValue);
 
             const div = document.createElement('div');
@@ -211,18 +255,15 @@
 
             div.querySelector('[data-action="delete"]').addEventListener('click', () => {
                 div.remove();
-                if (cronList.children.length === 0) {
-                    cronLabels.classList.add('d-none');
+                if (container.children.length === 0) {
+                    labels.classList.add('d-none');
                 }
             });
 
-            cronList.appendChild(div);
-            cronLabels.classList.remove('d-none');
-        }
+            container.appendChild(div);
+            labels.classList.remove('d-none');
+        };
 
-        /**
-         * 辅助函数：创建 <option> 列表
-         */
         function createOptions(start, end, selectedValue) {
             let html = '';
             for (let i = start; i <= end; i++) {
@@ -231,9 +272,6 @@
             return html;
         }
 
-        /**
-         * 辅助函数：解析 Cron 字符串
-         */
         function parseCron(cronString = '0 0 1 * * ?') {
             const parts = cronString.split(' ');
             return {
@@ -246,11 +284,8 @@
             };
         }
 
-        /**
-         * 辅助函数：从一行下拉框构建 Cron 字符串
-         */
         function buildCron(cronItemElement) {
-            const second = '0'; // 固定为 0
+            const second = '0';
             const minute = cronItemElement.querySelector('[data-cronpart="minute"]').value;
             const hour = cronItemElement.querySelector('[data-cronpart="hour"]').value;
             const dayOfMonth = cronItemElement.querySelector('[data-cronpart="dayOfMonth"]').value;
@@ -259,9 +294,14 @@
             return `${second} ${minute} ${hour} ${dayOfMonth} ${month} ${dayOfWeek}`;
         }
 
-        /**
-         * 加载当前配置
-         */
+        function getCronsFromContainer(containerId) {
+            const container = document.getElementById(containerId);
+            const items = container.querySelectorAll('.cron-item');
+            return Array.from(items)
+                .map(itemElement => buildCron(itemElement).trim())
+                .filter(cron => cron.length > 0);
+        }
+
         async function loadConfig() {
             loadingSpinner.classList.remove('d-none');
             errorAlert.classList.add('d-none');
@@ -270,16 +310,14 @@
 
             const token = getToken();
             if (!token) {
-                showError('未找到认证Token。请先登录主系统 (index.html 或 login.html)。');
+                showError('未找到认证Token。请先登录主系统。');
                 return;
             }
 
             try {
                 const response = await fetch(API_URL, {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (!response.ok) {
@@ -289,14 +327,22 @@
 
                 const config = await response.json();
 
-                cronList.innerHTML = ''; // 清空
+                // 清空旧数据
+                document.getElementById('cron-list-1').innerHTML = '';
+                document.getElementById('cron-list-2').innerHTML = '';
+
+                // 加载 任务1: 包机推送 (cronExpressions)
                 if (config.cronExpressions && config.cronExpressions.length > 0) {
-                    config.cronExpressions.forEach(cron => {
-                        createCronInput(cron);
-                    });
+                    config.cronExpressions.forEach(cron => createCronInput('cron-list-1', cron));
                 } else {
-                    // 如果是空的，也显示一个默认行
-                    createCronInput('0 0 1 * * ?');
+                    createCronInput('cron-list-1', '0 0 1 * * ?');
+                }
+
+                // 加载 任务2: 轮保推送 (lbTaskCronExpressions)
+                if (config.lbTaskCronExpressions && config.lbTaskCronExpressions.length > 0) {
+                    config.lbTaskCronExpressions.forEach(cron => createCronInput('cron-list-2', cron));
+                } else {
+                    createCronInput('cron-list-2', '0 30 6 * * ?');
                 }
 
                 configForm.classList.remove('d-none');
@@ -309,9 +355,6 @@
             }
         }
 
-        /**
-         * 保存配置
-         */
         async function saveConfig() {
             const token = getToken();
             if (!token) {
@@ -319,20 +362,17 @@
                 return;
             }
 
-            const items = cronList.querySelectorAll('.cron-item');
-            const cronExpressions = Array.from(items)
-                .map(itemElement => buildCron(itemElement).trim()) // [修改] 从下拉框构建 cron 字符串
-                .filter(cron => cron.length > 0);
+            // 收集所有 Cron
+            const cronList1 = getCronsFromContainer('cron-list-1');
+            const cronList2 = getCronsFromContainer('cron-list-2');
 
-            if (cronExpressions.length === 0) {
-                showToast('提示', '至少需要一个有效的 Cron 表达式，已为您保留一个默认值。', 'warning');
-                cronExpressions.push("0 0 1 * * ?"); // 至少保留一个
-                cronList.innerHTML = '';
-                createCronInput("0 0 1 * * ?");
-            }
+            // 确保至少有一个默认值，防止保存为空导致后端报错或逻辑问题
+            if (cronList1.length === 0) cronList1.push("0 0 1 * * ?");
+            if (cronList2.length === 0) cronList2.push("0 30 6 * * ?");
 
             const payload = {
-                cronExpressions: cronExpressions
+                cronExpressions: cronList1,
+                lbTaskCronExpressions: cronList2
             };
 
             const originalBtnHtml = saveBtn.innerHTML;
@@ -352,9 +392,8 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    showToast('保存成功', '定时任务已更新并重新加载。', 'success');
-                    // 重新加载配置以确保同步
-                    await loadConfig();
+                    showToast('保存成功', '所有定时任务配置已更新并重新加载。', 'success');
+                    await loadConfig(); // 刷新界面
                 } else {
                     throw new Error(result.error || '未知错误');
                 }
@@ -367,11 +406,9 @@
             }
         }
 
-        // --- 绑定事件 ---
-        addBtn.addEventListener('click', () => createCronInput('0 0 1 * * ?')); // [修改] 添加默认值
         saveBtn.addEventListener('click', saveConfig);
 
-        // --- 初始加载 ---
+        // 初始加载
         loadConfig();
     });
 </script>

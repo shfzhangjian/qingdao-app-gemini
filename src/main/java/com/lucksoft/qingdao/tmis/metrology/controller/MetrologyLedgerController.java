@@ -1,5 +1,6 @@
 package com.lucksoft.qingdao.tmis.metrology.controller;
 
+import com.lucksoft.qingdao.qdjl.mapper.MetrologyLedgerMapper;
 import com.lucksoft.qingdao.tmis.dto.PageResult;
 import com.lucksoft.qingdao.tmis.metrology.dto.LedgerQuery;
 import com.lucksoft.qingdao.tmis.metrology.dto.MetrologyLedgerDTO;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 @RestController
@@ -21,12 +23,12 @@ public class MetrologyLedgerController {
     private static final Logger log = LoggerFactory.getLogger(MetrologyLedgerController.class);
 
     private final MetrologyLedgerService metrologyLedgerService;
+    private final MetrologyLedgerMapper metrologyLedgerMapper; // 直接注入Mapper用于简单查询
 
-    // 使用构造函数注入 Service
-    public MetrologyLedgerController(MetrologyLedgerService metrologyLedgerService) {
+    public MetrologyLedgerController(MetrologyLedgerService metrologyLedgerService, MetrologyLedgerMapper metrologyLedgerMapper) {
         this.metrologyLedgerService = metrologyLedgerService;
+        this.metrologyLedgerMapper = metrologyLedgerMapper;
     }
-
     /**
      * 根据查询条件分页获取计量台账列表
      * @param query 查询参数 DTO，Spring Boot 会自动绑定 URL 查询参数到对象属性
@@ -53,5 +55,26 @@ public class MetrologyLedgerController {
 
         // 使用通用工具类导出 Excel
         ExcelExportUtil.export(response, "计量台账", query.getColumns(), dataToExport, MetrologyLedgerDTO.class);
+    }
+
+    /**
+     * 获取下拉补全选项
+     * @param field 前端字段名 (deviceName, department, parentDevice)
+     * @return 字符串列表
+     */
+    @GetMapping("/options")
+    public ResponseEntity<List<String>> getOptions(@RequestParam String field) {
+        String columnName;
+        // 简单的字段映射和校验，防止 SQL 注入
+        switch (field) {
+            case "deviceName": columnName = "SJNAME"; break;
+            case "department": columnName = "SUSEDEPT"; break;
+            case "parentDevice": columnName = "SEQ"; break;
+            default: return ResponseEntity.badRequest().body(Collections.emptyList());
+        }
+
+        // 使用缓存或直接查询 (这里简单起见直接查询，因为是去重查询，数据量通常可控)
+        List<String> options = metrologyLedgerMapper.findDistinctValues(columnName);
+        return ResponseEntity.ok(options);
     }
 }

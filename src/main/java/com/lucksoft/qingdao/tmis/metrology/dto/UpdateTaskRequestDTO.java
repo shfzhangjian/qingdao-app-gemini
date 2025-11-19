@@ -17,6 +17,10 @@ public class UpdateTaskRequestDTO {
     private String abnormalDesc;
     private String checkRemark;
 
+    // [新增] 用户信息字段，由后端 Controller 自动填充
+    private String loginId;
+    private String userName;
+
     public String getCheckRemark() {
         return checkRemark;
     }
@@ -57,5 +61,20 @@ public class UpdateTaskRequestDTO {
     public void setAbnormalDesc(String abnormalDesc) {
         this.abnormalDesc = abnormalDesc;
     }
-}
 
+    public String getLoginId() {
+        return loginId;
+    }
+
+    public void setLoginId(String loginId) {
+        this.loginId = loginId;
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
+    }
+}

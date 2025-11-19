@@ -261,8 +261,15 @@ body.theme-dark .dropdown-item:hover, body.theme-dark .dropdown-item:focus { bac
 body.theme-dark .list-group-item:hover { background-color: #343a40; }
 
 .form-switch .form-check-input { background-color: #aaa; border-color: #888; }
+/* [修改] 黑色主题未选中状态：深灰色 */
 body.theme-dark .form-switch .form-check-input { background-color: #555; border-color: #777; }
-.form-switch .form-check-input:checked { background-color: var(--accent-color); border-color: var(--accent-color); }
+
+/* [修改] 选中状态：蓝色。增加 body.theme-dark 选择器以提高权重，防止被上面的 #555 覆盖 */
+.form-switch .form-check-input:checked,
+body.theme-dark .form-switch .form-check-input:checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
 
 .btn-check:checked+.btn-outline-secondary { color: #fff; background-color: #6c757d; border-color: #6c757d; }
 body.theme-dark .btn-check:checked+.btn-outline-secondary { color: #fff; background-color: #555; border-color: #666; }
@@ -286,6 +293,16 @@ span.flatpickr-weekday { color: var(--text-secondary); }
 .flatpickr-time .numInputWrapper span:hover { background: rgba(0,0,0,0.1); }
 body.theme-dark .flatpickr-day:hover, body.theme-dark .flatpickr-day:focus { background: #3a3f44; }
 body.theme-dark .flatpickr-time .numInputWrapper span:hover { background: #3a3f44; }
+
+/* [修复] 修复黑色主题下月份下拉框看不见文字的问题 */
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+.flatpickr-current-month .flatpickr-monthDropdown-months .flatpickr-monthDropdown-month {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
 
 /* --- 自定义滚动条 --- */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -406,7 +423,7 @@ body.theme-light .stats-table-hover .cell-highlight {
     width: 1px;
 }
 
-.simple-tree li:last-child::before {
+.simple-tree li::last-child::before {
     height: 1.1rem; /* 最后一条线短一点 */
 }
 

@@ -1,12 +1,14 @@
 /**
  * 源码路径: js/views/MetrologyTasks.js
  * 功能说明: 计量任务页面的视图逻辑 (已适配真实数据)
+ * 版本变动:
+ * v4.1.0 - 2025-11-18: [新增] 设备名称和企业编号字段升级为可补全下拉框。
  * @version 4.0.0 - 2025-10-15
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import QueryForm from '../components/QueryForm.js';
 import Modal from '../components/Modal.js';
-import { getMetrologyTasks, exportMetrologyTasks, updateMetrologyTasks } from '../services/api.js';
+import { getMetrologyTasks, exportMetrologyTasks, updateMetrologyTasks, getMetrologyTaskOptions } from '../services/api.js';
 
 export default class MetrologyTasks {
     constructor() {
@@ -34,7 +36,6 @@ export default class MetrologyTasks {
     _formatDate(dateString) {
         if (!dateString) return '-';
         const date = new Date(dateString);
-        // 检查日期是否有效
         if (isNaN(date.getTime())) {
             return '-';
         }
@@ -43,16 +44,30 @@ export default class MetrologyTasks {
 
 
     _renderQueryForm(container) {
+        // [修改] 将 'text' 改为 'autocomplete' 并提供 dataSource
         const formFields = [
             { type: 'daterange', label: '确认时间范围', name: 'dateRange', containerClass: 'col-12 col-md-4' },
-            { type: 'text', label: '设备名称', name: 'deviceName', containerClass: 'col-12 col-md-4' },
-            { type: 'text', label: '企业编号', name: 'enterpriseId', containerClass: 'col-12 col-md-4' },
+            {
+                type: 'autocomplete',
+                label: '设备名称',
+                name: 'deviceName',
+                containerClass: 'col-12 col-md-4',
+                dataSource: () => getMetrologyTaskOptions('deviceName') // 绑定后端 API
+            },
+            {
+                type: 'autocomplete',
+                label: '企业编号',
+                name: 'enterpriseId',
+                containerClass: 'col-12 col-md-4',
+                dataSource: () => getMetrologyTaskOptions('enterpriseId') // 绑定后端 API
+            },
         ];
 
         this.queryForm = new QueryForm({ fields: formFields });
         container.innerHTML = `<div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);"><div class="row g-3 align-items-center">${this.queryForm._createFieldsHtml()}</div></div>`;
-        this.queryForm.container = container;
+        this.queryForm.container = container; // Hack: bind container manually before initializing inputs
         this.queryForm._initializeDatePickers();
+        this.queryForm._initializeAutocompletes(); // 手动调用初始化 (虽然 render 里已调用，但因为我们分两步，这里确保安全)
     }
 
     _renderDataTable(container) {
@@ -86,7 +101,7 @@ export default class MetrologyTasks {
 
         const filters = [
             { type: 'pills', label: '任务状态', name: 'taskStatus', options: [{label: '待检', value: 'unchecked', checked: true}, {label: '已检', value: 'checked'}, {label: '全部', value: 'all'}] },
-            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'a'}, {label: 'B', 'value': 'b'}, {label: 'C', value: 'c'}] }
+            { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'A'}, {label: 'B', 'value': 'B'}, {label: 'C', value: 'C'}] }
         ];
 
         this.dataTable = new DataTable({
@@ -101,6 +116,8 @@ export default class MetrologyTasks {
 
         this.dataTable.render(container);
     }
+
+    // ... (其余方法保持不变: _loadData, _showAbnormalWorkOrderModal, _attachEventListeners) ...
 
     async _loadData() {
         this.dataTable.toggleLoading(true);
@@ -255,4 +272,3 @@ export default class MetrologyTasks {
         });
     }
 }
-

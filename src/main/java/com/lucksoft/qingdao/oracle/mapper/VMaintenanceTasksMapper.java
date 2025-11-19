@@ -1,10 +1,8 @@
 package com.lucksoft.qingdao.oracle.mapper;
 
 import com.lucksoft.qingdao.oracle.dto.VMaintenanceTaskDTO;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Result;
-import org.apache.ibatis.annotations.Results;
-import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.*;
+import org.apache.ibatis.mapping.StatementType;
 
 import java.util.List;
 
@@ -41,4 +39,18 @@ public interface VMaintenanceTasksMapper {
     @Select("SELECT * FROM V_MAINTENANCE_TASKS_RECENT")
     List<VMaintenanceTaskDTO> findRecentTasks();
 
+    /**
+     * [新增] 调用无参数存储过程 tmis.genlb
+     */
+    @Update("{CALL tmis.genlb()}")
+    @Options(statementType = StatementType.CALLABLE)
+    void callGenLbProcedure();
+
+    /**
+     * [新增] 查询 view_lb_task 视图
+     * 字段结构与 V_MAINTENANCE_TASKS_RECENT 一致，复用 ResultMap
+     */
+    @ResultMap("vMaintenanceTaskResultMap")
+    @Select("SELECT * FROM view_lb_task")
+    List<VMaintenanceTaskDTO> findLbTasks();
 }

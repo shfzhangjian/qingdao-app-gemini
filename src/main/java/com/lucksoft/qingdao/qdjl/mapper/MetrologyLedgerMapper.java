@@ -3,6 +3,7 @@ package com.lucksoft.qingdao.qdjl.mapper;
 import com.lucksoft.qingdao.tmis.metrology.dto.LedgerQuery;
 import com.lucksoft.qingdao.tmis.metrology.dto.MetrologyLedgerDTO;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Result;
 import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
@@ -74,4 +75,11 @@ public interface MetrologyLedgerMapper {
             "ORDER BY SJNO" +
             "</script>")
     List<MetrologyLedgerDTO> findLedgerByCriteria(LedgerQuery query);
+
+    /**
+     * 查询指定列的去重值，用于前端下拉补全。
+     * 注意：columnName 由 Service 层校验，防止 SQL 注入。
+     */
+    @Select("SELECT DISTINCT ${columnName} FROM V_JL_EQUIP WHERE ${columnName} IS NOT NULL ORDER BY NLSSORT(${columnName}, 'NLS_SORT=SCHINESE_PINYIN_M')")
+    List<String> findDistinctValues(@Param("columnName") String columnName);
 }

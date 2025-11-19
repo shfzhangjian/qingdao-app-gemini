@@ -137,44 +137,115 @@ public class OracleDataService {
     }
 
     /**
-     * [重构] 接口 5: (轮保计划) 获取并过滤 EQ_PLANLB
+     * [重构] 接口 5: (轮保计划) 获取并过滤 EQ_PLANLB (使用视图)
      *
-     * @param indocno 主键
+     * @param indocno 主键 (-1 表示获取全部)
      * @return 包含推送计数和数据的Map
      * @throws Exception 如果 Kafka 推送失败
      */
     public Map<String, Object> getAndFilterEqPlanLbData(Long indocno) throws Exception {
-        String redisKey = PUSHED_TASK_KEY_PREFIX + "eq_planlb_v2";
+        String redisKey = PUSHED_TASK_KEY_PREFIX + "eq_planlb_v3"; // 更新 key 版本
         String indocnoStr = indocno.toString();
 
-        // [关键] 检查 Redis
-        if (redisTemplate.opsForSet().isMember(redisKey, indocnoStr)) {
+        // 仅当不是全量查询 (-1) 时才检查 Redis 防重
+        if (indocno != -1 && redisTemplate.opsForSet().isMember(redisKey, indocnoStr)) {
             log.warn("[{}] INDOCNO: {} 触发, 但 Redis 中显示已推送过, 将跳过。", "EQ_PLANLB_ARCHIVED", indocno);
             return createSkippedResult();
         }
 
-        EqPlanLbDTO mainData = eqPlanLbMapper.findMainByIndocno(indocno);
-        if (mainData == null) {
-            log.error("[{}] INDOCNO: {} 触发, 但在 EQ_PLANLB 中未查询到数据!", "EQ_PLANLB_ARCHIVED", indocno);
-            return createErrorResult("Data not found");
-        }
-        List<EqPlanLbDtDTO> items = eqPlanLbMapper.findItemsByIlinkno(indocno);
-        mainData.setItems(items);
-        log.info("[{}] INDOCNO: {} 触发, 成功查询到主表及 {} 条子项, 准备转换。", "EQ_PLANLB_ARCHIVED", indocno, items.size());
+        // [核心修改] 直接从视图查询 DTO 列表
+        log.info("[{}] 开始查询视图 V_EQ_PLANLB_FLATTENED, 参数 indocno: {}", "EQ_PLANLB_ARCHIVED", indocno);
 
-        List<RotationalPlanDTO> plansToPush = transformerService.transformEqPlanLbTasks(mainData);
+        List<RotationalPlanDTO> plansToPush = eqPlanLbMapper.findPlansByIndocnoFromView(indocno);
 
-        // [关键] 先推送 Kafka, 成功后再写入 Redis
-        if (!plansToPush.isEmpty()) {
-            producerService.sendSync(syncRotationalPlanTopic, plansToPush);
-            log.info("成功推送 {} 条轮保计划到 Kafka Topic: {}", plansToPush.size(), syncRotationalPlanTopic);
+        if (plansToPush.isEmpty()) {
+            log.warn("[{}] 查询视图成功，但返回了 0 条数据 (indocno={})。", "EQ_PLANLB_ARCHIVED", indocno);
+            return createEmptyResult();
         }
 
-        // 写入 Redis
-        redisTemplate.opsForSet().add(redisKey, indocnoStr);
-        redisTemplate.expire(redisKey, KEY_EXPIRATION);
+        // [关键] 先推送 Kafka
+        producerService.sendSync(syncRotationalPlanTopic, plansToPush);
+        log.info("成功推送 {} 条轮保计划到 Kafka Topic: {}", plansToPush.size(), syncRotationalPlanTopic);
+
+        // 成功后写入 Redis (仅针对单据触发的情况)
+        if (indocno != -1) {
+            redisTemplate.opsForSet().add(redisKey, indocnoStr);
+            redisTemplate.expire(redisKey, KEY_EXPIRATION);
+        }
 
         return createSuccessResult(plansToPush);
+    }
+
+    /**
+     * [新增] 接口 1-扩展: 定时生成并推送轮保(LB)任务
+     * 逻辑: 调用 tmis.genlb() -> 查询 view_lb_task -> 推送 Kafka
+     *
+     * @return 处理结果统计
+     * @throws Exception 如果过程执行或推送失败
+     */
+    public Map<String, Object> generateAndPushLbTasks() throws Exception {
+        String taskId = "LB-TASK-GEN-" + System.currentTimeMillis();
+        log.info("[{}] 开始执行轮保任务生成与推送流程...", taskId);
+
+        // 1. 调用存储过程
+        log.info("[{}] 正在调用存储过程 tmis.genlb()...", taskId);
+        long startTime = System.currentTimeMillis();
+        try {
+            vMaintenanceTasksMapper.callGenLbProcedure();
+            log.info("[{}] 存储过程执行完成，耗时: {} ms", taskId, System.currentTimeMillis() - startTime);
+        } catch (Exception e) {
+            log.error("[{}] 存储过程 tmis.genlb() 执行失败", taskId, e);
+            throw new RuntimeException("存储过程执行失败", e);
+        }
+
+        // 2. 查询视图 view_lb_task
+        log.info("[{}] 正在查询视图 view_lb_task...", taskId);
+        List<VMaintenanceTaskDTO> lbTasks = vMaintenanceTasksMapper.findLbTasks();
+        if (lbTasks.isEmpty()) {
+            log.warn("[{}] 视图 view_lb_task 未返回任何数据。", taskId);
+            return createEmptyResult();
+        }
+
+        // 3. 转换并推送 (复用保养任务的 Topic)
+        // 注意：这里假设 view_lb_task 的数据也需要防重，或者根据需求决定是否需要防重。
+        // 如果 view_lb_task 每次只返回新生成的，则不需要像 Recent 视图那样复杂的防重。
+        // 这里暂且复用 Recent 任务的防重逻辑以防止重复推送相同数据。
+        String redisKey = PUSHED_TASK_KEY_PREFIX + "maintenance_tasks_lb_v1"; // 使用独立的 Redis Key 防止与其他任务混淆
+        List<MaintenanceTaskDTO> newTasksToPush = new ArrayList<>();
+        Set<String> pushedDeDupeKeys = new HashSet<>();
+
+        for (VMaintenanceTaskDTO vTask : lbTasks) {
+            String deDupeKey = vTask.getDeDupeKey();
+            // 如果视图没有 deDupeKey，则尝试使用 taskId 作为唯一标识
+            if (deDupeKey == null || deDupeKey.isEmpty()) {
+                deDupeKey = vTask.getTaskId();
+            }
+
+            if (deDupeKey != null && !redisTemplate.opsForSet().isMember(redisKey, deDupeKey)) {
+                newTasksToPush.add(transformerService.transformVTaskToMaintenanceTask(vTask));
+                pushedDeDupeKeys.add(deDupeKey);
+            }
+        }
+
+        if (!newTasksToPush.isEmpty()) {
+            log.info("[{}] 查询到 {} 条 LB 任务, 过滤后新增 {} 条。", taskId, lbTasks.size(), newTasksToPush.size());
+
+            // 推送 (复用 maintenanceTaskTopic)
+            pushTasksInBatches(taskId, maintenanceTaskTopic, newTasksToPush, KAFKA_BATCH_SIZE);
+
+            // 写入 Redis
+            redisTemplate.opsForSet().add(redisKey, pushedDeDupeKeys.toArray());
+            redisTemplate.expire(redisKey, KEY_EXPIRATION);
+
+            log.info("[{}] 流程执行完毕。", taskId);
+        } else {
+            log.info("[{}] 查询到 {} 条 LB 任务, 但全部已推送过。", taskId, lbTasks.size());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("pushedCount", newTasksToPush.size());
+        result.put("pushedData", newTasksToPush);
+        return result;
     }
 
     /**

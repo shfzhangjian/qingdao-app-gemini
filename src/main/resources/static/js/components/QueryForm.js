@@ -2,6 +2,7 @@
  * 源码路径: js/components/QueryForm.js
  * 功能说明: 根据配置动态创建查询表单和工具栏。
  * 版本变动:
+ * v1.3.0 - 2025-11-18: [新增] 支持 autocomplete 类型，配合 datalist 实现可补全下拉框。
  * v1.2.0 - 2025-10-13: 新增键盘支持，可通过回车查询和箭头键移动焦点。
  */
 
@@ -26,7 +27,7 @@ export default class QueryForm {
         const fieldsHtml = this._createFieldsHtml();
         const actionsHtml = this._createActionsHtml();
 
-        // The structure can be customized based on needs, e.g., putting actions inside the same container.
+        // The structure can be customized based on needs
         this.container.innerHTML = `
             <div class="d-flex flex-wrap align-items-center gap-3 mb-3 p-3 rounded" style="background-color: var(--bg-dark-primary);">
                 ${fieldsHtml}
@@ -37,7 +38,8 @@ export default class QueryForm {
         `;
 
         this._attachEventListeners();
-        this._initializeDatePickers(); // Initialize after rendering
+        this._initializeDatePickers();
+        this._initializeAutocompletes(); // [新增] 初始化自动补全数据
     }
 
     _createFieldsHtml() {
@@ -47,6 +49,18 @@ export default class QueryForm {
             switch (field.type) {
                 case 'text':
                     return `<div class="d-flex align-items-center ${field.containerClass || ''}">${commonParts}<input type="text" name="${field.name}" class="form-control form-control-sm" ${field.style ? `style="${field.style}"` : ''} value="${field.defaultValue || ''}"></div>`;
+
+                // [新增] Autocomplete 类型
+                case 'autocomplete':
+                    const listId = `list-${field.name}-${Math.random().toString(36).substr(2, 9)}`;
+                    return `
+                        <div class="d-flex align-items-center ${field.containerClass || ''}">
+                            ${commonParts}
+                            <input type="text" name="${field.name}" list="${listId}" class="form-control form-control-sm" ${field.style ? `style="${field.style}"` : ''} value="${field.defaultValue || ''}" placeholder="${field.placeholder || '请输入或选择...'}">
+                            <datalist id="${listId}"></datalist>
+                        </div>
+                    `;
+
                 case 'pills':
                     const optionsHtml = field.options.map(opt => `<input type="radio" class="btn-check" name="${field.name}" id="${field.name}-${opt.value}" value="${opt.value}" autocomplete="off" ${opt.checked ? 'checked' : ''}><label class="btn btn-outline-secondary" for="${field.name}-${opt.value}">${opt.label}</label>`).join('');
                     return `<div class="d-flex align-items-center gap-2 ${field.containerClass || ''}">${commonParts}<div class="btn-group btn-group-sm" role="group">${optionsHtml}</div></div>`;
@@ -59,7 +73,7 @@ export default class QueryForm {
     }
 
     _initializeDatePickers() {
-        this.destroyDatePickers(); // Clean up old instances first
+        this.destroyDatePickers();
         this.fields.forEach(field => {
             if (field.type === 'daterange') {
                 const input = this.container.querySelector(`input[name="${field.name}"]`);
@@ -70,12 +84,34 @@ export default class QueryForm {
         });
     }
 
+    /**
+     * [新增] 异步加载 Autocomplete 的数据源并填充 datalist
+     */
+    async _initializeAutocompletes() {
+        for (const field of this.fields) {
+            if (field.type === 'autocomplete' && typeof field.dataSource === 'function') {
+                const input = this.container.querySelector(`input[name="${field.name}"]`);
+                if (!input) continue;
+                const datalist = input.list;
+
+                try {
+                    // 执行数据源函数获取选项列表
+                    const options = await field.dataSource();
+                    if (Array.isArray(options)) {
+                        datalist.innerHTML = options.map(val => `<option value="${val}">`).join('');
+                    }
+                } catch (e) {
+                    console.warn(`[QueryForm] Failed to load autocomplete options for ${field.name}`, e);
+                }
+            }
+        }
+    }
+
     _createActionsHtml() {
         return this.actions.map(action => `<button class="btn btn-sm ${action.class || 'btn-primary'}" data-action="${action.name}">${action.text}</button>`).join('');
     }
 
     _attachEventListeners() {
-        // --- Click Event Listeners ---
         this.container.addEventListener('click', (e) => {
             const button = e.target.closest('button[data-action]');
             if (button) {
@@ -84,7 +120,6 @@ export default class QueryForm {
             }
         });
 
-        // --- Keyboard Event Listeners ---
         this.container.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && e.target.matches('input')) {
                 e.preventDefault();
@@ -92,7 +127,16 @@ export default class QueryForm {
                 searchButton?.click();
             }
 
+            // 简单的键盘导航逻辑 (保留)
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                // 注意：对于 datalist input，原生浏览器已接管 ArrowUp/Down 用于选择选项，
+                // 所以这里可以加个判断，如果是 autocomplete input 且 datalist 打开时，不阻止默认行为。
+                // 但 JS 很难判断 datalist 是否打开。
+                // 简单起见，我们只拦截左右键，或者是普通 input 的上下键。
+                if (e.target.getAttribute('list') && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                    return; // 让原生 datalist 处理
+                }
+
                 e.preventDefault();
                 const focusable = Array.from(this.container.querySelectorAll('input, button'));
                 const currentIndex = focusable.indexOf(document.activeElement);
@@ -146,4 +190,3 @@ export default class QueryForm {
         this.datePickers = [];
     }
 }
-

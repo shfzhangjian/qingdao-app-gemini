@@ -4,6 +4,7 @@
  * - 采用了全新的单行、左对齐、胶囊(Pills)风格Tab的UI布局。
  * - 彻底修复了列表视图下反复出现的“无限加载”Bug。
  * 版本变动:
+ * v4.4.0 - 2025-11-18: [UI优化] 为统计表格中的数字链接添加主题适配样式（暗色白字，亮色蓝字）。
  * v4.3.0 - 2025-11-17: [修复] 增加下钻时对上半年/下半年的判断，自动更新列表视图的日期范围。
  */
 import DataTable from '../components/Optimized_DataTable.js';
@@ -36,14 +37,41 @@ export default class PointCheck {
         this.dataTable = null;
 
         this.container = container;
-        container.innerHTML = `
-            <div class="p-3 rounded" style="background-color: var(--bg-secondary); display: flex; flex-direction: column; height: 100%;">
-                <div id="point-check-header"></div>
-                <div id="point-check-content" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"></div>
-            </div>`;
 
-        this.headerContainer = container.querySelector('#point-check-header');
-        this.contentContainer = container.querySelector('#point-check-content');
+        // [新增] 注入局部样式以处理链接颜色主题适配
+        const style = document.createElement('style');
+        style.textContent = `
+            /* 默认（暗色主题）下，下钻链接为白色 */
+            .drill-down { 
+                color: #fff !important; 
+                text-decoration: underline; 
+                cursor: pointer;
+            }
+            .drill-down:hover {
+                color: var(--accent-color) !important;
+            }
+            /* 亮色主题下，下钻链接为蓝色 */
+            body.theme-light .drill-down { 
+                color: #0d6efd !important; 
+            }
+            body.theme-light .drill-down:hover {
+                color: #0a58ca !important;
+            }
+        `;
+        container.appendChild(style);
+
+        // 主布局容器
+        const layoutDiv = document.createElement('div');
+        layoutDiv.className = 'p-3 rounded';
+        layoutDiv.style.cssText = 'background-color: var(--bg-secondary); display: flex; flex-direction: column; height: 100%;';
+        layoutDiv.innerHTML = `
+            <div id="point-check-header"></div>
+            <div id="point-check-content" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"></div>
+        `;
+        container.appendChild(layoutDiv);
+
+        this.headerContainer = layoutDiv.querySelector('#point-check-header');
+        this.contentContainer = layoutDiv.querySelector('#point-check-content');
 
         this._renderHeader();
         this._updateView();
@@ -249,7 +277,7 @@ export default class PointCheck {
                 uniformRowHeight: true,
                 configurable: false, // [修改] 列表视图的配置列按钮在Header中，所以这里禁用组件自带的
                 storageKey: 'pointCheckListTable',
-                selectable: 'multiple'
+                selectable: 'none'
             }
         });
         this.dataTable.render(this.contentContainer);

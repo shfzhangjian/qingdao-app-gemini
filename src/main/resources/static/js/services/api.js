@@ -127,6 +127,25 @@ export async function getPointCheckList(params) {
     return apiFetch(url);
 }
 
+/**
+ * 获取计量任务的补全选项
+ * @param {string} field - 字段名 (deviceName, enterpriseId)
+ */
+export async function getMetrologyTaskOptions(field) {
+    return apiFetch(`api/metrology/task/options?field=${field}`);
+}
+
+
+/**
+ * 获取计量台账的补全选项
+ * @param {string} field - 字段名 (deviceName, department, parentDevice)
+ */
+export async function getMetrologyLedgerOptions(field) {
+    return apiFetch(`api/metrology/ledger/options?field=${field}`);
+}
+
+
+
 export async function exportPointCheck(params) {
     const blob = await apiFetch('api/metrology/point-check/export', {
         method: 'POST',

@@ -9,9 +9,15 @@ import java.util.List;
 public class ScheduleDto {
 
     /**
-     * 一个包含一个或多个 Cron 表达式的列表。
+     * 默认的定时任务 (推送包机信息)
      */
     private List<String> cronExpressions;
+
+    /**
+     * [新增] 轮保任务生成与推送的定时任务
+     * 默认: "0 30 6 * * ?", "0 30 14 * * ?", "0 30 22 * * ?"
+     */
+    private List<String> lbTaskCronExpressions;
 
     public List<String> getCronExpressions() {
         return cronExpressions;
@@ -19,5 +25,13 @@ public class ScheduleDto {
 
     public void setCronExpressions(List<String> cronExpressions) {
         this.cronExpressions = cronExpressions;
+    }
+
+    public List<String> getLbTaskCronExpressions() {
+        return lbTaskCronExpressions;
+    }
+
+    public void setLbTaskCronExpressions(List<String> lbTaskCronExpressions) {
+        this.lbTaskCronExpressions = lbTaskCronExpressions;
     }
 }

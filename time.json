@@ -1,3 +1,4 @@
 {
-  "cronExpressions" : [ "0 47 10 * * ?" ]
+  "cronExpressions" : [ "0 26 6 * * ?" ],
+  "lbTaskCronExpressions" : [ "0 25 6 * * ?", "0 30 14 * * ?", "0 30 22 * * ?" ]
 }

@@ -2,6 +2,7 @@ package com.lucksoft.qingdao.oracle.mapper;
 
 import com.lucksoft.qingdao.oracle.dto.EqPlanLbDTO;
 import com.lucksoft.qingdao.oracle.dto.EqPlanLbDtDTO;
+import com.lucksoft.qingdao.tspm.dto.RotationalPlanDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Result;
@@ -65,4 +66,21 @@ public interface EqPlanLbMapper {
             "ORDER BY INDOCNO") // 按明细主键排序
     List<EqPlanLbDtDTO> findItemsByIlinkno(@Param("ilinkno") Long ilinkno);
 
+    /**
+     * 接口 5: 直接从视图 V_EQ_PLANLB_FLATTENED 查询轮保计划数据
+     * 逻辑:
+     * 1. 视图字段已与 RotationalPlanDTO 属性名一致，无需复杂 ResultMap。
+     * 2. 如果 indocno == -1，则查询所有数据 (移除 WHERE 条件)。
+     * 3. 否则，按 INDOCNO_FILTER 过滤。
+     */
+    @Select("<script>" +
+            "SELECT \"planId\", \"equipmentCode\", \"planDate\", \"createDate\" " +
+            "FROM V_EQ_PLANLB_FLATTENED " +
+            "<where>" +
+            "   <if test='indocno != -1'>" +
+            "       INDOCNO_FILTER = #{indocno}" +
+            "   </if>" +
+            "</where>" +
+            "</script>")
+    List<RotationalPlanDTO> findPlansByIndocnoFromView(@Param("indocno") Long indocno);
 }

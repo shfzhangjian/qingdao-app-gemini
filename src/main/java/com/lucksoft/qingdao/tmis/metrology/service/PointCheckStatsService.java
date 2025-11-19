@@ -6,7 +6,7 @@ import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckRawStatsDTO;
 import com.lucksoft.qingdao.tmis.metrology.dto.PointCheckStatsDTO;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-
+import com.github.pagehelper.PageHelper;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +45,7 @@ public class PointCheckStatsService {
         // query.setUserId(getCurrentUserId());
 
         // 从数据库获取按周期（双月/季度/半年）聚合的原始数据
+        PageHelper.clearPage();
         List<PointCheckRawStatsDTO> rawStatsList = pointCheckStatsMapper.getRawStatistics(query);
         List<PointCheckStatsDTO> finalStatsList = new ArrayList<>();
 

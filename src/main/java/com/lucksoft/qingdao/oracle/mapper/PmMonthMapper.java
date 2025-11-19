@@ -20,9 +20,10 @@ public interface PmMonthMapper {
 
     /**
      * [新] 接口 13: (停产检修)
-     * 根据主表 INDOCNO, 直接从视图 v_pm_month_item 查询已转换的 DTO 列表
+     * 根据主表 INDOCNO, 直接从视图 v_pm_month_item 查询已转换的 DTO 列表。
+     * [修改] 增加动态SQL逻辑：如果 indocno 为 -1，则查询所有数据；否则按 indocno 过滤。
      *
-     * @param indocno 主表ID (PM_MONTH.INDOCNO)
+     * @param indocno 主表ID (PM_MONTH.INDOCNO)，-1 表示全量查询
      * @return List<ProductionHaltTaskDTO>
      */
     @Results(id = "productionHaltTaskResultMap", value = {
@@ -36,7 +37,14 @@ public interface PmMonthMapper {
             @Result(property = "planEndTime", column = "PLANENDTIME"),
             @Result(property = "teamName", column = "TEAMNAME")
     })
-    @Select("SELECT * FROM v_pm_month_item WHERE indocno = #{indocno}")
+    @Select("<script>" +
+            "SELECT * FROM v_pm_month_item " +
+            "<where>" +
+            "   <if test='indocno != -1'>" +
+            "       indocno = #{indocno}" +
+            "   </if>" +
+            "</where>" +
+            "</script>")
     List<ProductionHaltTaskDTO> findTasksFromViewByIndocno(@Param("indocno") Long indocno);
 
 }

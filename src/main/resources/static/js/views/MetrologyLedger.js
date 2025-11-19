@@ -1,19 +1,14 @@
 /**
  * 源码路径: js/views/MetrologyLedger.js
  * 功能说明: 计量台账页面视图逻辑 (已适配真实后端数据)
- *
- * --- 主要变化 ---
- * 1.  **移除模拟数据**: _renderDataTable 方法不再生成任何模拟数据。
- * 2.  **适配真实列**: 列定义（columns）已根据 V_JL_EQUIP 视图和字段字典进行精确配置。
- * 3.  **日期格式化**: 为日期字段添加了 render 函数，以提供更友好的显示。
- * 4.  **主键适配**: 确保表格行的 id 绑定到从后端获取的 `indocno` 主键。
- *
- * @version 4.1.0 - 2025-10-15 (修复日期显示问题)
+ * 版本变动:
+ * v4.2.0 - 2025-11-18: [新增] “设备名称”、“部门”、“所属设备”字段升级为可补全下拉框。
+ * @version 4.1.0 - 2025-10-15
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import QueryForm from '../components/QueryForm.js';
 import Modal from '../components/Modal.js';
-import { getMetrologyLedger, exportMetrologyLedger } from '../services/api.js';
+import { getMetrologyLedger, exportMetrologyLedger, getMetrologyLedgerOptions } from '../services/api.js';
 
 /**
  * [新增] 一个健壮的日期格式化函数，用于防止 "Invalid Date" 的显示
@@ -64,26 +59,66 @@ export default class MetrologyLedger {
     }
 
     _renderQueryForm(container) {
+        // [修改] 将部分 'text' 字段改为 'autocomplete'
         const formFields = [
-            { type: 'text', label: '计量设备名称', name: 'deviceName', containerClass: 'col-md-4', labelWidth: '120px' },
+            {
+                type: 'autocomplete',
+                label: '计量设备名称',
+                name: 'deviceName',
+                containerClass: 'col-md-4',
+                labelWidth: '120px',
+                dataSource: () => getMetrologyLedgerOptions('deviceName')
+            },
             { type: 'text', label: '企业编号', name: 'enterpriseId', containerClass: 'col-md-4', labelWidth: '120px' },
             { type: 'text', label: '出厂编号', name: 'factoryId', containerClass: 'col-md-4', labelWidth: '120px' },
-            { type: 'text', label: '使用部门', name: 'department', containerClass: 'col-md-4', labelWidth: '120px' },
+            {
+                type: 'autocomplete',
+                label: '使用部门',
+                name: 'department',
+                containerClass: 'col-md-4',
+                labelWidth: '120px',
+                dataSource: () => getMetrologyLedgerOptions('department')
+            },
             { type: 'text', label: '安装位置/使用人', name: 'locationUser', containerClass: 'col-md-4', labelWidth: '120px' },
-            { type: 'text', label: '所属设备', name: 'parentDevice', containerClass: 'col-md-4', labelWidth: '120px', defaultValue: '' }
+            {
+                type: 'autocomplete',
+                label: '所属设备',
+                name: 'parentDevice',
+                containerClass: 'col-md-4',
+                labelWidth: '120px',
+                defaultValue: '',
+                dataSource: () => getMetrologyLedgerOptions('parentDevice')
+            }
         ];
 
         this.queryForm = new QueryForm({ fields: formFields });
         container.innerHTML = `<div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);"><div class="d-flex flex-wrap align-items-center row-gap-3">${this.queryForm._createFieldsHtml()}</div></div>`;
         this.queryForm.container = container;
+        this.queryForm._initializeAutocompletes(); // 初始化补全
     }
 
+    // ... (其余方法保持不变: _renderDataTable, _loadData, _attachEventListeners) ...
     _renderDataTable(container) {
         // --- [核心修改] 根据数据库字典和DTO重新定义列 ---
         const columns = [
             // --- 默认显示列 ---
-            { key: 'expired', title: '是否过期', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-exclamation-triangle-fill text-danger"></i>' : '<i class="bi bi-shield-check-fill text-success"></i>' },
-            { key: 'isLinked', title: '台账挂接', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
+            // { key: 'expired', title: '是否过期', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-exclamation-triangle-fill text-danger"></i>' : '<i class="bi bi-shield-check-fill text-success"></i>' },
+            // { key: 'isLinked', title: '台账挂接', visible: true, width: 90, render: (val) => val ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-circle text-secondary"></i>' },
+            {
+                key: 'expired',
+                title: '是否过期',
+                visible: true,
+                width: 90,
+                render: (val) => val ? '<i class="bi bi-exclamation-triangle-fill text-danger"></i>' : '<i class="bi bi-check-lg"></i>'
+            },
+            // [UI优化] 第二列：台账挂接。挂接显示打钩（自适应颜色），未挂接显示空圆圈。
+            {
+                key: 'isLinked',
+                title: '台账挂接',
+                visible: true,
+                width: 90,
+                render: (val) => val ? '<i class="bi bi-check-lg"></i>' : '<i class="bi bi-circle text-secondary"></i>'
+            },
             { key: 'sysId', title: '系统编号', visible: true, width: 120, sortable: true },
             { key: 'enterpriseId', title: '企业编号', visible: true, width: 120, sortable: true },
             { key: 'deviceName', title: '设备名称', visible: true, width: 180 },
@@ -129,7 +164,7 @@ export default class MetrologyLedger {
                 configurable: true,
                 uniformRowHeight: true,
                 storageKey: 'metrologyLedgerTable_v2', // Use a new key for the new config
-                selectable: 'single',
+                selectable: 'none',
                 defaultSortBy: 'sysId',
                 defaultSortOrder: 'desc'
             }
@@ -207,4 +242,3 @@ export default class MetrologyLedger {
         });
     }
 }
-

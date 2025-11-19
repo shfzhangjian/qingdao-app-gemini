@@ -28,7 +28,7 @@ public class TspmProducerService {
      * [新] 定义一个合理的同步发送超时时间 (例如 15 秒)
      * 如果 Kafka Broker 在 15 秒内未确认，则抛出 TimeoutException
      */
-    private static final long SYNC_SEND_TIMEOUT = 15; // 单位: 秒
+    private static final long SYNC_SEND_TIMEOUT = 200; // 单位: 秒
 
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
