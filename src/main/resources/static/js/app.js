@@ -6,6 +6,8 @@
  * v1.9.0 - 2025-11-15: [修改] 切换到 HTML5 History 模式路由
  * v1.9.1 - 2025-11-16: [修复] 修复了 IP 登录后白屏的问题
  * v1.9.2 - 2025-11-18: [修复] 增加 isAuthReady 状态管理，修复403/加载竞态条件
+ * v1.9.3 - 2025-11-19: [修复] 修复 view=content 模式下因跳过认证初始化导致的黑屏问题
+ * v1.9.4 - 2025-11-19: [修复] 修复IP登录同步执行导致的竞态条件（pendingPath赋值过晚）
  */
 import menuConfig from './config/menu.js';
 import Breadcrumb from './components/Breadcrumb.js';
@@ -102,6 +104,12 @@ class App {
      * @param {object | null} preloadedUser - 如果IP登录成功，则传入用户信息
      */
     continueInit(viewParam, themeParam, preloadedUser = null) {
+        // [关键修复] 1. 在做任何初始化之前，先捕获并设置当前的挂起路径。
+        // 必须在 _attachHeaderListeners 之前执行。
+        // 原因：如果是同步认证流程（如IP登录成功，preloadedUser不为空），_attachHeaderListeners 会同步执行完毕，
+        // 并立即调用 _processRouteQueue。如果此时 pendingPath 尚未赋值（仍为null），路由就会被忽略，导致白屏。
+        this.pendingPath = window.location.pathname;
+
         this._initTheme(themeParam);
 
         const isContentOnly = viewParam === 'content';
@@ -111,10 +119,11 @@ class App {
         } else {
             this.renderTopNav(); // 创建 Header DOM
             this.sidebarToggle.addEventListener('click', () => this.toggleSidebar());
-            // [MODIFIED] 4. _attachHeaderListeners 现在是 async
-            //    它负责获取用户信息并设置 isAuthReady = true
-            this._attachHeaderListeners(preloadedUser);
         }
+
+        // [关键修复] 无论是否是 content-only 模式，都必须初始化用户会话和认证状态
+        // 否则 isAuthReady 永远为 false，导致路由挂起不执行
+        this._attachHeaderListeners(preloadedUser);
 
         // [MODIFIED] 5. 路由监听器现在只设置挂起路径，不立即执行
         window.addEventListener('popstate', () => {
@@ -144,11 +153,6 @@ class App {
         window.addEventListener('userSwitched', (e) => {
             this.updateUserInfo(e.detail.user);
         });
-
-        // [MODIFIED] 7. 初始加载时，设置挂起路径
-        this.pendingPath = window.location.pathname;
-        // _processRouteQueue() 会在 _attachHeaderListeners 认证成功后被调用
-        // (不要在这里调用 handleRouteChange)
     }
 
     /**
@@ -169,10 +173,12 @@ class App {
      */
     async _attachHeaderListeners(preloadedUser = null) {
         // Theme Toggler
-        this.themeToggler.addEventListener('click', (e) => {
-            e.preventDefault();
-            this._toggleTheme();
-        });
+        if (this.themeToggler) {
+            this.themeToggler.addEventListener('click', (e) => {
+                e.preventDefault();
+                this._toggleTheme();
+            });
+        }
 
         // Logout Button
         const logoutBtn = document.getElementById('logout-btn');
@@ -194,6 +200,7 @@ class App {
         try {
             if (preloadedUser) {
                 // 1. 如果通过 IP 登录成功，直接使用该用户信息更新UI
+                // 注意：此分支是全同步执行的（没有 await），会立即触发 finally 块
                 console.log("[App] 使用IP登录的预加载用户信息更新UI。");
                 this.updateUserInfo(preloadedUser);
             } else {
@@ -201,7 +208,7 @@ class App {
                 const token = localStorage.getItem('jwt_token');
                 if (token) {
                     // 3. 如果有 token，异步加载 /info
-
+                    // 注意：此分支包含 await，会让出执行流
                     console.log("[App] 检测到现有 Token，正在获取用户信息...");
                     // 动态导入 apiFetch
                     const api = (await import('./services/api.js')).apiFetch;
@@ -224,6 +231,7 @@ class App {
             // [NEW] 10. 无论成功与否, 标记认证已就绪
             this.isAuthReady = true;
             // [NEW] 11. 尝试处理在等待认证时挂起的路由
+            // 如果是 IP 登录成功分支，这里会同步执行，此时 pendingPath 必须已被赋值
             this._processRouteQueue();
         }
     }
@@ -277,6 +285,7 @@ class App {
     }
 
     _updateThemeIcon(theme) {
+        if (!this.themeToggler) return;
         const icon = this.themeToggler.querySelector('i');
         if (theme === 'light') {
             icon.classList.remove('bi-sun-fill');
