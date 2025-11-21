@@ -15,6 +15,18 @@ const menuConfig = [
                     { id: "point_check", title: "点检统计", url: "/tmis/performance_opt/metrology_mgmt/point_check", component: "./views/PointCheck.js" }
                 ]
             },
+            {
+                id: "self_inspection_mgmt",
+                title: "自检自控管理",
+                icon: "bi-clipboard-check",
+                children: [
+                    { id: "si_tasks", title: "点检任务", url: "/tmis/performance_opt/self_inspection_mgmt/si_tasks", component: "./views/SiTasks.js" },
+                    { id: "si_stats", title: "点检统计", url: "/tmis/performance_opt/self_inspection_mgmt/si_stats", component: "./views/SiStats.js" },
+
+                    { id: "new_si_ledger", title: "自检自控台账", url: "/tmis/performance_opt/self_inspection_mgmt/new_si_ledger", component: "./views/NewSelfInspectionLedger.js" },
+                    { id: "si_ledger", title: "自检自控台账TREE", url: "/tmis/performance_opt/self_inspection_mgmt/si_ledger", component: "./views/SelfInspectionLedger.js" }
+                ]
+            },
             { id: "asset_mgmt", title: "备件管理", url: "/tmis/performance_opt/asset_mgmt", component: "./views/Placeholder.js" },
             { id: "knowledge_base", title: "知识库分析", url: "/tmis/performance_opt/knowledge_base", component: "./views/Placeholder.js" },
             { id: "spare_parts_mgmt", title: "备品备件管理", url: "/tmis/performance_opt/spare_parts_mgmt", component: "./views/Placeholder.js" },
