@@ -21,6 +21,7 @@ import javax.sql.DataSource;
 @Configuration
 @MapperScan(basePackages = {"com.lucksoft.qingdao.system.mapper",
         "com.lucksoft.qingdao.oracle.mapper",
+        "com.lucksoft.qingdao.selfinspection.mapper",
         "com.lucksoft.qingdao.eam.maintainbook.mapper"},
         sqlSessionFactoryRef = "primarySqlSessionFactory")
 public class PrimaryDataSourceConfig {

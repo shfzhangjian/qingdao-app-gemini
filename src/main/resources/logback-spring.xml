@@ -107,6 +107,10 @@
     <!-- 【新增】打印MyBatis SQL和参数                                           -->
     <!-- ===================================================================== -->
     <!-- 将Mapper接口的日志级别设为TRACE，即可在控制台看到执行的SQL及绑定的参数 -->
+    <logger name="com.lucksoft.qingdao.selfinspection.mapper" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
     <logger name="com.lucksoft.qingdao.qdjl.mapper" level="TRACE" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>

@@ -1,10 +1,7 @@
 /**
  * @file /js/views/SiTaskExecution.js
  * @description 点检任务执行详情视图。
- * v1.9.0 - [Style Fix]
- * 1. 注入局部 CSS 重新定义 table-hover 样式。
- * 2. 修复暗色主题下 hover 背景色过暗导致看不清的问题（改为变亮）。
- * 3. 强制所有单元格文字颜色跟随主题变量。
+ * v1.10.0 - [Fix] 修复提交时日期格式与后端 @JsonFormat 不匹配的问题 (yyyy/MM/dd -> yyyy-MM-dd).
  */
 import Modal from '../components/Modal.js';
 import { getSiTaskDetails, saveSiTaskDetails } from '../services/selfInspectionApi.js';
@@ -21,32 +18,22 @@ export default class SiTaskExecution {
     render(container) {
         this.container = container;
 
-        // [核心修复] 注入自定义样式，覆盖 Bootstrap 的默认 hover 行为
-        // 1. 默认(暗色)下：hover 背景变亮 (rgba(255,255,255,0.05))
-        // 2. 亮色(theme-light)下：hover 背景变暗 (rgba(0,0,0,0.05))
         const customStyles = `
             <style>
-                /* 强制表格内容颜色跟随主题变量 */
                 #exec-table tbody td, 
                 #exec-table tbody input.form-control-sm {
                     color: var(--text-primary) !important;
                     border-color: var(--border-color) !important;
                 }
-
-                /* --- 暗色主题 (默认) Hover 样式 --- */
                 #exec-table.table-hover tbody tr:hover > * {
-                    --bs-table-accent-bg: rgba(255, 255, 255, 0.08) !important; /* 背景稍微变亮 */
-                    color: #ffffff !important; /* 悬停时文字高亮 */
-                    background-color: var(--bs-table-accent-bg); /* 兼容性处理 */
+                    --bs-table-accent-bg: rgba(255, 255, 255, 0.08) !important;
+                    color: #ffffff !important;
+                    background-color: var(--bs-table-accent-bg);
                 }
-
-                /* --- 亮色主题 Hover 样式 --- */
                 body.theme-light #exec-table.table-hover tbody tr:hover > * {
-                    --bs-table-accent-bg: rgba(0, 0, 0, 0.05) !important; /* 背景稍微变暗 */
+                    --bs-table-accent-bg: rgba(0, 0, 0, 0.05) !important;
                     color: #000000 !important;
                 }
-
-                /* 修复输入框在 hover 时的背景 */
                 #exec-table tbody tr:hover input.form-control-sm {
                     background-color: transparent !important; 
                 }
@@ -167,9 +154,9 @@ export default class SiTaskExecution {
                     <td>${index + 1}</td>
                     <td class="text-start">${item.itemName}</td>
                     <td>${resultHtml}</td>
-                    <td>${item.prodStatus}</td>
-                    <td>${item.shiftType}</td>
-                    <td>${item.shift}</td>
+                    <td>${item.prodStatus || '-'}</td>
+                    <td>${item.shiftType || '-'}</td>
+                    <td>${item.shift || '-'}</td>
                     <td>
                         <input type="text" class="form-control form-control-sm input-remarks" value="${item.remarks || ''}" style="background-color: transparent; color: inherit; border-color: var(--border-color);">
                     </td>
@@ -193,6 +180,20 @@ export default class SiTaskExecution {
         });
     }
 
+    /**
+     * [Helper] 格式化当前时间为 'yyyy-MM-dd HH:mm:ss'
+     */
+    _getFormattedNow() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    }
+
     _attachGlobalListeners() {
         this.container.querySelector('#btn-back').addEventListener('click', () => {
             this.parentView.showList();
@@ -201,15 +202,17 @@ export default class SiTaskExecution {
         this.container.querySelector('#btn-submit').addEventListener('click', async () => {
             this._saveLocalState();
 
-            const now = new Date().toLocaleString('zh-CN', { hour12: false });
+            // [修复] 使用手动格式化确保时间格式为 'yyyy-MM-dd HH:mm:ss'
+            // 之前使用 toLocaleString() 可能导致 'yyyy/MM/dd' 格式，后端Jackson无法解析
+            const nowStr = this._getFormattedNow();
 
             if (this.currentRole === 'inspector') {
                 this.details.forEach(d => {
-                    if (d.result) d.checkTime = now;
+                    if (d.result) d.checkTime = nowStr;
                 });
             } else if (this.currentRole === 'operator') {
                 this.details.forEach(d => {
-                    if (d.isConfirmed) d.confirmTime = now;
+                    if (d.isConfirmed) d.confirmTime = nowStr;
                 });
             }
 
@@ -218,7 +221,7 @@ export default class SiTaskExecution {
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 提交中...';
 
             try {
-                await saveSiTaskDetails(this.taskInfo.id, this.details);
+                await saveSiTaskDetails(this.taskInfo.id, this.details, this.currentRole);
                 Modal.alert("提交成功！");
                 this.parentView.showList();
             } catch(e) {
@@ -256,7 +259,7 @@ export default class SiTaskExecution {
             } else if (target.classList.contains('input-remarks')) {
                 item.remarks = target.value;
             } else if (target.classList.contains('input-confirm')) {
-                item.isConfirmed = target.checked;
+                item.isConfirmed = target.checked ? 1 : 0; // 确保是 Integer 0/1
             }
         });
     }
@@ -274,7 +277,7 @@ export default class SiTaskExecution {
                 if (remarkInput) item.remarks = remarkInput.value;
 
                 const confirmInput = row.querySelector('.input-confirm');
-                if (confirmInput && !confirmInput.disabled) item.isConfirmed = confirmInput.checked;
+                if (confirmInput && !confirmInput.disabled) item.isConfirmed = confirmInput.checked ? 1 : 0;
             }
         });
     }
