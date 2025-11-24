@@ -1,4 +1,32 @@
 -- ============================================================
+-- 清理自检自控模块数据结构 (用于重置调试)
+-- ============================================================
+
+-- 1. 删除表 (注意删除顺序：先删子表，再删主表，防止外键约束报错)
+-- 虽然结构定义中未显式添加外键约束，但保持此习惯是好的
+
+-- 删除任务明细表
+DROP TABLE T_SI_TASK_DETAIL;
+
+-- 删除任务主表
+DROP TABLE T_SI_TASK;
+
+-- 删除标准明细表
+DROP TABLE T_SI_STANDARD;
+
+-- 删除台账主表
+DROP TABLE T_SI_LEDGER;
+
+-- 2. 删除序列
+
+DROP SEQUENCE SEQ_SI_TASK_DETAIL;
+DROP SEQUENCE SEQ_SI_TASK;
+DROP SEQUENCE SEQ_SI_STANDARD;
+DROP SEQUENCE SEQ_SI_LEDGER;
+
+COMMIT;
+
+-- ============================================================
 -- 1. 自检自控台账表 (T_SI_LEDGER)
 -- ============================================================
 CREATE TABLE T_SI_LEDGER (
@@ -97,3 +125,24 @@ CREATE TABLE T_SI_TASK_DETAIL (
 );
 CREATE SEQUENCE SEQ_SI_TASK_DETAIL START WITH 1 INCREMENT BY 1;
 CREATE INDEX IDX_SI_DETAIL_TASK ON T_SI_TASK_DETAIL(TASK_ID);
+
+
+-- ============================================================
+-- 自检自控结构变更：为任务主表添加人员详细信息字段
+-- ============================================================
+
+-- 添加检查人 ID 和 工号
+ALTER TABLE T_SI_TASK ADD CHECKER_ID NUMBER(19,0);
+ALTER TABLE T_SI_TASK ADD CHECKER_NO VARCHAR2(50);
+
+-- 添加确认人 ID 和 工号
+ALTER TABLE T_SI_TASK ADD CONFIRMER_ID NUMBER(19,0);
+ALTER TABLE T_SI_TASK ADD CONFIRMER_NO VARCHAR2(50);
+
+-- 添加注释
+COMMENT ON COLUMN T_SI_TASK.CHECKER_ID IS '检查人ID';
+COMMENT ON COLUMN T_SI_TASK.CHECKER_NO IS '检查人工号';
+COMMENT ON COLUMN T_SI_TASK.CONFIRMER_ID IS '确认人ID';
+COMMENT ON COLUMN T_SI_TASK.CONFIRMER_NO IS '确认人工号';
+
+COMMIT;

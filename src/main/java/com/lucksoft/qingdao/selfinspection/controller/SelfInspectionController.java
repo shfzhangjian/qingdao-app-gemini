@@ -4,6 +4,8 @@ import com.lucksoft.qingdao.selfinspection.entity.SiLedger;
 import com.lucksoft.qingdao.selfinspection.entity.SiTask;
 import com.lucksoft.qingdao.selfinspection.entity.SiTaskDetail;
 import com.lucksoft.qingdao.selfinspection.service.SelfInspectionService;
+import com.lucksoft.qingdao.system.dto.UserInfo;
+import com.lucksoft.qingdao.system.entity.User;
 import com.lucksoft.qingdao.system.util.AuthUtil;
 import com.lucksoft.qingdao.tmis.dto.PageResult;
 import com.lucksoft.qingdao.tspm.service.DynamicQueryService;
@@ -12,9 +14,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 自检自控管理控制器
@@ -221,30 +227,28 @@ public class SelfInspectionController {
         return ResponseEntity.ok(details);
     }
 
-    /**
-     * 提交任务详情
-     * 包含检查结果提交 或 确认提交
-     */
     @PostMapping("/task/submit/{taskId}")
     public ResponseEntity<?> submitTask(
             @PathVariable Long taskId,
             @RequestBody List<SiTaskDetail> details,
-            @RequestHeader(value = "X-Role", defaultValue = "inspector") String role) {
+            @RequestHeader(value = "X-Role", defaultValue = "inspector") String role,
+            HttpServletRequest request) { // 增加 Request 参数
 
-        log.info("收到任务提交请求 /api/si/task/submit/{}. 任务ID: {}, 操作角色: {}, 包含条目数: {}", taskId, taskId, role, details.size());
+        // [新增] 从 Token 获取当前登录用户
+        UserInfo userInfo = authUtil.getCurrentUserInfo(request);
+        User currentUser = (userInfo != null) ? userInfo.getUser() : null;
+
+        if (currentUser != null) {
+            log.info("当前操作用户: {} (ID: {}, 工号: {})", currentUser.getName(), currentUser.getId(), currentUser.getGh());
+        } else {
+            log.warn("未获取到当前登录用户信息 (可能是匿名或Token失效)");
+        }
 
         try {
-            // 打印第一条明细的内容以便调试 (如果存在)
-            if (!details.isEmpty()) {
-                SiTaskDetail first = details.get(0);
-                log.debug("首条明细示例 - ID: {}, 结果: {}, 确认: {}", first.getId(), first.getResult(), first.getIsConfirmed());
-            }
-
-            siService.submitTaskDetails(taskId, details, role);
-            log.info("任务提交处理成功 ID: {}", taskId);
+            // 将 User 对象传递给 Service
+            siService.submitTaskDetails(taskId, details, role, currentUser);
             return ResponseEntity.ok(Collections.singletonMap("success", true));
         } catch (Exception e) {
-            log.error("提交任务失败", e);
             return ResponseEntity.status(500).body(Collections.singletonMap("error", e.getMessage()));
         }
     }
@@ -256,12 +260,13 @@ public class SelfInspectionController {
     /**
      * 获取点检统计列表
      * 目前复用任务列表的查询逻辑，未来可扩展为专门的统计Service方法
+     * [修复] 获取点检统计列表 (扁平化明细数据)
      */
     @GetMapping("/stats/list")
-    public ResponseEntity<PageResult<SiTask>> getStatsList(@RequestParam Map<String, Object> params) {
+    public ResponseEntity<PageResult<Map<String, Object>>> getStatsList(@RequestParam Map<String, Object> params) {
         log.info("收到统计列表查询请求 /api/si/stats/list. 参数: {}", params);
-        // 统计页面通常查询已完成或归档的数据，这里暂复用任务查询逻辑
-        PageResult<SiTask> result = siService.getTaskPage(params);
+        // [修改] 调用新的 getStatsPage 方法
+        PageResult<Map<String, Object>> result = siService.getStatsPage(params);
         log.info("统计查询成功，返回记录数: {}, 总页数: {}", result.getList().size(), result.getPages());
         return ResponseEntity.ok(result);
     }
@@ -304,5 +309,41 @@ public class SelfInspectionController {
             }
         }
         return sb.toString();
+    }
+
+    // [修改] 批量导入标准
+    // 改为接收 ids 字符串 (逗号分隔)
+    @PostMapping("/ledger/import-standard")
+    public ResponseEntity<?> importStandard(@RequestParam("ids") String ids, @RequestParam("file") MultipartFile file) {
+        try {
+            if (ids == null || ids.isEmpty()) {
+                return ResponseEntity.badRequest().body(Collections.singletonMap("error", "未选择任何设备"));
+            }
+            List<Long> ledgerIds = Arrays.stream(ids.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(Long::parseLong)
+                    .collect(Collectors.toList());
+
+            siService.importStandardBatch(ledgerIds, file);
+            return ResponseEntity.ok(Collections.singletonMap("success", true));
+        } catch (Exception e) {
+            log.error("导入标准失败", e);
+            return ResponseEntity.status(500).body(Collections.singletonMap("error", e.getMessage()));
+        }
+    }
+
+
+    // [新增] 下载标准 (附件/模板)
+    @PostMapping("/ledger/download-standard/{ledgerId}")
+    public void downloadStandard(@PathVariable Long ledgerId, HttpServletResponse response) throws IOException {
+        try {
+            siService.downloadStandard(ledgerId, response);
+        } catch (Exception e) {
+            log.error("下载标准失败", e);
+            response.setContentType("application/json;charset=UTF-8");
+            response.setStatus(500);
+            response.getWriter().write("{\"error\": \"" + e.getMessage() + "\"}");
+        }
     }
 }

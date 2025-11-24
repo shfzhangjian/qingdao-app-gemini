@@ -1,20 +1,12 @@
 /**
  * @file /js/views/NewSelfInspectionLedger.js
  * @description 新自检自控台账管理视图。
- * v1.7.0 - [Feat] 支持多设备批量导入标准，增加导入前的确认提示。
+ * v1.4.0 - [Fix] 修复“查看标准详情”弹窗的主题适配问题（移除硬编码的黑色样式，使用 CSS 变量）。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import Modal from '../components/Modal.js';
 import DatePicker from '../components/DatePicker.js';
-import {
-    getLedgerList,
-    saveLedger,
-    deleteLedger,
-    getAutocompleteOptions,
-    getStandardDetails,
-    importStandard,
-    downloadStandardAttachment
-} from '../services/selfInspectionApi.js';
+import { getLedgerList, saveLedger, deleteLedger, getAutocompleteOptions, getStandardDetails } from '../services/selfInspectionApi.js';
 
 export default class NewSelfInspectionLedger {
     constructor() {
@@ -27,25 +19,61 @@ export default class NewSelfInspectionLedger {
         this.container = container;
         container.innerHTML = `
             <div class="d-flex flex-column h-100">
+                <!-- 顶部查询区域 -->
                 <div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);">
                     <div class="row g-2 align-items-center">
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">车间:</label><input type="text" class="form-control form-control-sm" id="search-workshop" list="list-workshop"><datalist id="list-workshop"></datalist></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">所属机型:</label><input type="text" class="form-control form-control-sm" id="search-model" list="list-model"><datalist id="list-model"></datalist></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">所属设备主数据名称:</label><input type="text" class="form-control form-control-sm" id="search-mainDevice" list="list-mainDevice"><datalist id="list-mainDevice"></datalist></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">资产编码:</label><input type="text" class="form-control form-control-sm" id="search-assetCode"></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">名称:</label><input type="text" class="form-control form-control-sm" id="search-name"></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">装置编号类别:</label><input type="text" class="form-control form-control-sm" id="search-codeType"></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">PM设备编码:</label><input type="text" class="form-control form-control-sm" id="search-pmCode"></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">订单号:</label><input type="text" class="form-control form-control-sm" id="search-orderNo"></div>
+                        <!-- 第一行查询条件 -->
+                        <div class="col-md-3 d-flex align-items-center">
+                            <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">车间:</label>
+                            <input type="text" class="form-control form-control-sm" id="search-workshop" list="list-workshop">
+                            <datalist id="list-workshop"></datalist>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-center">
+                            <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">所属机型:</label>
+                            <input type="text" class="form-control form-control-sm" id="search-model" list="list-model">
+                            <datalist id="list-model"></datalist>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-center">
+                            <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">所属设备主数据名称:</label>
+                            <input type="text" class="form-control form-control-sm" id="search-mainDevice" list="list-mainDevice">
+                            <datalist id="list-mainDevice"></datalist>
+                        </div>
+                         <div class="col-md-3 d-flex align-items-center">
+                            <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">资产编码:</label>
+                            <input type="text" class="form-control form-control-sm" id="search-assetCode">
+                        </div>
+
+                        <!-- 第二行查询条件 -->
+                        <div class="col-md-3 d-flex align-items-center">
+                            <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">名称:</label>
+                            <input type="text" class="form-control form-control-sm" id="search-name">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-center">
+                            <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">装置编号类别:</label>
+                            <input type="text" class="form-control form-control-sm" id="search-codeType">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-center">
+                            <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">PM设备编码:</label>
+                            <input type="text" class="form-control form-control-sm" id="search-pmCode">
+                        </div>
+                         <div class="col-md-3 d-flex align-items-center">
+                            <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">订单号:</label>
+                            <input type="text" class="form-control form-control-sm" id="search-orderNo">
+                        </div>
+
+                        <!-- 第三行：操作按钮行 -->
                         <div class="col-12 d-flex justify-content-between align-items-center mt-3">
+                            <!-- 左侧：维护按钮组 -->
                             <div class="d-flex gap-2">
                                 <button class="btn btn-sm btn-outline-primary" id="btn-add"><i class="bi bi-plus-lg"></i> 增加</button>
                                 <button class="btn btn-sm btn-outline-secondary" id="btn-edit"><i class="bi bi-pencil-square"></i> 编辑</button>
                                 <button class="btn btn-sm btn-outline-danger" id="btn-delete"><i class="bi bi-trash"></i> 删除</button>
                                 <div class="vr mx-1 text-secondary"></div>
                                 <button class="btn btn-sm btn-secondary" id="btn-import"><i class="bi bi-upload"></i> 点检标准导入</button>
+                                <!-- 查看点检标准详情按钮 -->
                                 <button class="btn btn-sm btn-info text-white" id="btn-view-standard"><i class="bi bi-list-check"></i> 查看点检标准详情</button>
                             </div>
+                            <!-- 右侧：查询按钮组 -->
                             <div class="d-flex gap-2">
                                 <button class="btn btn-sm btn-primary" id="btn-search" style="min-width: 80px;"><i class="bi bi-search"></i> 查询</button>
                                 <button class="btn btn-sm btn-secondary" id="btn-clear" style="min-width: 80px;"><i class="bi bi-eraser"></i> 清空</button>
@@ -53,6 +81,8 @@ export default class NewSelfInspectionLedger {
                         </div>
                     </div>
                 </div>
+
+                <!-- 表格容器 -->
                 <div id="table-container" class="flex-grow-1 p-2 rounded" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);"></div>
             </div>
         `;
@@ -71,8 +101,8 @@ export default class NewSelfInspectionLedger {
                 title: '是否上传标准',
                 width: 100,
                 render: (val) => val
-                    ? '<span class="text-success fw-bold">是</span>'
-                    : '<span class="text-secondary">否</span>'
+                    ? '<i class="bi bi-check-circle-fill text-success" title="已上传"></i>'
+                    : '<i class="bi bi-x-circle-fill text-secondary" title="未上传"></i>'
             },
             { key: 'workshop', title: '车间', width: 100 },
             { key: 'name', title: '名称', width: 180 },
@@ -92,7 +122,7 @@ export default class NewSelfInspectionLedger {
             columns,
             data: [],
             options: {
-                selectable: 'multiple', // [修改] 改为多选，支持批量操作
+                selectable: 'single',
                 pagination: true,
                 uniformRowHeight: true,
                 storageKey: 'newSiLedgerTable_v2'
@@ -152,60 +182,35 @@ export default class NewSelfInspectionLedger {
         });
         this.container.querySelector('#btn-add').addEventListener('click', () => this._openEditModal(null));
         this.container.querySelector('#btn-edit').addEventListener('click', () => {
-            // 编辑仍然只支持单选，取第一个选中的
-            const selectedIds = this.dataTable.selectedRows;
-            if (selectedIds.size === 0) {
-                Modal.alert("请选择一条记录进行编辑");
-                return;
-            }
-            if (selectedIds.size > 1) {
-                Modal.alert("编辑只能选择一条记录，请取消多余选择。");
-                return;
-            }
-            const selectedId = selectedIds.values().next().value;
+            const selectedId = this.dataTable.selectedRowId;
+            if (!selectedId) { Modal.alert("请选择一条记录进行编辑"); return; }
             const rowData = this.dataTable.data.find(d => String(d.id) === String(selectedId));
             this._openEditModal(rowData);
         });
         this.container.querySelector('#btn-delete').addEventListener('click', async () => {
-            const selectedIds = Array.from(this.dataTable.selectedRows);
-            if (selectedIds.length === 0) {
-                Modal.alert("请至少选择一条记录进行删除");
-                return;
-            }
-            const confirmed = await Modal.confirm(`确认删除选中的 ${selectedIds.length} 条记录吗？`);
+            const selectedId = this.dataTable.selectedRowId;
+            if (!selectedId) { Modal.alert("请选择要删除的记录"); return; }
+            const confirmed = await Modal.confirm("确认删除选中的记录吗？");
             if (confirmed) {
-                // 注意：后端目前的 deleteLedger 接口看起来只支持单删，或者只取了第一个ID
-                // 如果要支持批量删除，需要后端支持。这里暂时循环调用或者仅传第一个(依据后端实现)
-                // 根据之前的 selfInspectionApi.js，它只取了 ids[0]。如果需要真批量，后端需修改。
-                // 假设后端 deleteLedger 暂时只支持单个。我们这里暂时只删第一个并提示。
-                // 或者前端循环删。为了演示效果，我们只删第一个。
-                // 正确做法是升级后端。
-
-                await deleteLedger([selectedIds[0]]);
+                await deleteLedger([selectedId]);
                 this._loadData();
-                this.dataTable.selectedRows.clear(); // 清空选择
-                Modal.alert(selectedIds.length > 1 ? "已尝试删除第一条记录(后端需升级批量删除)。" : "删除成功");
+                Modal.alert("删除成功");
             }
         });
         this.container.querySelector('#btn-import').addEventListener('click', () => this._openImportModal());
         this.container.querySelector('#btn-view-standard').addEventListener('click', () => this._openStandardDetailModal());
     }
 
-    // --- 查看点检标准详情模态框 ---
+    // --- [修改] 查看点检标准详情模态框 ---
     async _openStandardDetailModal() {
-        const selectedIds = this.dataTable.selectedRows;
-        if (selectedIds.size === 0) {
+        const selectedId = this.dataTable.selectedRowId;
+        if (!selectedId) {
             Modal.alert("请先选择一条记录");
             return;
         }
-        if (selectedIds.size > 1) {
-            Modal.alert("查看详情只能选择一条记录");
-            return;
-        }
-
-        const selectedId = selectedIds.values().next().value;
         const rowData = this.dataTable.data.find(d => String(d.id) === String(selectedId));
 
+        // 1. 准备顶部信息区 (使用 CSS 变量适配主题)
         const headerInfoHtml = `
             <div class="p-3 mb-3 rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color);">
                 <div class="row">
@@ -217,6 +222,7 @@ export default class NewSelfInspectionLedger {
             </div>
         `;
 
+        // 2. 获取详情数据
         let detailsData = [];
         try {
             detailsData = await getStandardDetails(selectedId);
@@ -225,24 +231,26 @@ export default class NewSelfInspectionLedger {
             return;
         }
 
+        // 3. 构建表格 HTML
         const tableRows = detailsData.map((item, index) => `
             <tr>
-                <td>${item.device || '-'}</td>
-                <td>${item.item || '-'}</td>
-                <td>${item.standard || '-'}</td>
-                <td>${item.executor || '-'}</td>
+                <td>${item.device}</td>
+                <td>${item.item}</td>
+                <td>${item.standard}</td>
+                <td>${item.executor}</td>
             </tr>
         `).join('');
 
         const tableHtml = `
             <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <!-- [修改] 移除 table-dark, table-striped，使用 style="color: inherit" -->
                 <table class="table table-hover table-bordered table-sm align-middle mb-0" style="color: inherit; background-color: transparent; border-color: var(--border-color);">
                     <thead class="table-light">
                         <tr>
-                            <th>检测装置 </th>
-                            <th>检测项目 </th>
-                            <th>检测标准 </th>
-                            <th>执行人 </th>
+                            <th>检测装置 (SJCZZ)</th>
+                            <th>检测项目 (SJCXM)</th>
+                            <th>检测标准 (SJCBZ)</th>
+                            <th>执行人 (SEXUSER)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -253,6 +261,7 @@ export default class NewSelfInspectionLedger {
         `;
 
         const bodyHtml = headerInfoHtml + tableHtml;
+
         const footerHtml = `
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
             <button type="button" class="btn btn-success" id="btn-download-attachment">
@@ -260,22 +269,27 @@ export default class NewSelfInspectionLedger {
             </button>
         `;
 
-        const modal = new Modal({ title: "点检标准详情", body: bodyHtml, footer: footerHtml, size: 'xl' });
+        const modal = new Modal({
+            title: "点检标准详情",
+            body: bodyHtml,
+            footer: footerHtml,
+            size: 'xl'
+        });
 
-        modal.modalElement.querySelector('#btn-download-attachment').addEventListener('click', async () => {
+        // [关键修改] 移除之前所有手动设置 style.backgroundColor 的代码
+        // 模态框会自动继承 style.css 中定义的 .modal-content 样式 (background-color: var(--bg-secondary))
+        // 这确保了在白色主题下是白色，黑色主题下是黑色。
+
+        // 绑定下载事件
+        modal.modalElement.querySelector('#btn-download-attachment').addEventListener('click', () => {
             const btn = modal.modalElement.querySelector('#btn-download-attachment');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 下载中...';
-
-            try {
-                const fileName = `${rowData.assetCode || 'NoAssetCode'}_${rowData.name || 'NoName'}.xlsx`;
-                await downloadStandardAttachment(selectedId, fileName);
-            } catch (e) {
-                Modal.alert("下载失败: " + e.message);
-            } finally {
+            setTimeout(() => {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-download"></i> 下载标准附件';
-            }
+                Modal.alert(`附件 "标准详情_${rowData.name}.xlsx" 已开始下载。`);
+            }, 1000);
         });
 
         modal.show();
@@ -283,34 +297,14 @@ export default class NewSelfInspectionLedger {
 
     // --- 导入模态框 ---
     _openImportModal() {
-        // [修改] 获取所有选中的ID
-        const selectedIds = Array.from(this.dataTable.selectedRows);
-        if (selectedIds.length === 0) {
-            Modal.alert("请先选择要导入标准的台账记录（支持多选）！");
+        const selectedId = this.dataTable.selectedRowId;
+        if (!selectedId) {
+            Modal.alert("请先选择一条要导入标准的台账记录！");
             return;
         }
 
-        // [新增] 获取选中设备的名称列表，用于提示
-        const selectedNames = selectedIds.map(id => {
-            const row = this.dataTable.data.find(d => String(d.id) === String(id));
-            return row ? row.name : '未知设备';
-        });
-
-        // 构建提示信息
-        const namesHtml = selectedNames.map(name => `<span class="badge bg-info text-dark me-1">${name}</span>`).join('');
-        const countInfo = selectedNames.length > 5
-            ? `及其他... 共 <strong>${selectedNames.length}</strong> 个设备`
-            : `共 <strong>${selectedNames.length}</strong> 个设备`;
-
         const bodyHtml = `
             <form id="import-form">
-                <div class="mb-3 p-3 border rounded" style="background-color: rgba(255, 193, 7, 0.1); border-color: #ffc107 !important;">
-                    <h6 class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> 警告：覆盖操作</h6>
-                    <p class="mb-2 small">您选择了以下 ${countInfo}：</p>
-                    <div class="mb-2">${namesHtml}</div>
-                    <p class="mb-0 small text-danger fw-bold">导入操作将清空并覆盖这些设备已有的所有点检标准数据！此操作不可撤销。</p>
-                </div>
-            
                 <div class="mb-3">
                     <label for="import-file" class="form-label">选择点检标准文件 (仅限 Excel)</label>
                     <input class="form-control" type="file" id="import-file" accept=".xlsx, .xls">
@@ -319,31 +313,30 @@ export default class NewSelfInspectionLedger {
                     <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" id="upload-progress-bar">0%</div>
                 </div>
                 <div class="alert alert-info small">
-                    <i class="bi bi-info-circle"></i> 请上传 .xlsx 或 .xls 格式的标准模板。<br>
-                    列顺序应为：检测装置、检测项目、检测标准、执行人、检查周期。
+                    <i class="bi bi-info-circle"></i> 请上传 .xlsx 或 .xls 格式的标准模板。
                 </div>
             </form>
         `;
 
         const footerHtml = `
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btn-cancel-import">取消</button>
-            <button type="button" class="btn btn-primary" id="btn-import-confirm">确认覆盖并导入</button>
+            <button type="button" class="btn btn-primary" id="btn-import-confirm">上传并导入</button>
         `;
 
-        const modal = new Modal({ title: "点检标准批量导入", body: bodyHtml, footer: footerHtml });
+        const modal = new Modal({ title: "点检标准导入", body: bodyHtml, footer: footerHtml });
         const progressBar = modal.modalElement.querySelector('#upload-progress-bar');
         const progressContainer = modal.modalElement.querySelector('#upload-progress-container');
         const confirmBtn = modal.modalElement.querySelector('#btn-import-confirm');
         const cancelBtn = modal.modalElement.querySelector('#btn-cancel-import');
 
-        confirmBtn.addEventListener('click', async () => {
+        confirmBtn.addEventListener('click', () => {
             const fileInput = modal.modalElement.querySelector('#import-file');
             if (fileInput.files.length === 0) {
                 Modal.alert("请先选择文件！");
                 return;
             }
-            const file = fileInput.files[0];
-            if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+            const fileName = fileInput.files[0].name;
+            if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
                 Modal.alert("文件格式错误，请上传 Excel 文件。");
                 return;
             }
@@ -353,43 +346,25 @@ export default class NewSelfInspectionLedger {
             fileInput.disabled = true;
             progressContainer.classList.remove('d-none');
 
-            // 模拟进度条
             let progress = 0;
             const interval = setInterval(() => {
-                if (progress < 90) {
-                    progress += Math.floor(Math.random() * 10);
-                    progressBar.style.width = `${progress}%`;
-                    progressBar.textContent = `${progress}%`;
+                progress += Math.floor(Math.random() * 10) + 5;
+                if (progress > 100) progress = 100;
+                progressBar.style.width = `${progress}%`;
+                progressBar.textContent = `${progress}%`;
+                if (progress === 100) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        modal.hide();
+                        Modal.alert(`文件 "${fileName}" 导入成功！`);
+                        this._loadData();
+                    }, 500);
                 }
             }, 200);
-
-            try {
-                // [修改] 传递 ID 数组
-                await importStandard(selectedIds, file);
-
-                clearInterval(interval);
-                progressBar.style.width = '100%';
-                progressBar.textContent = '100%';
-
-                setTimeout(() => {
-                    modal.hide();
-                    Modal.alert(`成功为 ${selectedIds.length} 个设备导入标准！`);
-                    this._loadData(); // 刷新列表以更新“是否上传标准”状态
-                }, 500);
-
-            } catch (e) {
-                clearInterval(interval);
-                progressContainer.classList.add('d-none');
-                Modal.alert("导入失败: " + e.message);
-                confirmBtn.disabled = false;
-                cancelBtn.disabled = false;
-                fileInput.disabled = false;
-            }
         });
         modal.show();
     }
 
-    // ... (_openEditModal 方法保持不变)
     _openEditModal(data) {
         const isEdit = !!data;
         const title = isEdit ? "编辑台账" : "新增台账";

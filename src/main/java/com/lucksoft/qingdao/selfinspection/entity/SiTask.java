@@ -19,18 +19,29 @@ public class SiTask implements Serializable {
     private String checkStatus;   // 点检状态
     private String confirmStatus; // 确认状态
 
-    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
-    private Date taskTime;        // 任务日期
+    // [修改] 去掉 timezone
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private Date taskTime;        // 任务日期 (纯日期)
 
     private String taskType;      // 任务类型
     private String isOverdue;
 
-    private String checker;
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    // --- 检查人信息 ---
+    private String checker;       // 检查人姓名
+    private Long checkerId;       // [新增] 检查人ID
+    private String checkerNo;     // [新增] 检查人工号
+
+    // [修改] 去掉 timezone，格式保留为 yyyy-MM-dd HH:mm
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
     private Date checkTime;
 
-    private String confirmer;
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    // --- 确认人信息 ---
+    private String confirmer;     // 确认人姓名
+    private Long confirmerId;     // [新增] 确认人ID
+    private String confirmerNo;   // [新增] 确认人工号
+
+    // [修改] 去掉 timezone，格式保留为 yyyy-MM-dd HH:mm
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
     private Date confirmTime;
 
     // --- Getters and Setters ---
@@ -58,12 +69,24 @@ public class SiTask implements Serializable {
     public void setTaskType(String taskType) { this.taskType = taskType; }
     public String getIsOverdue() { return isOverdue; }
     public void setIsOverdue(String isOverdue) { this.isOverdue = isOverdue; }
+
     public String getChecker() { return checker; }
     public void setChecker(String checker) { this.checker = checker; }
+    public Long getCheckerId() { return checkerId; }
+    public void setCheckerId(Long checkerId) { this.checkerId = checkerId; }
+    public String getCheckerNo() { return checkerNo; }
+    public void setCheckerNo(String checkerNo) { this.checkerNo = checkerNo; }
+
     public Date getCheckTime() { return checkTime; }
     public void setCheckTime(Date checkTime) { this.checkTime = checkTime; }
+
     public String getConfirmer() { return confirmer; }
     public void setConfirmer(String confirmer) { this.confirmer = confirmer; }
+    public Long getConfirmerId() { return confirmerId; }
+    public void setConfirmerId(Long confirmerId) { this.confirmerId = confirmerId; }
+    public String getConfirmerNo() { return confirmerNo; }
+    public void setConfirmerNo(String confirmerNo) { this.confirmerNo = confirmerNo; }
+
     public Date getConfirmTime() { return confirmTime; }
     public void setConfirmTime(Date confirmTime) { this.confirmTime = confirmTime; }
 }

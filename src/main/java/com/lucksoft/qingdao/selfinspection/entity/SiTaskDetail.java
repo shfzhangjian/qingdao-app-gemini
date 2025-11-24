@@ -17,12 +17,12 @@ public class SiTaskDetail implements Serializable {
     private String result;        // 检查结果: 正常/异常/不用
     private String remarks;       // 检查说明
 
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date checkTime;       // 单项检查时间
 
     private Integer isConfirmed;  // 是否确认 (0/1)
 
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date confirmTime;     // 单项确认时间
 
     // --- Getters and Setters ---

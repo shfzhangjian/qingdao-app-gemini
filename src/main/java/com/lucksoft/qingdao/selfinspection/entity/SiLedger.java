@@ -23,7 +23,7 @@ public class SiLedger implements Serializable {
     private String orderNo;       // 订单号
     private String assetCode;     // 资产编码
 
-    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private Date firstUseDate;    // 初次使用时间
 
     private String auditStatus;   // 审批状态

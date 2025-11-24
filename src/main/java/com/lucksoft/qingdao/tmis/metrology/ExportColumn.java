@@ -10,6 +10,16 @@ public class ExportColumn {
         return key;
     }
 
+    // 无参构造函数
+    public ExportColumn() {
+    }
+
+    // [新增] 全参构造函数，方便 new ExportColumn(key, title) 调用
+    public ExportColumn(String key, String title) {
+        this.key = key;
+        this.title = title;
+    }
+
     public void setKey(String key) {
         this.key = key;
     }

@@ -77,6 +77,56 @@ export async function getStandardDetails(id) {
 }
 
 
+// [修改] 导入标准 (支持批量)
+// ledgerIds: 可以是单个ID(String/Number) 或 ID数组(Array)
+export async function importStandard(ledgerIds, file) {
+    const formData = new FormData();
+
+    // 转换为逗号分隔的字符串
+    let idsStr = ledgerIds;
+    if (Array.isArray(ledgerIds)) {
+        idsStr = ledgerIds.join(',');
+    }
+
+    formData.append('ids', idsStr);
+    formData.append('file', file);
+
+    const token = localStorage.getItem('jwt_token');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    // 注意：URL 变更，去掉路径中的 ID
+    const response = await fetch(`/tmis/api/si/ledger/import-standard`, {
+        method: 'POST',
+        headers: headers,
+        body: formData
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+    }
+    return response.json();
+}
+
+// [新增] 下载标准附件
+export async function downloadStandardAttachment(ledgerId, fileName) {
+    const blob = await apiFetch(`/tmis/api/si/ledger/download-standard/${ledgerId}`, {
+        method: 'POST'
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName; // 使用前端传入的名称，或者依赖后端 header
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+}
+
+
+
 // ==================================================================================
 // --- 2. 点检任务 (Task) API ---
 // ==================================================================================

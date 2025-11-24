@@ -42,8 +42,12 @@ public interface SiTaskMapper {
             @Result(property = "taskType", column = "TASK_TYPE"),
             @Result(property = "isOverdue", column = "IS_OVERDUE"),
             @Result(property = "checker", column = "CHECKER"),
+            @Result(property = "checkerId", column = "CHECKER_ID"),
+            @Result(property = "checkerNo", column = "CHECKER_NO"),
             @Result(property = "checkTime", column = "CHECK_TIME"),
             @Result(property = "confirmer", column = "CONFIRMER"),
+            @Result(property = "confirmerId", column = "CONFIRMER_ID"),
+            @Result(property = "confirmerNo", column = "CONFIRMER_NO"),
             @Result(property = "confirmTime", column = "CONFIRM_TIME")
     })
     List<SiTask> findList(@Param("params") Map<String, Object> params);
@@ -58,17 +62,18 @@ public interface SiTaskMapper {
     int insert(SiTask task);
 
     /**
-     * [修复] 为所有可能为 NULL 的字段显式指定 jdbcType。
-     * Oracle 驱动在参数为 null 时必须知道其类型。
-     * - String -> VARCHAR
-     * - Date   -> TIMESTAMP
+     * [修复] 更新状态时同时更新人员 ID、工号和姓名
      */
     @Update("UPDATE T_SI_TASK SET " +
             "CHECK_STATUS=#{checkStatus, jdbcType=VARCHAR}, " +
             "CONFIRM_STATUS=#{confirmStatus, jdbcType=VARCHAR}, " +
             "CHECKER=#{checker, jdbcType=VARCHAR}, " +
+            "CHECKER_ID=#{checkerId, jdbcType=NUMERIC}, " +
+            "CHECKER_NO=#{checkerNo, jdbcType=VARCHAR}, " +
             "CHECK_TIME=#{checkTime, jdbcType=TIMESTAMP}, " +
             "CONFIRMER=#{confirmer, jdbcType=VARCHAR}, " +
+            "CONFIRMER_ID=#{confirmerId, jdbcType=NUMERIC}, " +
+            "CONFIRMER_NO=#{confirmerNo, jdbcType=VARCHAR}, " +
             "CONFIRM_TIME=#{confirmTime, jdbcType=TIMESTAMP} " +
             "WHERE ID=#{id}")
     int updateStatus(SiTask task);

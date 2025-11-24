@@ -1,12 +1,27 @@
 /**
  * @file /js/views/SiStats.js
  * @description 点检统计界面视图。
- * v2.1.0 - [Feature] 归档弹窗中的设备选择改为自动补全输入框。
+ * v2.2.0 - [Fix] 修复日期列显示为 ISO 格式的问题，统一格式化为 yyyy-MM-dd HH:mm。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import Modal from '../components/Modal.js';
 import DatePicker from '../components/DatePicker.js';
 import { getSiStatsList, archiveSiData, getAutocompleteOptions } from '../services/selfInspectionApi.js';
+
+// [新增] 日期格式化工具函数
+const formatDate = (val) => {
+    if (!val) return '-';
+    const date = new Date(val);
+    if (isNaN(date.getTime())) return val;
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+};
 
 export default class SiStats {
     constructor() {
@@ -90,8 +105,9 @@ export default class SiStats {
         const end = new Date();
         const start = new Date();
         start.setMonth(start.getMonth() - 1);
-        const formatDate = d => d.toISOString().split('T')[0];
-        checkTimeInput.value = `${formatDate(start)} 至 ${formatDate(end)}`;
+        // const formatDate = d => d.toISOString().split('T')[0]; // Remove local var to avoid conflict
+        const formatDateStr = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+        checkTimeInput.value = `${formatDateStr(start)} 至 ${formatDateStr(end)}`;
         this.datePicker = new DatePicker(checkTimeInput, { mode: 'range' });
     }
 
@@ -107,22 +123,25 @@ export default class SiStats {
 
     _initTable() {
         const columns = [
-            { key: 'checkTime', title: '检查时间', width: 140 },
+            // [修改] 添加 render: formatDate
+            { key: 'checkTime', title: '检查时间', width: 140, render: formatDate },
             { key: 'device', title: '检查设备', width: 120 },
             { key: 'itemName', title: '检查项目名称', width: 150, render: val => `<div class="text-start">${val}</div>` },
             {
                 key: 'result', title: '检查结果', width: 80,
-                render: val => val === '异常' ? `<span class="text-danger"><i class="bi bi-circle-fill small me-1"></i>异常</span>` : `<span class="text-success"><i class="bi bi-circle-fill small me-1"></i>正常</span>`
+                render: val => val === '异常' ? `<span class="text-danger"><i class="bi bi-circle-fill small me-1"></i>异常</span>` : (val === '正常' ? `<span class="text-success"><i class="bi bi-circle-fill small me-1"></i>正常</span>` : val)
             },
             { key: 'remarks', title: '检查说明', width: 120 },
             { key: 'prodStatus', title: '生产状态', width: 80 },
             { key: 'shift', title: '班次', width: 60 },
             { key: 'shiftType', title: '班别', width: 60 },
             { key: 'taskType', title: '任务类型', width: 100 },
-            { key: 'actualCheckTime', title: '实际检查时间', width: 140 },
+            // [修改] 添加 render: formatDate
+            { key: 'actualCheckTime', title: '实际检查时间', width: 140, render: formatDate },
             { key: 'checker', title: '检查人', width: 80 },
             { key: 'confirmStatus', title: '确认状态', width: 80 },
-            { key: 'confirmTime', title: '确认时间', width: 140 },
+            // [修改] 添加 render: formatDate
+            { key: 'confirmTime', title: '确认时间', width: 140, render: formatDate },
             { key: 'confirmer', title: '确认人', width: 80 },
         ];
 
@@ -207,7 +226,6 @@ export default class SiStats {
             <form id="archive-form">
                 <div class="mb-3">
                     <label for="arc-device" class="form-label">选择设备</label>
-                    <!-- [修改] 使用自动补全输入框替代 select -->
                     <input type="text" class="form-control" id="arc-device" list="list-arc-device" placeholder="请输入设备名称...">
                     <datalist id="list-arc-device"></datalist>
                 </div>
@@ -240,11 +258,11 @@ export default class SiStats {
             const end = new Date();
             const start = new Date();
             start.setMonth(start.getMonth() - months);
-            const formatDate = d => d.toISOString().split('T')[0];
+            const formatDateStr = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
             if (this.archiveDatePicker && this.archiveDatePicker.instance) {
                 this.archiveDatePicker.instance.setDate([start, end]);
             } else {
-                dateInput.value = `${formatDate(start)} 至 ${formatDate(end)}`;
+                dateInput.value = `${formatDateStr(start)} 至 ${formatDateStr(end)}`;
             }
         };
 
