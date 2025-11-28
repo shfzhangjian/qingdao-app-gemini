@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.*;
 import org.apache.ibatis.mapping.StatementType;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * [新] MyBatis Mapper 接口
@@ -13,6 +14,28 @@ import java.util.List;
  */
 @Mapper
 public interface VMaintenanceTasksMapper {
+
+    /**
+     * [新增] 通用查询接口 (支持分页和时间过滤)
+     * 对应 Topic: tims.sync.maintenance.task
+     */
+    @ResultMap("vMaintenanceTaskResultMap")
+    @Select("<script>" +
+            "SELECT * FROM V_MAINTENANCE_TASKS_RECENT " +
+            "<where>" +
+            "   <if test='updateTime != null and updateTime != \"\"'>" +
+            "       AND \"createDateTime\" &gt;= #{updateTime}" +
+            "   </if>" +
+            "   <if test='params != null'>" +
+            "       <if test='params.equipmentCode != null and params.equipmentCode != \"\"'>" +
+            "           AND \"equipmentCode\" LIKE '%' || #{params.equipmentCode} || '%'" +
+            "       </if>" +
+            "   </if>" +
+            "</where>" +
+            "ORDER BY \"createDateTime\" DESC" +
+            "</script>")
+    List<VMaintenanceTaskDTO> findTasksByCondition(@Param("updateTime") String updateTime, @Param("params") Map<String, Object> params);
+
 
     /**
      * 查询 V_MAINTENANCE_TASKS_RECENT 视图中的所有数据。

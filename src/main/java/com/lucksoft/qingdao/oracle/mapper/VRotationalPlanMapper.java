@@ -1,12 +1,10 @@
 package com.lucksoft.qingdao.oracle.mapper;
 
 import com.lucksoft.qingdao.oracle.dto.VRotationalPlanDTO;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Result;
-import org.apache.ibatis.annotations.Results;
-import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * [新] MyBatis Mapper 接口
@@ -15,6 +13,23 @@ import java.util.List;
  */
 @Mapper
 public interface VRotationalPlanMapper {
+
+    /**
+     * [新增] 通用查询接口
+     * 对应 Topic: tims.sync.rotational.plan
+     */
+    @ResultMap("vRotationalPlanResultMap")
+    @Select("<script>" +
+            "SELECT * FROM V_ROTATIONAL_PLANS_RECENT " +
+            "<where>" +
+            "   <if test='updateTime != null and updateTime != \"\"'>" +
+            "       AND \"createDate\" &gt;= #{updateTime}" +
+            "   </if>" +
+            "</where>" +
+            "ORDER BY \"createDate\" DESC" +
+            "</script>")
+    List<VRotationalPlanDTO> findPlansByCondition(@Param("updateTime") String updateTime, @Param("params") Map<String, Object> params);
+
 
     /**
      * 查询 V_ROTATIONAL_PLANS_RECENT 视图中的所有数据。

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSPM-TIMS 数据同步接口测试入口</title>
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; padding: 20px; }
+        .card { transition: transform 0.2s; height: 100%; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .icon-box { font-size: 2.5rem; margin-bottom: 15px; }
+        .card-footer { background-color: transparent; border-top: none; padding-top: 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="text-center mb-5">
+        <h1 class="display-6"><i class="bi bi-arrow-left-right text-primary"></i> TSPM-TIMS 数据同步接口测试</h1>
+        <p class="lead text-muted">独立接口功能验证与联调入口</p>
+        <!-- [新增] 管理入口按钮 -->
+        <a href="tmis_config.html" class="btn btn-outline-dark mt-2"><i class="bi bi-gear-fill"></i> 进入同步配置与监控面板</a>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+
+        <!-- 接口 1 -->
+        <div class="col">
+            <div class="card border-primary h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box text-primary"><i class="bi bi-tools"></i></div>
+                    <h5 class="card-title">接口 1: 保养/点检任务</h5>
+                    <p class="card-text text-muted small">GET /api/tims/sync/maintenance/task</p>
+                    <p class="card-text">获取保养、点检、润滑等类型的增量任务数据。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="maintenance_task_test.html" class="btn btn-outline-primary w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 接口 5 (Plan) -->
+        <div class="col">
+            <div class="card border-info h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box text-info"><i class="bi bi-calendar-week"></i></div>
+                    <h5 class="card-title">接口 5: 轮保计划排期</h5>
+                    <p class="card-text text-muted small">GET /api/tims/sync/rotational/plan</p>
+                    <p class="card-text">获取轮保计划的主表排期信息。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="rotational_plan_test.html" class="btn btn-outline-info w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 接口 7 (Task) -->
+        <div class="col">
+            <div class="card border-warning h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box text-warning"><i class="bi bi-list-check"></i></div>
+                    <h5 class="card-title">接口 7: 轮保任务明细</h5>
+                    <p class="card-text text-muted small">GET /api/tims/sync/rotational/task</p>
+                    <p class="card-text">获取经过筛选的具体轮保任务明细。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="rotational_task_test.html" class="btn btn-outline-warning w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 接口 7 (User Equipment) -->
+        <div class="col">
+            <div class="card border-secondary h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box text-secondary"><i class="bi bi-person-badge"></i></div>
+                    <h5 class="card-title">接口 7/15: 包机信息</h5>
+                    <p class="card-text text-muted small">GET /api/tims/sync/user/equipment</p>
+                    <p class="card-text">获取人员与设备的包机对应关系。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="user_equipment_test.html" class="btn btn-outline-secondary w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 接口 13 -->
+        <div class="col">
+            <div class="card border-success h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box text-success"><i class="bi bi-pause-circle"></i></div>
+                    <h5 class="card-title">接口 13: 停产检修任务</h5>
+                    <p class="card-text text-muted small">GET /api/tims/sync/production/halt/...</p>
+                    <p class="card-text">获取停产检修期间的计划任务。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="production_halt_task_test.html" class="btn btn-outline-success w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 接口 4/10 (Create) -->
+        <div class="col">
+            <div class="card border-danger h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box text-danger"><i class="bi bi-exclamation-triangle"></i></div>
+                    <h5 class="card-title">接口 4/10: 故障报告创建</h5>
+                    <p class="card-text text-muted small">POST /api/tims/fault-report</p>
+                    <p class="card-text">模拟 TIMS 提交故障报告，返回生成编码。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="fault_report_create_test.html" class="btn btn-outline-danger w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 接口 5 (Analysis Create) -->
+        <div class="col">
+            <div class="card" style="border-color: #6f42c1;">
+                <div class="card-body text-center">
+                    <div class="icon-box" style="color: #6f42c1;"><i class="bi bi-clipboard-data"></i></div>
+                    <h5 class="card-title">接口 5: 故障分析报告</h5>
+                    <p class="card-text text-muted small">POST /api/tims/fault-analysis-report</p>
+                    <p class="card-text">模拟 TIMS 提交故障分析，返回生成编码。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="fault_analysis_create_test.html" class="btn btn-outline-dark w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 接口 4/10 (Query History) -->
+        <div class="col">
+            <div class="card border-dark h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box text-dark"><i class="bi bi-search"></i></div>
+                    <h5 class="card-title">接口 4/10: 故障报告查询</h5>
+                    <p class="card-text text-muted small">GET /api/tims/create/fault/report</p>
+                    <p class="card-text">查询 TIMS 已推送过来的历史故障报告记录。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="fault_report_test.html" class="btn btn-outline-dark w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通用查询 -->
+        <div class="col">
+            <div class="card bg-light border-secondary h-100">
+                <div class="card-body text-center">
+                    <div class="icon-box text-muted"><i class="bi bi-database-gear"></i></div>
+                    <h5 class="card-title">通用数据查询</h5>
+                    <p class="card-text text-muted small">POST /api/tmis/data/query</p>
+                    <p class="card-text">高级工具，支持按 Topic 和 Body 进行通用查询。</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="query-template.html" class="btn btn-secondary w-100">进入测试</a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

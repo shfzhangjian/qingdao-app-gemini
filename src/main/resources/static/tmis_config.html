@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TMIS 接口同步配置与监控</title>
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; padding: 20px; }
+        .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; margin-bottom: 20px; }
+        .card-header { background-color: #fff; border-bottom: 1px solid #eee; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .table th { font-weight: 600; background-color: #f8f9fa; }
+        .status-dot { height: 10px; width: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .status-dot.active { background-color: #28a745; }
+        .btn-xs { padding: 0.25rem 0.5rem; font-size: 0.75rem; line-height: 1.5; border-radius: 0.2rem; }
+        .topic-text { font-family: monospace; font-size: 0.9em; color: #0d6efd; }
+        .time-text { font-family: monospace; color: #6610f2; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid" style="max-width: 1400px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="mb-1"><i class="bi bi-hdd-network text-primary"></i> TMIS 数据同步监控中心</h3>
+            <p class="text-muted mb-0">管理数据补漏接口配置，监控同步水位线。</p>
+        </div>
+        <div>
+            <a href="test_entry.html" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回测试入口</a>
+            <button id="refreshBtn" class="btn btn-primary"><i class="bi bi-arrow-clockwise"></i> 刷新数据</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span><i class="bi bi-list-ul"></i> 接口配置列表</span>
+            <span class="badge bg-info text-dark" id="last-refresh-time"></span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                    <tr>
+                        <th style="width: 50px;">状态</th>
+                        <th>主题 (Topic) / 描述</th>
+                        <th style="width: 200px;">最后更新时间 (水位线)</th>
+                        <th>接口 URL</th>
+                        <th style="width: 180px;" class="text-end">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody id="config-table-body">
+                    <tr><td colspan="5" class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 重置时间模态框 -->
+<div class="modal fade" id="resetTimeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">重置水位线</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="reset-topic">
+                <p>正在重置主题：<br><strong id="reset-topic-display" class="text-primary"></strong></p>
+                <div class="mb-3">
+                    <label class="form-label">新时间点 (yyyy-MM-dd HH:mm:ss)</label>
+                    <input type="text" class="form-control" id="reset-time-input" placeholder="2023-01-01 00:00:00">
+                    <div class="form-text text-danger"><i class="bi bi-exclamation-triangle"></i> 注意：重置到较早时间将导致系统重新拉取该时间点之后的所有数据。</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" id="confirmResetBtn">确认重置</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const tableBody = document.getElementById('config-table-body');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const resetModal = new bootstrap.Modal(document.getElementById('resetTimeModal'));
+        const toastContainer = document.querySelector('.toast-container');
+
+        // API 基础路径
+        const API_BASE = '/tmis/api/tmis/data';
+
+        // 加载列表
+        async function loadConfigs() {
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 加载中...';
+
+            try {
+                const response = await fetch(`${API_BASE}/config/list`);
+                const data = await response.json();
+                renderTable(data);
+                document.getElementById('last-refresh-time').textContent = '更新于: ' + new Date().toLocaleTimeString();
+            } catch (error) {
+                showToast('加载失败', error.message, 'danger');
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 刷新数据';
+            }
+        }
+
+        function renderTable(list) {
+            if (!list || list.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-4">暂无配置数据</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = list.map(item => {
+                const enabled = item.enabled === 1;
+                const statusBadge = enabled
+                    ? '<span class="badge bg-success-subtle text-success border border-success-subtle">启用</span>'
+                    : '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">禁用</span>';
+
+                return `
+                    <tr>
+                        <td class="text-center">
+                            <div class="form-check form-switch d-flex justify-content-center">
+                                <input class="form-check-input status-switch" type="checkbox" role="switch"
+                                    data-topic="${item.topic}" ${enabled ? 'checked' : ''}>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="topic-text">${item.topic}</div>
+                            <div class="small text-muted">${item.description || '-'}</div>
+                        </td>
+                        <td><span class="time-text">${item.lastUpdateTime || '从未同步'}</span></td>
+                        <td class="small text-truncate" style="max-width: 300px;" title="${item.apiUrl}">${item.apiUrl || '-'}</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-warning me-1 btn-reset"
+                                data-topic="${item.topic}" data-time="${item.lastUpdateTime || ''}" title="重置水位线">
+                                <i class="bi bi-clock-history"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary btn-trigger"
+                                data-topic="${item.topic}" title="立即触发补漏" ${!enabled ? 'disabled' : ''}>
+                                <i class="bi bi-play-fill"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // 绑定事件
+            document.querySelectorAll('.status-switch').forEach(el => {
+                el.addEventListener('change', async (e) => {
+                    const topic = e.target.dataset.topic;
+                    const enabled = e.target.checked ? 1 : 0;
+                    try {
+                        await apiCall(`${API_BASE}/config/status`, { topic, enabled });
+                        showToast('状态更新', `已${enabled?'启用':'禁用'}接口: ${topic}`, 'success');
+                        // 重新加载以刷新UI状态（如按钮禁用）
+                        loadConfigs();
+                    } catch (err) {
+                        e.target.checked = !e.target.checked; // 回滚
+                        showToast('错误', err.message, 'danger');
+                    }
+                });
+            });
+
+            document.querySelectorAll('.btn-reset').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    const btn = e.target.closest('button');
+                    const topic = btn.dataset.topic;
+                    const time = btn.dataset.time;
+                    document.getElementById('reset-topic').value = topic;
+                    document.getElementById('reset-topic-display').textContent = topic;
+                    document.getElementById('reset-time-input').value = time || '2023-01-01 00:00:00';
+                    resetModal.show();
+                });
+            });
+
+            document.querySelectorAll('.btn-trigger').forEach(el => {
+                el.addEventListener('click', async (e) => {
+                    const btn = e.target.closest('button');
+                    const topic = btn.dataset.topic;
+                    if(!confirm('确定要立即手动触发一次该接口的数据拉取吗？')) return;
+
+                    try {
+                        btn.disabled = true;
+                        await apiCall(`${API_BASE}/config/trigger`, { topic });
+                        showToast('触发成功', '补漏任务已提交至后台线程池运行。', 'success');
+                    } catch (err) {
+                        showToast('触发失败', err.message, 'danger');
+                    } finally {
+                        setTimeout(() => btn.disabled = false, 2000); // 防抖
+                    }
+                });
+            });
+        }
+
+        // 重置确认逻辑
+        document.getElementById('confirmResetBtn').addEventListener('click', async () => {
+            const topic = document.getElementById('reset-topic').value;
+            const time = document.getElementById('reset-time-input').value;
+
+            try {
+                await apiCall(`${API_BASE}/config/reset-time`, { topic, time });
+                resetModal.hide();
+                showToast('重置成功', `水位线已更新为 ${time}`, 'success');
+                loadConfigs();
+            } catch (err) {
+                alert('重置失败: ' + err.message);
+            }
+        });
+
+        async function apiCall(url, body) {
+            const token = localStorage.getItem('jwt_token');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(body)
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text);
+            }
+            return res.json();
+        }
+
+        function showToast(title, message, type) {
+            const id = 'toast-' + Date.now();
+            const html = `
+                <div id="${id}" class="toast align-items-center text-bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <strong>${title}</strong>: ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            toastContainer.insertAdjacentHTML('beforeend', html);
+            const toastEl = document.getElementById(id);
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+            toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+        }
+
+        refreshBtn.addEventListener('click', loadConfigs);
+        loadConfigs();
+    });
+</script>
+
+</body>
+</html>

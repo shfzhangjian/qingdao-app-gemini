@@ -53,7 +53,8 @@
         <spring-boot-starter-data-redis.version>2.7.18</spring-boot-starter-data-redis.version>
         <spring-boot-starter-data-jpa.version>2.7.18</spring-boot-starter-data-jpa.version>
         <spring-boot-starter-test.version>2.7.18</spring-boot-starter-test.version>
-        <mybatis-spring-boot.version>2.2.2</mybatis-spring-boot.version>
+        <!-- MyBatis Plus 版本 -->
+        <mybatis-plus.version>3.5.3.1</mybatis-plus.version>
         <!-- 新增版本属性 -->
         <fastjson2.version>2.0.43</fastjson2.version>
         <hutool.version>5.8.22</hutool.version>
@@ -101,11 +102,11 @@
             <version>${spring-boot-starter-data-jpa.version}</version>
         </dependency>
 
-        <!-- MyBatis -->
+        <!-- MyBatis Plus (替换了原有的 mybatis-spring-boot-starter) -->
         <dependency>
-            <groupId>org.mybatis.spring.boot</groupId>
-            <artifactId>mybatis-spring-boot-starter</artifactId>
-            <version>${mybatis-spring-boot.version}</version>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
         </dependency>
 
         <!-- ==================== 新增: JSON, 加密, 鉴权 ==================== -->

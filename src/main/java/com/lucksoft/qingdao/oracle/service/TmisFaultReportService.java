@@ -2,12 +2,16 @@ package com.lucksoft.qingdao.oracle.service;
 
 import com.lucksoft.qingdao.oracle.mapper.TmisFaultReportMapper;
 import com.lucksoft.qingdao.oracle.service.OracleDataService;
+import com.lucksoft.qingdao.tspm.dto.FaultReportCodeFeedbackDTO;
 import com.lucksoft.qingdao.tspm.dto.FaultReportDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * [新] TMIS 故障报告服务
@@ -26,6 +30,48 @@ public class TmisFaultReportService {
     // 2. 注入用于 *触发* "接口 12" Kafka 推送的服务
     @Autowired
     private OracleDataService oracleDataService;
+
+    /**
+     * 创建一个新的故障报告，触发推送，并返回生成的报告编码。
+     *
+     * @param reportDto 从 API 接收的故障报告数据
+     * @return 生成的故障报告编码 (例如 "JB-E-20250716")
+     */
+    @Transactional
+    public String createReport(FaultReportDTO reportDto) {
+        try {
+            // 1. 调用存储过程保存到 Oracle
+            tmisFaultReportMapper.createFaultReportViaSP(reportDto);
+
+            Integer newReportId = reportDto.getId();
+            if (newReportId == null) {
+                throw new RuntimeException("未能从序列获取新生成的故障报告 ID。");
+            }
+            log.info("故障报告已存入数据库, 新 ID: {}", newReportId);
+
+            // 2. 触发 '接口 12' 逻辑 (查询编码并推送 Kafka)
+            // result 包含 { "pushedData": [FaultReportCodeFeedbackDTO], ... }
+            Map<String, Object> result = oracleDataService.getAndFilterFaultReportCode(newReportId);
+
+            // 3. 从结果中提取 Report Code
+            List<?> pushedData = (List<?>) result.get("pushedData");
+            if (pushedData != null && !pushedData.isEmpty()) {
+                Object firstItem = pushedData.get(0);
+                if (firstItem instanceof FaultReportCodeFeedbackDTO) {
+                    String code = ((FaultReportCodeFeedbackDTO) firstItem).getCode();
+                    log.info("成功获取报告编码: {}", code);
+                    return code;
+                }
+            }
+
+            log.warn("未能获取到报告编码 (ID: {})", newReportId);
+            return null;
+
+        } catch (Exception e) {
+            log.error("创建故障报告失败: {}", e.getMessage(), e);
+            throw new RuntimeException("创建故障报告失败: " + e.getMessage(), e);
+        }
+    }
 
     /**
      * 创建一个新的故障报告，并立即触发 "接口 12" 推送。

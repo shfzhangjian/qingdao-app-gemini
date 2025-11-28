@@ -1,13 +1,10 @@
 package com.lucksoft.qingdao.oracle.mapper;
 
 import com.lucksoft.qingdao.tspm.dto.ProductionHaltTaskDTO;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Result;
-import org.apache.ibatis.annotations.Results;
-import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * [已重构]
@@ -17,6 +14,26 @@ import java.util.List;
  */
 @Mapper
 public interface PmMonthMapper {
+
+
+    /**
+     * [新增] 通用查询接口
+     * 对应 Topic: tims.sync.production.halt.maintenance.task
+     * 视图 v_pm_month_item
+     */
+    @ResultMap("productionHaltTaskResultMap")
+    @Select("<script>" +
+            "SELECT * FROM v_pm_month_item " +
+            "<where>" +
+            // 假设视图中没有明确的创建时间，这里使用计划开始时间作为过滤依据，或者根据您的视图字段调整
+            "   <if test='updateTime != null and updateTime != \"\"'>" +
+            "       AND PLANSTARTTIME &gt;= #{updateTime}" +
+            "   </if>" +
+            "</where>" +
+            "ORDER BY PLANSTARTTIME DESC" +
+            "</script>")
+    List<ProductionHaltTaskDTO> findHaltTasksByCondition(@Param("updateTime") String updateTime, @Param("params") Map<String, Object> params);
+
 
     /**
      * [新] 接口 13: (停产检修)

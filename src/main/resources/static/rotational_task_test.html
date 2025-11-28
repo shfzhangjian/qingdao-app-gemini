@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>轮保任务同步接口测试</title>
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 20px; }
+        .container { max-width: 900px; }
+        .card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .card-header { background-color: #fd7e14; color: white; font-weight: bold; } /* 使用橙色区分 */
+        pre { background-color: #212529; color: #f8f9fa; padding: 15px; border-radius: 5px; max-height: 500px; }
+        .form-label { font-weight: 500; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="text-center mb-4">
+        <h2><i class="bi bi-list-check text-primary"></i> 轮保任务同步接口测试</h2>
+        <p class="text-muted">用于验证后端 <code>/api/tims/sync/rotational/task</code> GET 接口</p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-sliders"></i> 请求参数配置
+        </div>
+        <div class="card-body">
+            <form id="queryForm">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="lastSyncDateTime" class="form-label">1. 上次同步时间 (lastSyncDateTime) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="lastSyncDateTime" placeholder="yyyy-MM-dd HH:mm:ss" value="2023-01-01 00:00:00" required>
+                        <div class="form-text">查询在此时间之后创建的轮保任务。</div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="pageNum" class="form-label">页码 (pageNum)</label>
+                        <input type="number" class="form-control" id="pageNum" placeholder="可选，默认不分页" min="1">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="pageSize" class="form-label">每页数量 (pageSize)</label>
+                        <input type="number" class="form-control" id="pageSize" placeholder="可选，默认不分页" min="1" max="100">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100" id="submitBtn">
+                    <i class="bi bi-send-fill"></i> 发送同步请求 (GET)
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-secondary">
+            <i class="bi bi-code-slash"></i> 响应结果
+            <span id="statusBadge" class="badge bg-light text-dark ms-2 d-none">Status: -</span>
+            <span id="timeBadge" class="badge bg-light text-dark ms-2 d-none">Time: - ms</span>
+        </div>
+        <div class="card-body">
+            <div id="loadingSpinner" class="text-center d-none my-3">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">正在同步数据...</p>
+            </div>
+            <div id="requestUrl" class="alert alert-info d-none mb-3" role="alert" style="word-break: break-all;">
+                <strong>请求 URL:</strong> <span></span>
+            </div>
+            <pre id="responseArea" class="d-none">暂无响应数据...</pre>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('queryForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const responseArea = document.getElementById('responseArea');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const statusBadge = document.getElementById('statusBadge');
+        const timeBadge = document.getElementById('timeBadge');
+        const requestUrlAlert = document.getElementById('requestUrl');
+        const requestUrlSpan = requestUrlAlert.querySelector('span');
+        const toastContainer = document.querySelector('.toast-container');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const lastSyncDateTime = document.getElementById('lastSyncDateTime').value.trim();
+            const pageNumVal = document.getElementById('pageNum').value;
+            const pageSizeVal = document.getElementById('pageSize').value;
+
+            const params = new URLSearchParams();
+            params.append('lastSyncDateTime', lastSyncDateTime);
+
+            if (pageNumVal) params.append('pageNum', pageNumVal);
+            if (pageSizeVal) params.append('pageSize', pageSizeVal);
+
+            const url = `/tmis/api/tims/sync/rotational/task?${params.toString()}`;
+
+            submitBtn.disabled = true;
+            loadingSpinner.classList.remove('d-none');
+            responseArea.classList.add('d-none');
+            statusBadge.classList.add('d-none');
+            timeBadge.classList.add('d-none');
+            requestUrlAlert.classList.remove('d-none');
+            requestUrlSpan.textContent = url;
+
+            const startTime = Date.now();
+
+            try {
+                const token = localStorage.getItem('jwt_token');
+                const headers = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+
+                let result;
+                try {
+                    result = await response.json();
+                } catch (jsonError) {
+                    result = await response.text();
+                }
+
+                statusBadge.textContent = `Status: ${response.status}`;
+                statusBadge.className = `badge ms-2 ${response.ok ? 'bg-success' : 'bg-danger'}`;
+                statusBadge.classList.remove('d-none');
+
+                timeBadge.textContent = `Time: ${duration} ms`;
+                timeBadge.classList.remove('d-none');
+
+                if (typeof result === 'object') {
+                    responseArea.textContent = JSON.stringify(result, null, 2);
+                } else {
+                    responseArea.textContent = result;
+                }
+                responseArea.classList.remove('d-none');
+
+                if (response.ok) {
+                    const count = result.list ? result.list.length : (Array.isArray(result) ? result.length : 0);
+                    showToast('同步成功', `成功获取 ${count} 条数据`, 'success');
+                } else {
+                    const errorMsg = result.error || result.message || '未知错误';
+                    showToast('同步失败', errorMsg, 'danger');
+                }
+
+            } catch (error) {
+                console.error(error);
+                showToast('网络错误', error.message, 'danger');
+                responseArea.textContent = `Error: ${error.message}`;
+                responseArea.classList.remove('d-none');
+            } finally {
+                loadingSpinner.classList.add('d-none');
+                submitBtn.disabled = false;
+            }
+        });
+
+        function showToast(title, message, type) {
+            const id = 'toast-' + Date.now();
+            const html = `
+                <div id="${id}" class="toast align-items-center text-bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <strong>${title}</strong>: ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            toastContainer.insertAdjacentHTML('beforeend', html);
+            const toastEl = document.getElementById(id);
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+            toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+        }
+    });
+</script>
+
+</body>
+</html>
