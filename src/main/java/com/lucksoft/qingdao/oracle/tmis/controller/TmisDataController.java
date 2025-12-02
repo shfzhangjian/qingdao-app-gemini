@@ -1,5 +1,6 @@
 package com.lucksoft.qingdao.oracle.tmis.controller;
 
+import com.lucksoft.qingdao.job.TmisDynamicJob;
 import com.lucksoft.qingdao.oracle.tmis.dto.TmisDataQueryDTO;
 import com.lucksoft.qingdao.oracle.tmis.service.TmisDataQueryService;
 import com.lucksoft.qingdao.system.entity.TmisData;
@@ -99,6 +100,11 @@ public class TmisDataController {
         return ResponseEntity.ok(tmisDataMapper.findAll());
     }
 
+    @Autowired
+    private TmisDynamicJob tmisDynamicJob; // [新增] 注入动态调度器
+
+
+
     /**
      * 更新接口启用状态 (启用/禁用)
      *
@@ -114,7 +120,33 @@ public class TmisDataController {
         }
 
         tmisDataMapper.updateStatus(topic, enabled);
-        return ResponseEntity.ok(Collections.singletonMap("message", "Status updated"));
+        // [新增] 状态更新后，重载调度器
+        tmisDynamicJob.reloadTasks();
+        return ResponseEntity.ok(Collections.singletonMap("message", "Status updated and tasks reloaded"));
+    }
+
+    /**
+     * [新增] 更新 Cron 表达式
+     * Payload: { "topic": "...", "cron": "0 0 14 * * ?" }
+     */
+    @PostMapping("/config/cron")
+    public ResponseEntity<?> updateCron(@RequestBody Map<String, String> params) {
+        String topic = params.get("topic");
+        String cron = params.get("cron");
+
+        if (topic == null || cron == null) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Invalid parameters"));
+        }
+
+        try {
+            // 简单校验 Cron 格式 (依赖 Spring 的 CronTrigger 校验比较麻烦，这里只做判空，运行时报错会记日志)
+            tmisDataMapper.updateCron(topic, cron);
+            // 重载调度器
+            tmisDynamicJob.reloadTasks();
+            return ResponseEntity.ok(Collections.singletonMap("message", "Cron updated and tasks reloaded"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Collections.singletonMap("error", e.getMessage()));
+        }
     }
 
     /**

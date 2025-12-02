@@ -10,12 +10,11 @@
         body { background-color: #f8f9fa; padding: 20px; }
         .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; margin-bottom: 20px; }
         .card-header { background-color: #fff; border-bottom: 1px solid #eee; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-        .table th { font-weight: 600; background-color: #f8f9fa; }
-        .status-dot { height: 10px; width: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
-        .status-dot.active { background-color: #28a745; }
-        .btn-xs { padding: 0.25rem 0.5rem; font-size: 0.75rem; line-height: 1.5; border-radius: 0.2rem; }
+        .nav-tabs .nav-link { color: #495057; }
+        .nav-tabs .nav-link.active { font-weight: bold; color: #0d6efd; }
         .topic-text { font-family: monospace; font-size: 0.9em; color: #0d6efd; }
         .time-text { font-family: monospace; color: #6610f2; font-weight: bold; }
+        .cron-text { font-family: monospace; background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
     </style>
 </head>
 <body>
@@ -23,36 +22,93 @@
 <div class="container-fluid" style="max-width: 1400px;">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h3 class="mb-1"><i class="bi bi-hdd-network text-primary"></i> TMIS 数据同步监控中心</h3>
-            <p class="text-muted mb-0">管理数据补漏接口配置，监控同步水位线。</p>
+            <h3 class="mb-1"><i class="bi bi-hdd-network text-primary"></i> TIMS 数据同步监控中心</h3>
+            <p class="text-muted mb-0">管理数据补漏接口配置，监控同步水位线及执行日志。</p>
         </div>
         <div>
             <a href="test_entry.html" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回测试入口</a>
-            <button id="refreshBtn" class="btn btn-primary"><i class="bi bi-arrow-clockwise"></i> 刷新数据</button>
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-header">
-            <span><i class="bi bi-list-ul"></i> 接口配置列表</span>
-            <span class="badge bg-info text-dark" id="last-refresh-time"></span>
+    <!-- 选项卡导航 -->
+    <ul class="nav nav-tabs mb-3" id="myTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="config-tab" data-bs-toggle="tab" data-bs-target="#config-pane" type="button">接口配置</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs-pane" type="button">执行日志</button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="myTabContent">
+
+        <!-- 1. 接口配置面板 -->
+        <div class="tab-pane fade show active" id="config-pane" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <span><i class="bi bi-list-ul"></i> 配置列表</span>
+                    <div>
+                        <span class="badge bg-info text-dark me-2" id="last-refresh-time"></span>
+                        <button id="refreshBtn" class="btn btn-sm btn-primary"><i class="bi bi-arrow-clockwise"></i> 刷新数据</button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                            <tr>
+                                <th style="width: 60px;">状态</th>
+                                <th>主题 (Topic) / 描述</th>
+                                <th style="width: 150px;">定时策略 (Cron)</th>
+                                <th style="width: 200px;">最后更新时间 (水位线)</th>
+                                <th>接口 URL</th>
+                                <th style="width: 180px;" class="text-end">操作</th>
+                            </tr>
+                            </thead>
+                            <tbody id="config-table-body">
+                            <tr><td colspan="6" class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead>
-                    <tr>
-                        <th style="width: 50px;">状态</th>
-                        <th>主题 (Topic) / 描述</th>
-                        <th style="width: 200px;">最后更新时间 (水位线)</th>
-                        <th>接口 URL</th>
-                        <th style="width: 180px;" class="text-end">操作</th>
-                    </tr>
-                    </thead>
-                    <tbody id="config-table-body">
-                    <tr><td colspan="5" class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
-                    </tbody>
-                </table>
+
+        <!-- 2. 执行日志面板 -->
+        <div class="tab-pane fade" id="logs-pane" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <span><i class="bi bi-journal-text"></i> 日志文件下载</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">选择日期</label>
+                            <select class="form-select" id="log-date-select">
+                                <option value="">加载中...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" id="load-files-btn">加载文件列表</button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive border rounded">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                            <tr>
+                                <th>文件名 (描述_主题)</th>
+                                <th style="width: 120px;">大小</th>
+                                <th style="width: 180px;">修改时间</th>
+                                <th style="width: 100px;">操作</th>
+                            </tr>
+                            </thead>
+                            <tbody id="log-files-body">
+                            <tr><td colspan="4" class="text-center p-3 text-muted">请选择日期并加载</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -83,6 +139,65 @@
     </div>
 </div>
 
+<!-- 修改 Cron 模态框 -->
+<div class="modal fade" id="cronModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">修改定时策略</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="cron-topic">
+
+                <!-- 模式切换 -->
+                <div class="btn-group w-100 mb-3" role="group">
+                    <input type="radio" class="btn-check" name="cron-mode" id="mode-simple" value="simple" checked>
+                    <label class="btn btn-outline-primary" for="mode-simple">每天定点 (表格模式)</label>
+                    <input type="radio" class="btn-check" name="cron-mode" id="mode-advanced" value="advanced">
+                    <label class="btn btn-outline-primary" for="mode-advanced">高级模式 (Cron表达式)</label>
+                </div>
+
+                <!-- 简易模式面板 -->
+                <div id="simple-mode-panel">
+                    <div class="table-responsive border rounded mb-2">
+                        <table class="table table-sm mb-0 align-middle">
+                            <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">执行时间 (HH:mm:ss)</th>
+                                <th style="width: 60px;" class="text-center">操作</th>
+                            </tr>
+                            </thead>
+                            <tbody id="cron-time-tbody">
+                            <!-- 动态插入时间行 -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <button class="btn btn-sm btn-outline-success w-100" id="add-time-btn"><i class="bi bi-plus-circle"></i> 添加时间点</button>
+                    <div class="form-text mt-2">此模式适用于每天固定几个时间点执行任务。<br>如果时间点的分钟/秒不同，系统将自动生成组合策略。</div>
+                </div>
+
+                <!-- 高级模式面板 -->
+                <div id="advanced-mode-panel" class="d-none">
+                    <div class="mb-3">
+                        <label class="form-label">Cron 表达式</label>
+                        <input type="text" class="form-control font-monospace" id="cron-input" placeholder="0 0 14,20,22 * * ?">
+                        <div class="form-text text-muted">
+                            格式: 秒 分 时 日 月 周<br>
+                            多组策略可用 <code>||</code> 分隔 (例如: <code>0 0 8 * * ?||0 30 14 * * ?</code>)
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmCronBtn">保存并生效</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
 
@@ -92,19 +207,29 @@
         const tableBody = document.getElementById('config-table-body');
         const refreshBtn = document.getElementById('refreshBtn');
         const resetModal = new bootstrap.Modal(document.getElementById('resetTimeModal'));
+        const cronModal = new bootstrap.Modal(document.getElementById('cronModal'));
         const toastContainer = document.querySelector('.toast-container');
+        const logDateSelect = document.getElementById('log-date-select');
+        const logFilesBody = document.getElementById('log-files-body');
 
-        // API 基础路径
+        // Cron Modal Elements
+        const simplePanel = document.getElementById('simple-mode-panel');
+        const advancedPanel = document.getElementById('advanced-mode-panel');
+        const modeRadios = document.querySelectorAll('input[name="cron-mode"]');
+        const cronTimeTbody = document.getElementById('cron-time-tbody');
+        const cronInput = document.getElementById('cron-input');
+
         const API_BASE = '/tmis/api/tmis/data';
+        const LOG_API_BASE = '/tmis/api/tmis/logs';
 
-        // 加载列表
+        // --- 1. 配置管理功能 ---
+
         async function loadConfigs() {
             refreshBtn.disabled = true;
             refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 加载中...';
 
             try {
-                const response = await fetch(`${API_BASE}/config/list`);
-                const data = await response.json();
+                const data = await fetchData(`${API_BASE}/config/list`);
                 renderTable(data);
                 document.getElementById('last-refresh-time').textContent = '更新于: ' + new Date().toLocaleTimeString();
             } catch (error) {
@@ -117,15 +242,12 @@
 
         function renderTable(list) {
             if (!list || list.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5" class="text-center p-4">暂无配置数据</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="6" class="text-center p-4">暂无配置数据</td></tr>';
                 return;
             }
 
             tableBody.innerHTML = list.map(item => {
                 const enabled = item.enabled === 1;
-                const statusBadge = enabled
-                    ? '<span class="badge bg-success-subtle text-success border border-success-subtle">启用</span>'
-                    : '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">禁用</span>';
 
                 return `
                     <tr>
@@ -138,6 +260,11 @@
                         <td>
                             <div class="topic-text">${item.topic}</div>
                             <div class="small text-muted">${item.description || '-'}</div>
+                        </td>
+                        <td>
+                            <a href="#" class="text-decoration-none cron-link" data-topic="${item.topic}" data-cron="${item.cronExpression || ''}">
+                                <span class="cron-text">${item.cronExpression ? (item.cronExpression.length > 20 ? '复合策略...' : item.cronExpression) : '未配置'}</span> <i class="bi bi-pencil-square small text-secondary"></i>
+                            </a>
                         </td>
                         <td><span class="time-text">${item.lastUpdateTime || '从未同步'}</span></td>
                         <td class="small text-truncate" style="max-width: 300px;" title="${item.apiUrl}">${item.apiUrl || '-'}</td>
@@ -156,15 +283,18 @@
             }).join('');
 
             // 绑定事件
+            bindConfigEvents();
+        }
+
+        function bindConfigEvents() {
+            // 状态开关
             document.querySelectorAll('.status-switch').forEach(el => {
                 el.addEventListener('change', async (e) => {
                     const topic = e.target.dataset.topic;
                     const enabled = e.target.checked ? 1 : 0;
                     try {
                         await apiCall(`${API_BASE}/config/status`, { topic, enabled });
-                        showToast('状态更新', `已${enabled?'启用':'禁用'}接口: ${topic}`, 'success');
-                        // 重新加载以刷新UI状态（如按钮禁用）
-                        loadConfigs();
+                        showToast('状态更新', `已${enabled?'启用':'禁用'}接口，定时任务已重载。`, 'success');
                     } catch (err) {
                         e.target.checked = !e.target.checked; // 回滚
                         showToast('错误', err.message, 'danger');
@@ -172,42 +302,208 @@
                 });
             });
 
+            // Cron 修改
+            document.querySelectorAll('.cron-link').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const link = e.target.closest('a');
+                    const topic = link.dataset.topic;
+                    const cron = link.dataset.cron;
+
+                    document.getElementById('cron-topic').value = topic;
+
+                    // 初始化 Modal 内容
+                    initCronModal(cron);
+
+                    cronModal.show();
+                });
+            });
+
+            // 重置时间
             document.querySelectorAll('.btn-reset').forEach(el => {
                 el.addEventListener('click', (e) => {
                     const btn = e.target.closest('button');
-                    const topic = btn.dataset.topic;
-                    const time = btn.dataset.time;
-                    document.getElementById('reset-topic').value = topic;
-                    document.getElementById('reset-topic-display').textContent = topic;
-                    document.getElementById('reset-time-input').value = time || '2023-01-01 00:00:00';
+                    document.getElementById('reset-topic').value = btn.dataset.topic;
+                    document.getElementById('reset-topic-display').textContent = btn.dataset.topic;
+                    document.getElementById('reset-time-input').value = btn.dataset.time || '2023-01-01 00:00:00';
                     resetModal.show();
                 });
             });
 
+            // 手动触发
             document.querySelectorAll('.btn-trigger').forEach(el => {
                 el.addEventListener('click', async (e) => {
                     const btn = e.target.closest('button');
-                    const topic = btn.dataset.topic;
                     if(!confirm('确定要立即手动触发一次该接口的数据拉取吗？')) return;
-
                     try {
                         btn.disabled = true;
-                        await apiCall(`${API_BASE}/config/trigger`, { topic });
-                        showToast('触发成功', '补漏任务已提交至后台线程池运行。', 'success');
+                        await apiCall(`${API_BASE}/config/trigger`, { topic: btn.dataset.topic });
+                        showToast('触发成功', '补漏任务已提交至后台线程池运行，请查看日志。', 'success');
                     } catch (err) {
                         showToast('触发失败', err.message, 'danger');
                     } finally {
-                        setTimeout(() => btn.disabled = false, 2000); // 防抖
+                        setTimeout(() => btn.disabled = false, 2000);
                     }
                 });
             });
         }
 
-        // 重置确认逻辑
+        // --- Cron Modal 逻辑 ---
+
+        function initCronModal(cron) {
+            cronInput.value = cron || '';
+            cronTimeTbody.innerHTML = '';
+
+            const times = parseCronToTimes(cron);
+
+            if (times) {
+                // 可以解析为简易模式
+                document.getElementById('mode-simple').checked = true;
+                toggleCronMode('simple');
+                times.forEach(t => addTimeRow(t));
+            } else {
+                // 无法解析，切换到高级模式
+                document.getElementById('mode-advanced').checked = true;
+                toggleCronMode('advanced');
+            }
+        }
+
+        function toggleCronMode(mode) {
+            if (mode === 'simple') {
+                simplePanel.classList.remove('d-none');
+                advancedPanel.classList.add('d-none');
+            } else {
+                simplePanel.classList.add('d-none');
+                advancedPanel.classList.remove('d-none');
+            }
+        }
+
+        modeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                toggleCronMode(e.target.value);
+            });
+        });
+
+        function addTimeRow(timeVal = '08:00:00') {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="ps-3"><input type="time" step="1" class="form-control form-control-sm time-input" value="${timeVal}"></td>
+                <td class="text-center"><button class="btn btn-sm btn-outline-danger btn-del-time"><i class="bi bi-trash"></i></button></td>
+            `;
+            tr.querySelector('.btn-del-time').addEventListener('click', () => tr.remove());
+            cronTimeTbody.appendChild(tr);
+        }
+
+        document.getElementById('add-time-btn').addEventListener('click', () => addTimeRow());
+
+        // 解析 Cron 为时间数组 (支持用 || 分隔的复合 Cron)
+        function parseCronToTimes(cronStr) {
+            if (!cronStr) return [];
+            // 支持用 || 分隔的多个 Cron
+            const crons = cronStr.split('||');
+            let allTimes = [];
+
+            for (let cron of crons) {
+                cron = cron.trim();
+                if(!cron) continue;
+
+                const parts = cron.split(' ');
+                if (parts.length < 6) return null; // 格式错误
+
+                const [s, m, h, d, M, y] = parts;
+
+                // 必须是每天执行 (* * ?)
+                if (d !== '*' || M !== '*') return null;
+
+                // 分和秒必须是定值 (不支持范围)
+                if (isNaN(s) || isNaN(m)) return null;
+
+                const ss = s.padStart(2, '0');
+                const mm = m.padStart(2, '0');
+
+                // 解析小时 (支持逗号分隔)
+                const hours = h.split(',');
+                for (let hourStr of hours) {
+                    if (isNaN(hourStr)) return null;
+                    const hh = hourStr.padStart(2, '0');
+                    allTimes.push(`${hh}:${mm}:${ss}`);
+                }
+            }
+
+            return allTimes.sort();
+        }
+
+        // 将表格时间转为 (可能包含多个) Cron 表达式
+        function generateCronFromTimes() {
+            const inputs = cronTimeTbody.querySelectorAll('.time-input');
+            if (inputs.length === 0) return '';
+
+            // 1. 收集并分组 (Key: "ss:mm", Value: Set(hours))
+            const timeGroups = {};
+
+            for (let input of inputs) {
+                const val = input.value;
+                if (!val) continue;
+
+                const parts = val.split(':');
+                if (parts.length < 2) continue;
+
+                const h = parseInt(parts[0]);
+                const m = parseInt(parts[1]);
+                const s = parseInt(parts[2] || 0);
+
+                // key 是 分:秒，用于分组
+                const key = `${s}:${m}`;
+                if (!timeGroups[key]) {
+                    timeGroups[key] = new Set();
+                }
+                timeGroups[key].add(h);
+            }
+
+            // 2. 生成 Cron 列表
+            const crons = [];
+            for (let key in timeGroups) {
+                const [s, m] = key.split(':');
+                const hours = Array.from(timeGroups[key]).sort((a,b)=>a-b).join(',');
+                // Cron: s m h * * ?
+                crons.push(`${s} ${m} ${hours} * * ?`);
+            }
+
+            if (crons.length === 0) return '';
+
+            // 3. 用 || 拼接 (后端调度器需支持)
+            return crons.join('||');
+        }
+
+
+        // Cron 保存
+        document.getElementById('confirmCronBtn').addEventListener('click', async () => {
+            const topic = document.getElementById('cron-topic').value;
+            const mode = document.querySelector('input[name="cron-mode"]:checked').value;
+            let cron = '';
+
+            if (mode === 'simple') {
+                cron = generateCronFromTimes();
+                if (cron === '') { alert("请至少添加一个有效的时间点"); return; }
+            } else {
+                cron = document.getElementById('cron-input').value.trim();
+                if (!cron) { alert("Cron 表达式不能为空"); return; }
+            }
+
+            try {
+                await apiCall(`${API_BASE}/config/cron`, { topic, cron });
+                cronModal.hide();
+                showToast('更新成功', '定时策略已更新，系统已重载任务。', 'success');
+                loadConfigs();
+            } catch(err) {
+                alert('更新失败: ' + err.message);
+            }
+        });
+
+        // 重置时间保存
         document.getElementById('confirmResetBtn').addEventListener('click', async () => {
             const topic = document.getElementById('reset-topic').value;
             const time = document.getElementById('reset-time-input').value;
-
             try {
                 await apiCall(`${API_BASE}/config/reset-time`, { topic, time });
                 resetModal.hide();
@@ -218,21 +514,126 @@
             }
         });
 
+        // --- 2. 日志管理功能 ---
+
+        async function loadLogDates() {
+            try {
+                const dates = await fetchData(`${LOG_API_BASE}/dates`);
+                logDateSelect.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+                if (dates.length > 0) {
+                    loadLogFiles(dates[0]); // 默认加载最新日期的
+                } else {
+                    logDateSelect.innerHTML = '<option value="">无日志记录</option>';
+                }
+            } catch (e) {
+                logDateSelect.innerHTML = '<option value="">加载失败</option>';
+            }
+        }
+
+        async function loadLogFiles(date) {
+            if (!date) return;
+            logFilesBody.innerHTML = '<tr><td colspan="4" class="text-center p-3"><span class="spinner-border spinner-border-sm"></span> 加载中...</td></tr>';
+            try {
+                const files = await fetchData(`${LOG_API_BASE}/files?date=${date}`);
+
+                if (files.length === 0) {
+                    logFilesBody.innerHTML = '<tr><td colspan="4" class="text-center p-3 text-muted">该日期无日志文件</td></tr>';
+                    return;
+                }
+
+                logFilesBody.innerHTML = files.map(f => `
+                    <tr>
+                        <td><i class="bi bi-file-earmark-text text-secondary me-2"></i>${f.name}</td>
+                        <td>${(f.size / 1024).toFixed(2)} KB</td>
+                        <td>${new Date(f.time).toLocaleTimeString()}</td>
+                        <td>
+                            <button class="btn btn-xs btn-outline-primary btn-download-log"
+                                data-date="${date}" data-name="${f.name}">
+                                <i class="bi bi-download"></i> 下载
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Bind download buttons
+                document.querySelectorAll('.btn-download-log').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        downloadLog(btn.dataset.date, btn.dataset.name);
+                    });
+                });
+
+            } catch (e) {
+                logFilesBody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">加载文件列表失败: ' + e.message + '</td></tr>';
+            }
+        }
+
+        // 文件下载处理 (带 Token)
+        async function downloadLog(date, fileName) {
+            const token = localStorage.getItem('jwt_token');
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            try {
+                const res = await fetch(`${LOG_API_BASE}/download?date=${date}&fileName=${encodeURIComponent(fileName)}`, {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                if (!res.ok) throw new Error(await res.text());
+
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                showToast('下载失败', e.message, 'danger');
+            }
+        }
+
+        document.getElementById('load-files-btn').addEventListener('click', () => {
+            loadLogFiles(logDateSelect.value);
+        });
+
+        // 切换 Tab 时加载数据
+        document.getElementById('logs-tab').addEventListener('shown.bs.tab', () => {
+            if (logDateSelect.options.length <= 1) {
+                loadLogDates();
+            }
+        });
+
+
+        // --- 通用 ---
+
+        // [新] 专门用于 GET 请求的 fetch 封装
+        async function fetchData(url) {
+            const token = localStorage.getItem('jwt_token');
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const res = await fetch(url, { method: 'GET', headers: headers });
+            if (!res.ok) {
+                const text = await res.text();
+                // 如果认证失败，重定向或提示
+                if (res.status === 401 || res.status === 403) {
+                    showToast('认证失败', '您的登录已过期，请重新登录。', 'danger');
+                }
+                throw new Error(text);
+            }
+            return res.json();
+        }
+
+        // 现有的 apiCall (主要用于 POST)
         async function apiCall(url, body) {
             const token = localStorage.getItem('jwt_token');
             const headers = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
-
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(body)
-            });
-
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text);
-            }
+            const res = await fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body) });
+            if (!res.ok) throw new Error(await res.text());
             return res.json();
         }
 
@@ -241,18 +642,14 @@
             const html = `
                 <div id="${id}" class="toast align-items-center text-bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
                     <div class="d-flex">
-                        <div class="toast-body">
-                            <strong>${title}</strong>: ${message}
-                        </div>
+                        <div class="toast-body"><strong>${title}</strong>: ${message}</div>
                         <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                     </div>
-                </div>
-            `;
+                </div>`;
             toastContainer.insertAdjacentHTML('beforeend', html);
             const toastEl = document.getElementById(id);
             const toast = new bootstrap.Toast(toastEl);
             toast.show();
-            toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
         }
 
         refreshBtn.addEventListener('click', loadConfigs);
