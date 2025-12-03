@@ -12,7 +12,8 @@ public class FaultAnalysisReportDTO {
      */
     @JsonProperty("id")
     private Integer id;
-
+    @JsonProperty("code")
+    private String code;
     /**
      * 故障报告/名称
      */
@@ -116,6 +117,8 @@ public class FaultAnalysisReportDTO {
     private String faultCausesAnalysis;
 
     // Getters and Setters
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
     public String getName() { return name; }

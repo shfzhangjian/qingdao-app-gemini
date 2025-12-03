@@ -10,6 +10,7 @@ import org.apache.ibatis.mapping.StatementType;
 /**
  * [新] Kafka 接口 11: 故障分析报告创建
  * 负责调用 'tmis.CREATE_FAULT_ANALYSIS_REPORT' 存储过程。
+ * 增加 p_new_id OUT 参数以支持 ID 回填。
  */
 @Mapper
 public interface TmisFaultAnalysisReportMapper {
@@ -32,7 +33,9 @@ public interface TmisFaultAnalysisReportMapper {
             "p_halt_end_time => #{dto.haltEndTime, jdbcType=VARCHAR, mode=IN}," +
             "p_halt_duration => #{dto.haltDuration, jdbcType=VARCHAR, mode=IN}," +
             "p_fault_site_desc => #{dto.faultSiteDesc, jdbcType=VARCHAR, mode=IN}," +
-            "p_fault_causes_analysis => #{dto.faultCausesAnalysis, jdbcType=VARCHAR, mode=IN}" +
+            "p_fault_causes_analysis => #{dto.faultCausesAnalysis, jdbcType=VARCHAR, mode=IN}," +
+
+            "p_new_code => #{report.code, jdbcType=VARCHAR, mode=OUT}" +
             ")}")
     @Options(statementType = StatementType.CALLABLE)
     void createFaultAnalysisReportViaSP(@Param("dto") FaultAnalysisReportDTO dto);

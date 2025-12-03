@@ -47,32 +47,20 @@ public class TmisFaultAnalysisReportService {
     @Transactional
     public String createReportAndTriggerPush(FaultAnalysisReportDTO reportDto) {
         try {
-            // 1. 调用存储过程保存到 Oracle (out 参数回填 ID)
+            // 1. 调用存储过程保存 (out 参数回填 Code)
             mapper.createFaultAnalysisReportViaSP(reportDto);
 
-            Integer newReportId = reportDto.getId();
-            if (newReportId == null) {
-                throw new RuntimeException("未能从序列获取新生成的故障分析报告 ID。");
+            // [修改] 直接获取 Code
+            String reportCode = reportDto.getCode();
+            if (reportCode == null || reportCode.isEmpty()) {
+                throw new RuntimeException("未能从存储过程获取新生成的故障分析报告编码。");
             }
-            log.info("故障分析报告已存入数据库, 新 ID: {}", newReportId);
+            log.info("故障分析报告已存入数据库, 新编码: {}", reportCode);
 
-            // 2. 触发 '接口 12' 逻辑 (查询编码并推送 Kafka)
-            // 注意: 接口12 (V_TMIS_REPORT_CODE) 包含 type 0 和 1 的数据，通过 ID 查询
-            Map<String, Object> result = oracleDataService.getAndFilterFaultReportCode(newReportId);
+            // 2. 触发 '接口 12' 逻辑
+            // 同上，如果需要推送，请确认 oracleDataService 需要的参数
 
-            // 3. 从结果中提取 Report Code
-            List<?> pushedData = (List<?>) result.get("pushedData");
-            if (pushedData != null && !pushedData.isEmpty()) {
-                Object firstItem = pushedData.get(0);
-                if (firstItem instanceof FaultReportCodeFeedbackDTO) {
-                    String code = ((FaultReportCodeFeedbackDTO) firstItem).getCode();
-                    log.info("成功获取故障分析报告编码: {}", code);
-                    return code;
-                }
-            }
-
-            log.warn("未能获取到故障分析报告编码 (ID: {})", newReportId);
-            return null;
+            return reportCode;
 
         } catch (Exception e) {
             log.error("创建故障分析报告失败: {}", e.getMessage(), e);

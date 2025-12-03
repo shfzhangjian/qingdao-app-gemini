@@ -12,6 +12,9 @@ public class FaultReportDTO {
     @JsonProperty("id")
     private Integer id;
 
+    @JsonProperty("code")
+    private String code;
+
     /**
      * 故障报告/名称
      */
@@ -121,6 +124,8 @@ public class FaultReportDTO {
     private String specificDesc;
 
     // Getters and Setters
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
     public String getName() { return name; }

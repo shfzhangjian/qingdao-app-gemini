@@ -8,30 +8,57 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * [新] MyBatis Mapper 接口
+ * [已修复] MyBatis Mapper 接口
  * 专门用于查询 V_MAINTENANCE_TASKS_RECENT 视图。
- * 此 Mapper 假设连接的是主数据源 (PrimaryDataSource)。
+ * 修复了忽略 'type' 过滤条件导致返回所有类型数据的问题。
+ * * 更新：支持按类型动态路由到不同视图 (V_MAINTENANCE_TASKS_RECENT_{type})。
  */
 @Mapper
 public interface VMaintenanceTasksMapper {
 
     /**
-     * [新增] 通用查询接口 (支持分页和时间过滤)
+     * [已修复] 通用查询接口 (支持分页、时间过滤和类型动态视图路由)
      * 对应 Topic: tims.sync.maintenance.task
+     * * 逻辑变更：
+     * 1. 如果 params.types 仅包含 1 个类型，尝试查询对应的分视图 V_MAINTENANCE_TASKS_RECENT_{type}。
+     * 2. 否则，查询总视图 V_MAINTENANCE_TASKS_RECENT 并使用 WHERE type IN (...) 过滤。
      */
     @ResultMap("vMaintenanceTaskResultMap")
     @Select("<script>" +
-            "SELECT * FROM V_MAINTENANCE_TASKS_RECENT " +
-            "<where>" +
-            "   <if test='updateTime != null and updateTime != \"\"'>" +
-            "       AND \"createDateTime\" &gt;= #{updateTime}" +
-            "   </if>" +
-            "   <if test='params != null'>" +
-            "       <if test='params.equipmentCode != null and params.equipmentCode != \"\"'>" +
-            "           AND \"equipmentCode\" LIKE '%' || #{params.equipmentCode} || '%'" +
-            "       </if>" +
-            "   </if>" +
-            "</where>" +
+            "<choose>" +
+            // 情况1: 如果只指定了唯一的 type，则查询对应的分视图 V_MAINTENANCE_TASKS_RECENT_{type}
+            "   <when test='params != null and params.types != null and params.types.size() == 1'>" +
+            "       SELECT * FROM V_MAINTENANCE_TASKS_RECENT_${params.types[0]} " +
+            "       <where>" +
+            "           <if test='updateTime != null and updateTime != \"\"'>" +
+            "               AND \"createDateTime\" &gt;= #{updateTime}" +
+            "           </if>" +
+            "           <if test='params.equipmentCode != null and params.equipmentCode != \"\"'>" +
+            "               AND \"equipmentCode\" LIKE '%' || #{params.equipmentCode} || '%'" +
+            "           </if>" +
+            "       </where>" +
+            "   </when>" +
+            // 情况2: 否则 (未指定类型 或 指定了多个类型)，查询总视图并进行 WHERE 过滤
+            "   <otherwise>" +
+            "       SELECT * FROM V_MAINTENANCE_TASKS_RECENT " +
+            "       <where>" +
+            "           <if test='updateTime != null and updateTime != \"\"'>" +
+            "               AND \"createDateTime\" &gt;= #{updateTime}" +
+            "           </if>" +
+            "           <if test='params != null'>" +
+            "               <if test='params.equipmentCode != null and params.equipmentCode != \"\"'>" +
+            "                   AND \"equipmentCode\" LIKE '%' || #{params.equipmentCode} || '%'" +
+            "               </if>" +
+            "               <if test='params.types != null and params.types.size() > 0'>" +
+            "                   AND \"type\" IN " +
+            "                   <foreach item='item' index='index' collection='params.types' open='(' separator=',' close=')'>" +
+            "                       #{item}" +
+            "                   </foreach>" +
+            "               </if>" +
+            "           </if>" +
+            "       </where>" +
+            "   </otherwise>" +
+            "</choose>" +
             "ORDER BY \"createDateTime\" DESC" +
             "</script>")
     List<VMaintenanceTaskDTO> findTasksByCondition(@Param("updateTime") String updateTime, @Param("params") Map<String, Object> params);
