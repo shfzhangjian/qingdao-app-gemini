@@ -50,7 +50,16 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             "/api/tspm/simulate/**",
             "/api/tspm/generate-json/**",
             "/api/tspm/received-data/**",
-            "/api/tspm/logs"
+            "/api/tspm/logs",
+            // 新增测试页面
+            "/tims_speed_test.html",
+            "/tims_self_check_test.html",
+            "/test_index.html",
+            "/test_entry.html",
+            // 新增 API
+            "/api/tims/speed/**",
+            "/api/tims/self-check/**",
+            "/api/direct-test/**"
     );
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();

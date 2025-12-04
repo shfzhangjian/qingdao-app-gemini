@@ -1,0 +1,107 @@
+package com.lucksoft.qingdao.selfinspection.mapper;
+
+import com.lucksoft.qingdao.selfinspection.entity.ZjzkTool;
+import org.apache.ibatis.annotations.*;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 自检自控台账 Mapper
+ * 对应表: ZJZK_TOOL
+ */
+@Mapper
+public interface ZjzkToolMapper {
+
+    // ... (保留原有的 findList, insert, update, deleteById, findDistinctValues 方法) ...
+    @Results(id = "zjzkToolMap", value = {
+            @Result(property = "indocno", column = "INDOCNO", id = true),
+            @Result(property = "sregid", column = "SREGID"),
+            @Result(property = "sregnm", column = "SREGNM"),
+            @Result(property = "dregt", column = "DREGT"),
+            @Result(property = "smodid", column = "SMODID"),
+            @Result(property = "smodnm", column = "SMODNM"),
+            @Result(property = "dmodt", column = "DMODT"),
+            @Result(property = "sname", column = "SNAME"),
+            @Result(property = "szznolb", column = "SZZNOLB"),
+            @Result(property = "sdept", column = "SDEPT"),
+            @Result(property = "idept", column = "IDEPT"),
+            @Result(property = "sjx", column = "SJX"),
+            @Result(property = "ijx", column = "IJX"),
+            @Result(property = "sfname", column = "SFNAME"),
+            @Result(property = "sfcode", column = "SFCODE"),
+            @Result(property = "sbname", column = "SBNAME"),
+            @Result(property = "scj", column = "SCJ"),
+            @Result(property = "sxh", column = "SXH"),
+            @Result(property = "sazwz", column = "SAZWZ"),
+            @Result(property = "ssm", column = "SSM"),
+            @Result(property = "syl", column = "SYL"),
+            @Result(property = "iszc", column = "ISZC"),
+            @Result(property = "spmcode", column = "SPMCODE"),
+            @Result(property = "sddno", column = "SDDNO"),
+            @Result(property = "szcno", column = "SZCNO"),
+            @Result(property = "dtime", column = "DTIME"),
+            @Result(property = "istepid", column = "ISTEPID"),
+            @Result(property = "sstepnm", column = "SSTEPNM"),
+            @Result(property = "sstepstate", column = "SSTEPSTATE"),
+            @Result(property = "istepcharttype", column = "ISTEPCHARTTYPE"),
+            @Result(property = "sstepoperid", column = "SSTEPOPERID"),
+            @Result(property = "sstepopernm", column = "SSTEPOPERNM"),
+            @Result(property = "snote", column = "SNOTE")
+    })
+    @Select("<script>" +
+            "SELECT * FROM ZJZK_TOOL " +
+            "<where>" +
+            "   <if test='params.sdept != null and params.sdept != \"\"'>AND SDEPT LIKE '%' || #{params.sdept} || '%'</if>" +
+            "   <if test='params.sjx != null and params.sjx != \"\"'>AND SJX LIKE '%' || #{params.sjx} || '%'</if>" +
+            "   <if test='params.sbname != null and params.sbname != \"\"'>AND SBNAME LIKE '%' || #{params.sbname} || '%'</if>" +
+            "   <if test='params.sname != null and params.sname != \"\"'>AND SNAME LIKE '%' || #{params.sname} || '%'</if>" +
+            "   <if test='params.spmcode != null and params.spmcode != \"\"'>AND SPMCODE LIKE '%' || #{params.spmcode} || '%'</if>" +
+            "   <if test='params.szcno != null and params.szcno != \"\"'>AND SZCNO LIKE '%' || #{params.szcno} || '%'</if>" +
+            "</where>" +
+            "ORDER BY INDOCNO DESC" +
+            "</script>")
+    List<ZjzkTool> findList(@Param("params") Map<String, Object> params);
+
+    @Insert("INSERT INTO ZJZK_TOOL (INDOCNO, SDEPT, SNAME, SJX, SFNAME, SBNAME, SCJ, SXH, SAZWZ, SYL, SPMCODE, SDDNO, SZCNO, DTIME, SSTEPSTATE, DREGT) " +
+            "VALUES (SEQ_ZJZK_TOOL.NEXTVAL, #{sdept}, #{sname}, #{sjx}, #{sfname}, #{sbname}, #{scj}, #{sxh}, #{sazwz}, #{syl}, #{spmcode}, #{sddno}, #{szcno}, #{dtime}, #{sstepstate}, SYSDATE)")
+    @Options(useGeneratedKeys = true, keyProperty = "indocno", keyColumn = "INDOCNO")
+    int insert(ZjzkTool tool);
+
+    @Update("UPDATE ZJZK_TOOL SET SDEPT=#{sdept}, SNAME=#{sname}, SJX=#{sjx}, SFNAME=#{sfname}, SBNAME=#{sbname}, SCJ=#{scj}, SXH=#{sxh}, SAZWZ=#{sazwz}, SYL=#{syl}, SPMCODE=#{spmcode}, SDDNO=#{sddno}, SZCNO=#{szcno}, DTIME=#{dtime}, DMODT=SYSDATE WHERE INDOCNO=#{indocno}")
+    int update(ZjzkTool tool);
+
+    @Delete("DELETE FROM ZJZK_TOOL WHERE INDOCNO=#{id}")
+    int deleteById(Long id);
+
+    @Select("SELECT DISTINCT ${field} FROM ZJZK_TOOL WHERE ${field} IS NOT NULL ORDER BY NLSSORT(${field}, 'NLS_SORT=SCHINESE_PINYIN_M')")
+    List<String> findDistinctValues(@Param("field") String field);
+
+    // -------------------------------------------------------------
+    // [新增] 专门用于生成任务的接口
+    // -------------------------------------------------------------
+
+    /**
+     * [新增] 1. 分组查询设备列表 (Group By SJX, SFNAME, SBNAME, SNAME, SPMCODE)
+     * 必须过滤 SPMCODE IS NOT NULL
+     * 注意：为了配合 Optimized_DataTable，我们通常需要在 SQL 里做分页，
+     * 这里使用 PageHelper，所以只需要写基本查询。
+     */
+    @Select("<script>" +
+            "SELECT SJX, SFNAME, SBNAME,  SPMCODE " +
+            "FROM ZJZK_TOOL " +
+            "WHERE SPMCODE IS NOT NULL AND LENGTH(TRIM(SPMCODE)) > 0 " +
+            "<if test='params.sbname != null and params.sbname != \"\"'>AND SBNAME LIKE '%' || #{params.sbname} || '%'</if>" +
+            "<if test='params.spmcode != null and params.spmcode != \"\"'>AND SPMCODE LIKE '%' || #{params.spmcode} || '%'</if>" +
+            "GROUP BY SJX, SFNAME, SBNAME, SPMCODE " +
+            "ORDER BY SPMCODE" +
+            "</script>")
+    List<ZjzkTool> selectDeviceGroupList(@Param("params") Map<String, Object> params);
+
+    /**
+     * [新增] 2. 根据联合主键查询该设备下的所有明细 (用于生成任务子表)
+     */
+    @Select("SELECT * FROM ZJZK_TOOL WHERE SPMCODE = #{spmcode} AND SNAME = #{sname}")
+    @ResultMap("zjzkToolMap")
+    List<ZjzkTool> selectByDeviceKey(@Param("spmcode") String spmcode, @Param("sname") String sname);
+}

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>获取设备平均车速测试</title>
+    <link href="libs/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="libs/bootstrap-icons-1.11.3/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 20px; }
+        .container { max-width: 800px; }
+        .card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .card-header { background-color: #0dcaf0; color: white; font-weight: bold; } /* Cyan */
+        pre { background-color: #212529; color: #f8f9fa; padding: 15px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="text-center mb-4">
+        <h2><i class="bi bi-speedometer2 text-info"></i> 获取设备平均车速测试</h2>
+        <p class="text-muted">验证接口: <code>GET /api/tims/speed/avg</code></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-sliders"></i> 查询参数
+        </div>
+        <div class="card-body">
+            <form id="queryForm">
+                <div class="mb-3">
+                    <label class="form-label">设备编码 (equipmentCode) *</label>
+                    <input type="text" class="form-control" id="equipmentCode" value="JB000488" required>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">开始时间 (startTime)</label>
+                        <input type="text" class="form-control" id="startTime" placeholder="yyyy-MM-dd HH:mm:ss" value="2025-05-01 00:00:00">
+                        <div class="form-text">可选，默认回推10min</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">结束时间 (endTime)</label>
+                        <input type="text" class="form-control" id="endTime" placeholder="yyyy-MM-dd HH:mm:ss" value="2025-05-01 00:10:00">
+                        <div class="form-text">可选，默认当前时间</div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-info text-white w-100" id="submitBtn">
+                    <i class="bi bi-send-fill"></i> 查询平均车速
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-secondary">
+            <i class="bi bi-code-slash"></i> 响应结果
+        </div>
+        <div class="card-body text-center">
+            <div id="loadingSpinner" class="spinner-border text-primary d-none" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+
+            <div id="resultContainer" class="d-none">
+                <h5>平均车速</h5>
+                <h1 class="display-1 text-primary" id="speedValue">0.0</h1>
+                <p class="text-muted">Status: <span id="statusCode"></span></p>
+            </div>
+
+            <div id="errorContainer" class="alert alert-danger d-none"></div>
+            <pre id="rawResponse" class="d-none text-start mt-3"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="libs/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.getElementById('queryForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const equipmentCode = document.getElementById('equipmentCode').value;
+        const startTime = document.getElementById('startTime').value;
+        const endTime = document.getElementById('endTime').value;
+
+        const params = new URLSearchParams();
+        params.append('equipmentCode', equipmentCode);
+        if(startTime) params.append('startTime', startTime);
+        if(endTime) params.append('endTime', endTime);
+
+        const btn = document.getElementById('submitBtn');
+        const spinner = document.getElementById('loadingSpinner');
+        const resultDiv = document.getElementById('resultContainer');
+        const errorDiv = document.getElementById('errorContainer');
+        const rawPre = document.getElementById('rawResponse');
+
+        btn.disabled = true;
+        spinner.classList.remove('d-none');
+        resultDiv.classList.add('d-none');
+        errorDiv.classList.add('d-none');
+        rawPre.classList.add('d-none');
+
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`/tmis/api/tims/speed/avg?${params.toString()}`, {
+                method: 'GET',
+                headers: headers
+            });
+
+            const text = await response.text();
+            document.getElementById('statusCode').textContent = response.status;
+
+            if (response.ok) {
+                document.getElementById('speedValue').textContent = text;
+                resultDiv.classList.remove('d-none');
+            } else {
+                try {
+                    const errJson = JSON.parse(text);
+                    throw new Error(errJson.error || text);
+                } catch(e) {
+                    throw new Error(text);
+                }
+            }
+
+        } catch (err) {
+            errorDiv.textContent = "请求失败: " + err.message;
+            errorDiv.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+            spinner.classList.add('d-none');
+        }
+    });
+</script>
+</body>
+</html>

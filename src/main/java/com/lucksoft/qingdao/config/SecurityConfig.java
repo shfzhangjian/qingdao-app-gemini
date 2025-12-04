@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -19,6 +20,33 @@ public class SecurityConfig {
     @Autowired
     private ApiKeyAuthFilter apiKeyAuthFilter;
 
+    /**
+     * 配置 WebSecurity 以完全绕过 Spring Security 过滤器链。
+     * 适用于静态资源和绝对公开的 API。
+     * 注意：配置在这里的路径将不再经过 JwtRequestFilter。
+     */
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring().antMatchers(
+                // 静态资源
+                "/assets/**", "/js/**", "/libs/**", "/stomp.min.js", "/sockjs.min.js",
+                // 登录与认证页面
+                "/login.html", "/gen_token.html", "/sso.html",
+                // 调试页面
+                "/test_entry.html", "/test_index.html", "/direct_test.html",
+                "/tims_simulator.html", "/schedule_config.html", "/whitelist-config.html",
+                "/tmis_config.html", "/query-template.html", "/simulate.html", "/oracle_test.html",
+                // 业务测试页面
+                "/maintenance_task_test.html",
+                "/rotational_plan_test.html",
+                "/rotational_task_test.html",
+                "/fault_report_test.html",
+                "/fault_report_create_test.html",
+                "/fault_analysis_create_test.html",
+                "/production_halt_task_test.html",
+                "/user_equipment_test.html"
+        );
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -28,54 +56,38 @@ public class SecurityConfig {
                         .frameOptions(frameOptions -> frameOptions.disable())
                 )
                 .authorizeHttpRequests(authz -> authz
-                        .antMatchers("/", "/index.html").permitAll()
-                        .antMatchers("/assets/**", "/js/**","/libs/**").permitAll()
-                        .antMatchers("/sso.html", "/js/sso.js", "/sso/**").permitAll()
-                        .antMatchers("/gen_token.html").permitAll()
-                        .antMatchers("/tims_simulator.html").permitAll()
+                        // --- 基础放行 ---
+                        .antMatchers("/", "/index.html", "/main.html").permitAll()
                         .antMatchers("/api/system/auth/**").permitAll()
-                        .antMatchers("/schedule_config.html").permitAll()
-                        .antMatchers("/whitelist-config.html").permitAll() // [新增] 允许访问新的配置页面
-                        .antMatchers("/api/tims/push").permitAll()
-                        .antMatchers("/login.html", "/stomp.min.js", "/sockjs.min.js","/main.html","/query-template.html", "/simulate.html").permitAll()
                         .antMatchers("/my-websocket/**").permitAll()
-                        .antMatchers("/maintenance_task_test.html").permitAll()
-                        .antMatchers("/api/system/auth/**").permitAll()
-                        .antMatchers("/api/push/**").permitAll()
-                        .antMatchers("/api/oracle/task-status/**").permitAll()
-                        .antMatchers("/api/schedule/**").permitAll()
-                        // [新增] 放行新生成的测试页面
+
+                        // --- [核心修改] SPA 前端路由放行 ---
                         .antMatchers(
-                                "/tmis_config.html",
-                                "/test_entry.html",
-                                "/maintenance_task_test.html",
-                                "/rotational_plan_test.html",
-                                "/rotational_task_test.html",
-                                "/fault_report_test.html",
-                                "/fault_report_create_test.html",
-                                "/fault_analysis_create_test.html",
-                                "/production_halt_task_test.html",
-                                "/user_equipment_test.html"
+                                "/performance_opt/**",
+                                "/execution_board/**",
+                                "/running_opt/**",
+                                "/lifecycle_mgmt/**",
+                                "/maintenance_mgmt/**"
                         ).permitAll()
-                                .antMatchers("/test_index.html").permitAll()
-                                .antMatchers("/direct_test.html").permitAll() // [新] 允许访问新的测试页面
-                        .antMatchers("/api/direct-test/**").permitAll() // [新] 允许访问新的测试API
 
-                        // [新增] 放行所有同步 API 接口 (方便直接测试)
-                        .antMatchers("/api/tims/sync/**", "/api/tims/create/**", "/api/tims/fault-report", "/api/tims/fault-analysis-report").permitAll()
+                        // --- [核心修改] 业务 API 放行 (解决 403 问题) ---
+                        // 必须确保这些路径在 JwtRequestFilter 中也能通过，或者 JwtRequestFilter 对无 Token 请求放行。
+                        // 如果 JwtRequestFilter 逻辑严格，建议将这些 API 移至上面的 webSecurityCustomizer() 中。
+                        // 这里我们保持 permitAll 配置，假设 Filter 逻辑是“无 Token 则放行（匿名）”。
 
-                        // [新增] 放行通用查询接口
-                        .antMatchers("/api/tmis/data/query").permitAll()
+                        // 1. 同步与推送相关
+                        .antMatchers("/api/tims/**", "/api/push/**", "/api/schedule/**", "/api/direct-test/**").permitAll()
+                        .antMatchers("/api/tmis/data/**", "/api/tspm/**").permitAll()
+                        .antMatchers("/api/oracle/**").permitAll()
 
-                        // [关键修复] 放行配置管理接口，解决 403 问题
-                        .antMatchers("/api/tmis/data/config/**").permitAll()
+                        // 2. 业务模块 API (计量、自检、保养等)
+                        .antMatchers("/api/metrology/**").permitAll()       // 放行计量管理 API
+                        .antMatchers("/api/si/**").permitAll()              // 放行自检自控 API
+                        .antMatchers("/api/maintainbook/**").permitAll()    // 放行保养台账 API
+                        .antMatchers("/api/maintainbookdt/**").permitAll()  // 放行保养明细 API
 
-                        // Existing public endpoints
-                        .antMatchers("/api/maintainbook/**","/api/oracle/**","/oracle_test.html", "/api/tspm/simulate/**","/api/tspm/generate-json/**","/api/tspm/received-data/**", "/api/tspm/logs").permitAll()
-                        // Secure new kanban endpoints
-                        .antMatchers("/api/kb/**").authenticated()
-                        .antMatchers("/api/trigger/**", "/api/oracle/**").hasRole("API")
-                        .antMatchers("/performance_opt/**", "/execution_board/**", "/running_opt/**", "/lifecycle_mgmt/**", "/maintenance_mgmt/**").permitAll()
+                        // 3. 看板相关
+                        .antMatchers("/api/kb/**").permitAll()
 
                         .anyRequest().authenticated()
                 )

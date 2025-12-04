@@ -1,26 +1,31 @@
 /**
  * @file /js/views/NewSelfInspectionLedger.js
- * @description 新自检自控台账管理视图。
- * v1.7.0 - [Feat] 支持多设备批量导入标准，增加导入前的确认提示。
+ * @description 新自检自控台账管理视图 (重构版)。
+ * v2.5.0 - [Fix] 修正生成任务时设备列表的数据源，严格调用分组接口 getTaskGenerationDeviceList。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import Modal from '../components/Modal.js';
-import DatePicker from '../components/DatePicker.js';
 import {
     getLedgerList,
     saveLedger,
     deleteLedger,
     getAutocompleteOptions,
-    getStandardDetails,
-    importStandard,
-    downloadStandardAttachment
+    getStandardFiles,
+    uploadStandardFile,
+    deleteStandardFile,
+    getFilePreviewUrl,
+    generateSiTasks,
+    getTaskGenerationDeviceList // [修复] 必须导入此接口
 } from '../services/selfInspectionApi.js';
 
 export default class NewSelfInspectionLedger {
     constructor() {
         this.container = null;
         this.dataTable = null;
-        this.searchParams = {};
+        // 缓存生成任务列表的数据表格实例
+        this.genTaskTable = null;
+        // [New] 缓存已选设备信息 {id: {name, ...}}，用于跨页显示名称
+        this.selectedItemsMap = new Map();
     }
 
     render(container) {
@@ -28,25 +33,26 @@ export default class NewSelfInspectionLedger {
         container.innerHTML = `
             <div class="d-flex flex-column h-100">
                 <div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">车间:</label><input type="text" class="form-control form-control-sm" id="search-workshop" list="list-workshop"><datalist id="list-workshop"></datalist></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">所属机型:</label><input type="text" class="form-control form-control-sm" id="search-model" list="list-model"><datalist id="list-model"></datalist></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">所属设备主数据名称:</label><input type="text" class="form-control form-control-sm" id="search-mainDevice" list="list-mainDevice"><datalist id="list-mainDevice"></datalist></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">资产编码:</label><input type="text" class="form-control form-control-sm" id="search-assetCode"></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">名称:</label><input type="text" class="form-control form-control-sm" id="search-name"></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">装置编号类别:</label><input type="text" class="form-control form-control-sm" id="search-codeType"></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">PM设备编码:</label><input type="text" class="form-control form-control-sm" id="search-pmCode"></div>
-                        <div class="col-md-3 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary">订单号:</label><input type="text" class="form-control form-control-sm" id="search-orderNo"></div>
-                        <div class="col-12 d-flex justify-content-between align-items-center mt-3">
+                    <!-- [修改] 改为每行 3 列 (col-md-4) -->
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-4 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary" style="width: 80px; text-align: right;">车间:</label><input type="text" class="form-control form-control-sm" id="search-sdept" list="list-sdept"><datalist id="list-sdept"></datalist></div>
+                        <div class="col-md-4 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary" style="width: 80px; text-align: right;">所属机型:</label><input type="text" class="form-control form-control-sm" id="search-sjx" list="list-sjx"><datalist id="list-sjx"></datalist></div>
+                        <div class="col-md-4 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary" style="width: 110px; text-align: right;">主数据名称:</label><input type="text" class="form-control form-control-sm" id="search-sbname" list="list-sbname"><datalist id="list-sbname"></datalist></div>
+                        
+                        <div class="col-md-4 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary" style="width: 80px; text-align: right;">名称:</label><input type="text" class="form-control form-control-sm" id="search-sname"></div>
+                        <div class="col-md-4 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary" style="width: 80px; text-align: right;">PM编码:</label><input type="text" class="form-control form-control-sm" id="search-spmcode"></div>
+                        <div class="col-md-4 d-flex align-items-center"><label class="form-label mb-0 me-2 flex-shrink-0 text-secondary" style="width: 110px; text-align: right;">资产编码:</label><input type="text" class="form-control form-control-sm" id="search-szcno"></div>
+                        
+                        <div class="col-12 d-flex justify-content-between align-items-center mt-2 pt-2 border-top border-secondary">
                             <div class="d-flex gap-2">
                                 <button class="btn btn-sm btn-outline-primary" id="btn-add"><i class="bi bi-plus-lg"></i> 增加</button>
                                 <button class="btn btn-sm btn-outline-secondary" id="btn-edit"><i class="bi bi-pencil-square"></i> 编辑</button>
                                 <button class="btn btn-sm btn-outline-danger" id="btn-delete"><i class="bi bi-trash"></i> 删除</button>
                                 <div class="vr mx-1 text-secondary"></div>
-                                <button class="btn btn-sm btn-secondary" id="btn-import"><i class="bi bi-upload"></i> 点检标准导入</button>
-                                <button class="btn btn-sm btn-info text-white" id="btn-view-standard"><i class="bi bi-list-check"></i> 查看点检标准详情</button>
+                                <button class="btn btn-sm btn-info text-white" id="btn-files"><i class="bi bi-file-earmark-pdf"></i> 标准附件管理(PDF)</button>
                             </div>
                             <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-warning text-dark" id="btn-generate"><i class="bi bi-lightning-charge-fill"></i> 生成任务</button>
                                 <button class="btn btn-sm btn-primary" id="btn-search" style="min-width: 80px;"><i class="bi bi-search"></i> 查询</button>
                                 <button class="btn btn-sm btn-secondary" id="btn-clear" style="min-width: 80px;"><i class="bi bi-eraser"></i> 清空</button>
                             </div>
@@ -64,38 +70,26 @@ export default class NewSelfInspectionLedger {
 
     _initTable() {
         const columns = [
-            { key: 'auditStatus', title: '审批状态', width: 80, render: val => `<span class="badge bg-success">${val}</span>` },
-            { key: 'id', title: '序号', width: 60 },
-            {
-                key: 'hasStandard',
-                title: '是否上传标准',
-                width: 100,
-                render: (val) => val
-                    ? '<span class="text-success fw-bold">是</span>'
-                    : '<span class="text-secondary">否</span>'
-            },
-            { key: 'workshop', title: '车间', width: 100 },
-            { key: 'name', title: '名称', width: 180 },
-            { key: 'model', title: '所属机型', width: 120 },
-            { key: 'device', title: '所属设备', width: 120 },
-            { key: 'mainDevice', title: '所属设备主数据名称', width: 200 },
-            { key: 'factory', title: '厂家', width: 120 },
-            { key: 'spec', title: '规格型号', width: 120 },
-            { key: 'location', title: '安装位置', width: 150 },
-            { key: 'principle', title: '测量原理', width: 120 },
-            { key: 'pmCode', title: 'PM设备编码', width: 120 },
-            { key: 'orderNo', title: '订单号', width: 120 },
-            { key: 'assetCode', title: '资产编码', width: 120 },
+            { key: 'sstepstate', title: '审批状态', width: 80, render: val => `<span class="badge bg-success">${val || '草稿'}</span>` },
+            // 虚拟序号列
+            { key: '_index', title: '序号', width: 60 },
+            { key: 'sdept', title: '车间', width: 100 },
+            { key: 'sname', title: '名称', width: 180 },
+            { key: 'sjx', title: '所属机型', width: 120 },
+            { key: 'sfname', title: '所属设备', width: 120 },
+            { key: 'sbname', title: '主设备名称', width: 200 },
+            { key: 'spmcode', title: 'PM编码', width: 120 },
+            { key: 'sazwz', title: '安装位置', width: 150 },
         ];
 
         this.dataTable = new DataTable({
             columns,
             data: [],
             options: {
-                selectable: 'multiple', // [修改] 改为多选，支持批量操作
+                selectable: 'single',
                 pagination: true,
                 uniformRowHeight: true,
-                storageKey: 'newSiLedgerTable_v2'
+                storageKey: 'zjzkToolTable_v2'
             }
         });
         this.dataTable.render(this.container.querySelector('#table-container'));
@@ -111,28 +105,37 @@ export default class NewSelfInspectionLedger {
                 list.innerHTML = options.map(opt => `<option value="${opt}">`).join('');
             } catch(e){}
         };
-        fillDatalist('workshop', 'list-workshop');
-        fillDatalist('model', 'list-model');
-        fillDatalist('mainDevice', 'list-mainDevice');
+        fillDatalist('sdept', 'list-sdept');
+        fillDatalist('sjx', 'list-sjx');
+        fillDatalist('sbname', 'list-sbname');
     }
 
     async _loadData() {
         if (!this.dataTable) return;
         this.dataTable.toggleLoading(true);
         const params = {
-            workshop: this.container.querySelector('#search-workshop').value,
-            model: this.container.querySelector('#search-model').value,
-            mainDevice: this.container.querySelector('#search-mainDevice').value,
-            name: this.container.querySelector('#search-name').value,
-            pmCode: this.container.querySelector('#search-pmCode').value,
-            assetCode: this.container.querySelector('#search-assetCode').value,
+            sdept: this.container.querySelector('#search-sdept').value,
+            sjx: this.container.querySelector('#search-sjx').value,
+            sbname: this.container.querySelector('#search-sbname').value,
+            sname: this.container.querySelector('#search-sname').value,
+            spmcode: this.container.querySelector('#search-spmcode').value,
+            szcno: this.container.querySelector('#search-szcno').value,
             pageNum: this.dataTable.state.pageNum,
             pageSize: this.dataTable.state.pageSize
         };
         try {
             const result = await getLedgerList(params);
+
+            if (result && result.list) {
+                const start = (result.pageNum - 1) * result.pageSize;
+                result.list.forEach((item, index) => {
+                    item._index = start + index + 1;
+                    item.id = item.indocno;
+                });
+            }
+
             this.dataTable.updateView(result);
-        } catch (e) { console.error(e); Modal.alert("加载数据失败"); }
+        } catch (e) { console.error(e); Modal.alert("加载数据失败: " + e.message); }
         finally { this.dataTable.toggleLoading(false); }
     }
 
@@ -146,299 +149,90 @@ export default class NewSelfInspectionLedger {
             this.dataTable.state.pageNum = 1;
             this._loadData();
         });
-        this.container.querySelector('#table-container').addEventListener('pageChange', (e) => {
-            this.dataTable.state.pageNum = e.detail.pageNum;
+
+        this.container.querySelector('#table-container').addEventListener('queryChange', (e) => {
             this._loadData();
         });
+
         this.container.querySelector('#btn-add').addEventListener('click', () => this._openEditModal(null));
         this.container.querySelector('#btn-edit').addEventListener('click', () => {
-            // 编辑仍然只支持单选，取第一个选中的
-            const selectedIds = this.dataTable.selectedRows;
-            if (selectedIds.size === 0) {
-                Modal.alert("请选择一条记录进行编辑");
+            const selectedId = this.dataTable.selectedRowId;
+            if (!selectedId) { Modal.alert("请选择一条记录进行编辑"); return; }
+            const rowData = this.dataTable.data.find(d => String(d.indocno) === String(selectedId));
+            if (!rowData) {
+                Modal.alert("无法获取选中行数据，请刷新重试");
                 return;
             }
-            if (selectedIds.size > 1) {
-                Modal.alert("编辑只能选择一条记录，请取消多余选择。");
-                return;
-            }
-            const selectedId = selectedIds.values().next().value;
-            const rowData = this.dataTable.data.find(d => String(d.id) === String(selectedId));
             this._openEditModal(rowData);
         });
         this.container.querySelector('#btn-delete').addEventListener('click', async () => {
-            const selectedIds = Array.from(this.dataTable.selectedRows);
-            if (selectedIds.length === 0) {
-                Modal.alert("请至少选择一条记录进行删除");
-                return;
-            }
-            const confirmed = await Modal.confirm(`确认删除选中的 ${selectedIds.length} 条记录吗？`);
-            if (confirmed) {
-                // 注意：后端目前的 deleteLedger 接口看起来只支持单删，或者只取了第一个ID
-                // 如果要支持批量删除，需要后端支持。这里暂时循环调用或者仅传第一个(依据后端实现)
-                // 根据之前的 selfInspectionApi.js，它只取了 ids[0]。如果需要真批量，后端需修改。
-                // 假设后端 deleteLedger 暂时只支持单个。我们这里暂时只删第一个并提示。
-                // 或者前端循环删。为了演示效果，我们只删第一个。
-                // 正确做法是升级后端。
-
-                await deleteLedger([selectedIds[0]]);
+            const selectedId = this.dataTable.selectedRowId;
+            if (!selectedId) { Modal.alert("请选择要删除的记录"); return; }
+            if (await Modal.confirm("确认删除选中记录吗？")) {
+                await deleteLedger([selectedId]);
                 this._loadData();
-                this.dataTable.selectedRows.clear(); // 清空选择
-                Modal.alert(selectedIds.length > 1 ? "已尝试删除第一条记录(后端需升级批量删除)。" : "删除成功");
+                Modal.alert("删除成功");
             }
         });
-        this.container.querySelector('#btn-import').addEventListener('click', () => this._openImportModal());
-        this.container.querySelector('#btn-view-standard').addEventListener('click', () => this._openStandardDetailModal());
+
+        this.container.querySelector('#btn-files').addEventListener('click', () => this._openFileManagementModal());
+        this.container.querySelector('#btn-generate').addEventListener('click', () => this._openGenerateTaskModal());
     }
 
-    // --- 查看点检标准详情模态框 ---
-    async _openStandardDetailModal() {
-        const selectedIds = this.dataTable.selectedRows;
-        if (selectedIds.size === 0) {
-            Modal.alert("请先选择一条记录");
-            return;
-        }
-        if (selectedIds.size > 1) {
-            Modal.alert("查看详情只能选择一条记录");
-            return;
-        }
-
-        const selectedId = selectedIds.values().next().value;
-        const rowData = this.dataTable.data.find(d => String(d.id) === String(selectedId));
-
-        const headerInfoHtml = `
-            <div class="p-3 mb-3 rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color);">
-                <div class="row">
-                    <div class="col-md-6 mb-1"><strong>设备名称:</strong> ${rowData.name || '-'}</div>
-                    <div class="col-md-6 mb-1"><strong>资产编号:</strong> ${rowData.assetCode || '-'}</div>
-                    <div class="col-md-6"><strong>所属设备:</strong> ${rowData.device || '-'}</div>
-                    <div class="col-md-6"><strong>安装位置:</strong> ${rowData.location || '-'}</div>
-                </div>
-            </div>
-        `;
-
-        let detailsData = [];
-        try {
-            detailsData = await getStandardDetails(selectedId);
-        } catch (e) {
-            Modal.alert("获取详情失败");
-            return;
-        }
-
-        const tableRows = detailsData.map((item, index) => `
-            <tr>
-                <td>${item.device || '-'}</td>
-                <td>${item.item || '-'}</td>
-                <td>${item.standard || '-'}</td>
-                <td>${item.executor || '-'}</td>
-            </tr>
-        `).join('');
-
-        const tableHtml = `
-            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                <table class="table table-hover table-bordered table-sm align-middle mb-0" style="color: inherit; background-color: transparent; border-color: var(--border-color);">
-                    <thead class="table-light">
-                        <tr>
-                            <th>检测装置 </th>
-                            <th>检测项目 </th>
-                            <th>检测标准 </th>
-                            <th>执行人 </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${detailsData.length > 0 ? tableRows : '<tr><td colspan="4" class="text-center py-3">无标准数据</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        const bodyHtml = headerInfoHtml + tableHtml;
-        const footerHtml = `
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-            <button type="button" class="btn btn-success" id="btn-download-attachment">
-                <i class="bi bi-download"></i> 下载标准附件
-            </button>
-        `;
-
-        const modal = new Modal({ title: "点检标准详情", body: bodyHtml, footer: footerHtml, size: 'xl' });
-
-        modal.modalElement.querySelector('#btn-download-attachment').addEventListener('click', async () => {
-            const btn = modal.modalElement.querySelector('#btn-download-attachment');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 下载中...';
-
-            try {
-                const fileName = `${rowData.assetCode || 'NoAssetCode'}_${rowData.name || 'NoName'}.xlsx`;
-                await downloadStandardAttachment(selectedId, fileName);
-            } catch (e) {
-                Modal.alert("下载失败: " + e.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-download"></i> 下载标准附件';
-            }
-        });
-
-        modal.show();
-    }
-
-    // --- 导入模态框 ---
-    _openImportModal() {
-        // [修改] 获取所有选中的ID
-        const selectedIds = Array.from(this.dataTable.selectedRows);
-        if (selectedIds.length === 0) {
-            Modal.alert("请先选择要导入标准的台账记录（支持多选）！");
-            return;
-        }
-
-        // [新增] 获取选中设备的名称列表，用于提示
-        const selectedNames = selectedIds.map(id => {
-            const row = this.dataTable.data.find(d => String(d.id) === String(id));
-            return row ? row.name : '未知设备';
-        });
-
-        // 构建提示信息
-        const namesHtml = selectedNames.map(name => `<span class="badge bg-info text-dark me-1">${name}</span>`).join('');
-        const countInfo = selectedNames.length > 5
-            ? `及其他... 共 <strong>${selectedNames.length}</strong> 个设备`
-            : `共 <strong>${selectedNames.length}</strong> 个设备`;
-
-        const bodyHtml = `
-            <form id="import-form">
-                <div class="mb-3 p-3 border rounded" style="background-color: rgba(255, 193, 7, 0.1); border-color: #ffc107 !important;">
-                    <h6 class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> 警告：覆盖操作</h6>
-                    <p class="mb-2 small">您选择了以下 ${countInfo}：</p>
-                    <div class="mb-2">${namesHtml}</div>
-                    <p class="mb-0 small text-danger fw-bold">导入操作将清空并覆盖这些设备已有的所有点检标准数据！此操作不可撤销。</p>
-                </div>
-            
-                <div class="mb-3">
-                    <label for="import-file" class="form-label">选择点检标准文件 (仅限 Excel)</label>
-                    <input class="form-control" type="file" id="import-file" accept=".xlsx, .xls">
-                </div>
-                <div class="progress d-none mb-3" id="upload-progress-container">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" id="upload-progress-bar">0%</div>
-                </div>
-                <div class="alert alert-info small">
-                    <i class="bi bi-info-circle"></i> 请上传 .xlsx 或 .xls 格式的标准模板。<br>
-                    列顺序应为：检测装置、检测项目、检测标准、执行人、检查周期。
-                </div>
-            </form>
-        `;
-
-        const footerHtml = `
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btn-cancel-import">取消</button>
-            <button type="button" class="btn btn-primary" id="btn-import-confirm">确认覆盖并导入</button>
-        `;
-
-        const modal = new Modal({ title: "点检标准批量导入", body: bodyHtml, footer: footerHtml });
-        const progressBar = modal.modalElement.querySelector('#upload-progress-bar');
-        const progressContainer = modal.modalElement.querySelector('#upload-progress-container');
-        const confirmBtn = modal.modalElement.querySelector('#btn-import-confirm');
-        const cancelBtn = modal.modalElement.querySelector('#btn-cancel-import');
-
-        confirmBtn.addEventListener('click', async () => {
-            const fileInput = modal.modalElement.querySelector('#import-file');
-            if (fileInput.files.length === 0) {
-                Modal.alert("请先选择文件！");
-                return;
-            }
-            const file = fileInput.files[0];
-            if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-                Modal.alert("文件格式错误，请上传 Excel 文件。");
-                return;
-            }
-
-            confirmBtn.disabled = true;
-            cancelBtn.disabled = true;
-            fileInput.disabled = true;
-            progressContainer.classList.remove('d-none');
-
-            // 模拟进度条
-            let progress = 0;
-            const interval = setInterval(() => {
-                if (progress < 90) {
-                    progress += Math.floor(Math.random() * 10);
-                    progressBar.style.width = `${progress}%`;
-                    progressBar.textContent = `${progress}%`;
-                }
-            }, 200);
-
-            try {
-                // [修改] 传递 ID 数组
-                await importStandard(selectedIds, file);
-
-                clearInterval(interval);
-                progressBar.style.width = '100%';
-                progressBar.textContent = '100%';
-
-                setTimeout(() => {
-                    modal.hide();
-                    Modal.alert(`成功为 ${selectedIds.length} 个设备导入标准！`);
-                    this._loadData(); // 刷新列表以更新“是否上传标准”状态
-                }, 500);
-
-            } catch (e) {
-                clearInterval(interval);
-                progressContainer.classList.add('d-none');
-                Modal.alert("导入失败: " + e.message);
-                confirmBtn.disabled = false;
-                cancelBtn.disabled = false;
-                fileInput.disabled = false;
-            }
-        });
-        modal.show();
-    }
-
-    // ... (_openEditModal 方法保持不变)
     _openEditModal(data) {
         const isEdit = !!data;
         const title = isEdit ? "编辑台账" : "新增台账";
+
         const formHtml = `
             <form id="ledger-form" class="container-fluid">
-                <input type="hidden" name="id" value="${data?.id || ''}">
+                <input type="hidden" name="indocno" value="${data?.indocno || ''}">
                 <div class="row mb-3 align-items-center">
                     <div class="col-md-2 text-end"><label class="form-label"><span class="text-danger">*</span>车间</label></div>
-                    <div class="col-md-4"><input type="text" class="form-control" name="workshop" list="dl-workshop" required value="${data?.workshop || ''}"><datalist id="dl-workshop"></datalist></div>
+                    <div class="col-md-4"><input type="text" class="form-control" name="sdept" list="dl-sdept" required value="${data?.sdept || ''}"><datalist id="dl-sdept"></datalist></div>
                     <div class="col-md-2 text-end"><label class="form-label"><span class="text-danger">*</span>名称</label></div>
-                    <div class="col-md-4"><input type="text" class="form-control" name="name" required value="${data?.name || ''}"></div>
+                    <div class="col-md-4"><input type="text" class="form-control" name="sname" required value="${data?.sname || ''}"></div>
                 </div>
                 <div class="row mb-3 align-items-center">
-                    <div class="col-md-2 text-end"><label class="form-label"><span class="text-danger">*</span>所属机型</label></div>
-                    <div class="col-md-4"><input type="text" class="form-control" name="model" list="dl-model" required value="${data?.model || ''}"><datalist id="dl-model"></datalist></div>
-                    <div class="col-md-2 text-end"><label class="form-label"><span class="text-danger">*</span>所属设备</label></div>
-                    <div class="col-md-4"><input type="text" class="form-control" name="device" required value="${data?.device || ''}"></div>
+                    <div class="col-md-2 text-end"><label class="form-label">所属机型</label></div>
+                    <div class="col-md-4"><input type="text" class="form-control" name="sjx" list="dl-sjx" value="${data?.sjx || ''}"><datalist id="dl-sjx"></datalist></div>
+                    <div class="col-md-2 text-end"><label class="form-label">所属设备</label></div>
+                    <div class="col-md-4"><input type="text" class="form-control" name="sfname" value="${data?.sfname || ''}"></div>
                 </div>
                 <div class="row mb-3 align-items-center">
-                    <div class="col-md-2 text-end"><label class="form-label"><span class="text-danger">*</span>所属设备主数据名称</label></div>
-                    <div class="col-md-4"><input type="text" class="form-control" name="mainDevice" list="dl-mainDevice" required value="${data?.mainDevice || ''}"><datalist id="dl-mainDevice"></datalist></div>
-                    <div class="col-md-2 text-end"><label class="form-label"><span class="text-danger">*</span>厂家</label></div>
-                    <div class="col-md-4"><input type="text" class="form-control" name="factory" required value="${data?.factory || ''}"></div>
-                </div>
-                <div class="row mb-3 align-items-center">
-                     <div class="col-md-2 text-end"><label class="form-label">规格型号</label></div>
-                     <div class="col-md-4"><input type="text" class="form-control" name="spec" value="${data?.spec || ''}"></div>
-                     <div class="col-md-2 text-end"><label class="form-label"><span class="text-danger">*</span>安装位置</label></div>
-                     <div class="col-md-4"><input type="text" class="form-control" name="location" required value="${data?.location || ''}"></div>
+                    <div class="col-md-2 text-end"><label class="form-label">主数据名称</label></div>
+                    <div class="col-md-4"><input type="text" class="form-control" name="sbname" list="dl-sbname" value="${data?.sbname || ''}"><datalist id="dl-sbname"></datalist></div>
+                    <div class="col-md-2 text-end"><label class="form-label">厂家</label></div>
+                    <div class="col-md-4"><input type="text" class="form-control" name="scj" value="${data?.scj || ''}"></div>
                 </div>
                  <div class="row mb-3 align-items-center">
+                     <div class="col-md-2 text-end"><label class="form-label">规格型号</label></div>
+                     <div class="col-md-4"><input type="text" class="form-control" name="sxh" value="${data?.sxh || ''}"></div>
+                     <div class="col-md-2 text-end"><label class="form-label">安装位置</label></div>
+                     <div class="col-md-4"><input type="text" class="form-control" name="sazwz" value="${data?.sazwz || ''}"></div>
+                </div>
+                <div class="row mb-3 align-items-center">
                      <div class="col-md-2 text-end"><label class="form-label">测量原理</label></div>
-                     <div class="col-md-4"><input type="text" class="form-control" name="principle" value="${data?.principle || ''}"></div>
+                     <div class="col-md-4"><input type="text" class="form-control" name="syl" value="${data?.syl || ''}"></div>
                      <div class="col-md-2 text-end"><label class="form-label">PM设备编码</label></div>
-                     <div class="col-md-4"><input type="text" class="form-control" name="pmCode" value="${data?.pmCode || ''}"></div>
+                     <div class="col-md-4"><input type="text" class="form-control" name="spmcode" value="${data?.spmcode || ''}"></div>
                 </div>
                 <div class="row mb-3 align-items-center">
                      <div class="col-md-2 text-end"><label class="form-label">订单号</label></div>
-                     <div class="col-md-4"><input type="text" class="form-control" name="orderNo" value="${data?.orderNo || ''}"></div>
+                     <div class="col-md-4"><input type="text" class="form-control" name="sddno" value="${data?.sddno || ''}"></div>
                      <div class="col-md-2 text-end"><label class="form-label">资产编码</label></div>
-                     <div class="col-md-4"><input type="text" class="form-control" name="assetCode" value="${data?.assetCode || ''}"></div>
+                     <div class="col-md-4"><input type="text" class="form-control" name="szcno" value="${data?.szcno || ''}"></div>
+                </div>
+                 <div class="row mb-3 align-items-center">
+                     <div class="col-md-2 text-end"><label class="form-label">初次使用时间</label></div>
+                     <div class="col-md-4"><input type="text" class="form-control" name="dtime" value="${data?.dtime || ''}" placeholder="yyyy-MM-dd"></div>
+                     <div class="col-md-2 text-end"><label class="form-label">使用寿命</label></div>
+                     <div class="col-md-4"><input type="text" class="form-control" name="ssm" value="${data?.ssm || ''}"></div>
                 </div>
             </form>
         `;
-        const footerHtml = `
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-            <button type="button" class="btn btn-primary" id="btn-save-modal">提交</button>
-        `;
+        const footerHtml = `<button class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" id="btn-save-modal">提交</button>`;
         const modal = new Modal({ title: title, body: formHtml, footer: footerHtml, size: 'xl' });
+
         const fillModalDatalist = async (field, listId) => {
             try {
                 const options = await getAutocompleteOptions(field);
@@ -446,9 +240,10 @@ export default class NewSelfInspectionLedger {
                 if(list) list.innerHTML = options.map(opt => `<option value="${opt}">`).join('');
             } catch(e){}
         };
-        fillModalDatalist('workshop', 'dl-workshop');
-        fillModalDatalist('model', 'dl-model');
-        fillModalDatalist('mainDevice', 'dl-mainDevice');
+        fillModalDatalist('sdept', 'dl-sdept');
+        fillModalDatalist('sjx', 'dl-sjx');
+        fillModalDatalist('sbname', 'dl-sbname');
+
         modal.modalElement.querySelector('#btn-save-modal').addEventListener('click', async () => {
             const form = modal.modalElement.querySelector('form');
             if (!form.checkValidity()) { form.reportValidity(); return; }
@@ -462,5 +257,380 @@ export default class NewSelfInspectionLedger {
             } catch (e) { Modal.alert("保存失败: " + e.message); }
         });
         modal.show();
+    }
+
+    async _openFileManagementModal() {
+
+        const bodyHtml = `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0 text-info">自检自控标准文件库 (PDF)</h6>
+                    <button class="btn btn-sm btn-outline-primary" id="btn-upload-pdf">
+                        <i class="bi bi-cloud-upload"></i> 上传PDF标准
+                    </button>
+                </div>
+                <input type="file" id="hidden-file-input" accept=".pdf" style="display:none">
+                
+                <div class="table-responsive border rounded" style="max-height: 300px; overflow-y: auto;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>文件名</th>
+                                <th style="width: 150px;">上传时间</th>
+                                <th style="width: 100px;">上传人</th>
+                                <th style="width: 120px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="file-list-tbody">
+                            <tr><td colspan="4" class="text-center text-secondary p-3"><div class="spinner-border spinner-border-sm"></div> 加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        const footerHtml = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>`;
+
+        const modal = new Modal({
+            title: "标准附件管理",
+            body: bodyHtml,
+            footer: footerHtml,
+            size: 'lg'
+        });
+
+        const loadFiles = async () => {
+            const tbody = modal.modalElement.querySelector('#file-list-tbody');
+            try {
+                const files = await getStandardFiles(); // 获取所有
+                if (files.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary p-3">暂无上传文件</td></tr>';
+                } else {
+                    tbody.innerHTML = files.map(f => `
+                        <tr>
+                            <td><i class="bi bi-file-pdf text-danger me-2"></i>${f.fileName}</td>
+                            <td>${f.uploadTime || '-'}</td>
+                            <td>${f.uploader || '-'}</td>
+                            <td>
+                                <button class="btn btn-xs btn-link text-primary btn-preview" data-id="${f.id}"><i class="bi bi-eye"></i> 预览</button>
+                                <button class="btn btn-xs btn-link text-danger btn-delete-file" data-id="${f.id}"><i class="bi bi-trash"></i> 删除</button>
+                            </td>
+                        </tr>
+                    `).join('');
+
+                    tbody.querySelectorAll('.btn-preview').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            const url = getFilePreviewUrl(btn.dataset.id);
+                            window.open(url, '_blank');
+                        });
+                    });
+
+                    tbody.querySelectorAll('.btn-delete-file').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            if (await Modal.confirm('确定删除该标准附件吗？')) {
+                                try {
+                                    await deleteStandardFile(btn.dataset.id);
+                                    loadFiles();
+                                } catch(e) { Modal.alert("删除失败: " + e.message); }
+                            }
+                        });
+                    });
+                }
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger p-3">加载失败</td></tr>';
+            }
+        };
+
+        const fileInput = modal.modalElement.querySelector('#hidden-file-input');
+        modal.modalElement.querySelector('#btn-upload-pdf').addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', async () => {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+                    Modal.alert("仅支持上传 PDF 文件！");
+                    return;
+                }
+
+                const uploadBtn = modal.modalElement.querySelector('#btn-upload-pdf');
+                uploadBtn.disabled = true;
+                uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 上传中...';
+
+                try {
+                    // 上传时不传 ID
+                    await uploadStandardFile(file);
+                    fileInput.value = '';
+                    await loadFiles();
+                    Modal.alert("上传成功");
+                } catch(e) {
+                    Modal.alert("上传失败: " + e.message);
+                } finally {
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> 上传PDF标准';
+                }
+            }
+        });
+
+        modal.show();
+        loadFiles();
+    }
+
+    // --- [修改] 生成任务模态框 (使用新接口) ---
+    _openGenerateTaskModal() {
+        this.selectedItemsMap.clear(); // 每次打开清空已选
+
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+        // 使用 Flex 布局确保弹窗内容不溢出，内部滚动
+        const bodyHtml = `
+            <div class="container-fluid h-100 d-flex flex-column" style="height: 70vh; overflow: hidden;">
+                <!-- 1. 任务参数表单 -->
+                <div class="card mb-3" style="flex-shrink: 0; background-color: var(--bg-secondary); border-color: var(--border-color); color: var(--text-primary);">
+                    <div class="card-header fw-bold py-2" style="background-color: var(--bg-primary); border-bottom: 1px solid var(--border-color);">任务参数配置</div>
+                    <div class="card-body py-2">
+                        <form id="gen-task-form" class="row g-2 align-items-center">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0">任务时间</label>
+                                <input type="text" class="form-control form-control-sm" name="taskTime" value="${todayStr}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0">任务类型</label>
+                                <select class="form-select form-select-sm" name="taskType">
+                                    <option value="三班电气" selected>三班电气</option>
+                                    <option value="白班">白班</option>
+                                    <option value="年检">年检</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0">生产状态</label>
+                                <select class="form-select form-select-sm" name="prodStatus">
+                                    <option value="生产" selected>生产</option>
+                                    <option value="停产">停产</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-0">班别</label>
+                                <select class="form-select form-select-sm" name="shiftType">
+                                    <option value="甲班" selected>甲班</option>
+                                    <option value="乙班">乙班</option>
+                                    <option value="丙班">丙班</option>
+                                    <option value="白班">白班</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-0">班次</label>
+                                <select class="form-select form-select-sm" name="shift">
+                                    <option value="早班" selected>早班</option>
+                                    <option value="中班">中班</option>
+                                    <option value="夜班">夜班</option>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- 2. 已选设备展示栏 (固定高度，使用变量颜色) -->
+                <div class="card mb-2" style="flex-shrink: 0; background-color: var(--bg-secondary); border-color: var(--border-color);">
+                    <div class="card-body py-2 d-flex align-items-center justify-content-between">
+                        <!-- [修复] 字体颜色使用 var(--text-primary) 和 var(--accent-color) -->
+                        <span class="small" style="color: var(--text-primary);">已选设备: <strong id="selected-count" style="color: var(--accent-color);">0</strong> 个</span>
+                        <button class="btn btn-xs btn-link text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#selected-items-panel">
+                            查看详情 <i class="bi bi-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div class="collapse border-top" id="selected-items-panel" style="border-color: var(--border-color) !important;">
+                        <div class="card-body py-2 small" id="selected-items-list" style="max-height: 100px; overflow-y: auto; color: var(--text-primary);">
+                            <span class="text-muted">暂无选择</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 设备选择列表 (自动填充剩余高度，内部滚动) -->
+                <div class="card flex-grow-1" id="device-selection-card" style="display: flex; flex-direction: column; overflow: hidden; background-color: var(--bg-secondary); border-color: var(--border-color);">
+                    <div class="card-header fw-bold py-2 d-flex justify-content-between align-items-center flex-shrink-0" style="background-color: var(--bg-primary); border-bottom: 1px solid var(--border-color); color: var(--text-primary);">
+                        <span>选择设备 (支持多选)</span>
+                        <div class="input-group input-group-sm" style="width: 200px;">
+                            <input type="text" class="form-control" id="gen-filter-input" placeholder="过滤主数据名称...">
+                            <button class="btn btn-outline-secondary" type="button" id="gen-filter-btn"><i class="bi bi-search"></i></button>
+                        </div>
+                    </div>
+                    <!-- [关键] card-body 设置为 flex-grow: 1 和 overflow: hidden -->
+                    <div class="card-body p-0 position-relative" id="gen-table-container" style="height:300px;flex-grow: 1; overflow: hidden; display: flex; flex-direction: column;">
+                        <!-- DataTable 挂载点 -->
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const footerHtml = `
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="button" class="btn btn-success" id="btn-confirm-gen"><i class="bi bi-lightning-fill"></i> 确认生成</button>
+        `;
+
+        const modal = new Modal({ title: "生成点检任务", body: bodyHtml, footer: footerHtml, size: 'xl' });
+
+        // [修改] 列定义：移除 ID，按要求添加字段 (只显示分组字段)
+        const columns = [
+            { key: 'sjx', title: '所属机型', width: 150 },
+            { key: 'sfname', title: '所属设备', width: 180 },
+            { key: 'sbname', title: '主数据名称', width: 200 },
+            { key: 'spmcode', title: 'PM编码', width: 200 },
+            // { key: 'sazwz', title: '安装位置', width: 120 }, // 列表是分组后的，位置可能有多个，暂不显示
+        ];
+
+        this.genTaskTable = new DataTable({
+            columns,
+            data: [],
+            options: {
+                selectable: 'multiple',
+                pagination: true,
+                uniformRowHeight: true,
+                storageKey: 'genTaskSelectTable_v2'
+            }
+        });
+
+        // 延时渲染并计算高度
+        setTimeout(() => {
+            const tableContainer = modal.modalElement.querySelector('#gen-table-container');
+            const deviceCard = modal.modalElement.querySelector('#device-selection-card');
+
+            if (tableContainer && deviceCard) {
+                console.log(`[Layout Debug] Device Card Height: ${deviceCard.clientHeight}px`);
+                console.log(`[Layout Debug] Table Container Height: ${tableContainer.clientHeight}px`);
+            }
+
+            this.genTaskTable.render(tableContainer);
+            this._loadGenTableData(); // [修改] 调用分组加载
+
+            // 绑定选择事件
+            tableContainer.addEventListener('click', () => this._syncSelectionMap());
+            tableContainer.addEventListener('change', () => this._syncSelectionMap());
+        }, 100);
+
+        modal.modalElement.querySelector('#gen-filter-btn').addEventListener('click', () => {
+            const val = modal.modalElement.querySelector('#gen-filter-input').value;
+            this._loadGenTableData({ sbname: val });
+        });
+
+        modal.modalElement.querySelector('#btn-confirm-gen').addEventListener('click', async () => {
+            const allSelectedItems = Array.from(this.selectedItemsMap.values());
+
+            if (allSelectedItems.length === 0) {
+                Modal.alert("请至少选择一个设备/工装！");
+                return;
+            }
+
+            const form = modal.modalElement.querySelector('#gen-task-form');
+            const formData = new FormData(form);
+            const payload = Object.fromEntries(formData.entries());
+            payload.taskTime = payload.taskTime.replace(' ', 'T');
+
+            // [修改] 提交联合主键列表: {spmcode, sname}
+            payload.selectedDevices = allSelectedItems.map(item => ({
+                spmcode: item.spmcode,
+                sname: item.sname
+            }));
+
+            const btn = modal.modalElement.querySelector('#btn-confirm-gen');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 处理中...';
+
+            try {
+                await generateSiTasks(payload);
+                modal.hide();
+                Modal.alert("任务生成成功！请前往“点检任务”页面查看。");
+            } catch (e) {
+                Modal.alert("生成失败: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-lightning-fill"></i> 确认生成';
+            }
+        });
+
+        modal.show();
+    }
+
+    _syncSelectionMap() {
+        if (!this.genTaskTable) return;
+        const currentSelectionIds = this.genTaskTable.selectedRows;
+
+        if (this.genTaskTable.data) {
+            this.genTaskTable.data.forEach(row => {
+                const id = row.id; // 此处 id 为复合键 spmcode##sname
+                if (currentSelectionIds.has(id)) {
+                    if (!this.selectedItemsMap.has(id)) {
+                        this.selectedItemsMap.set(id, row);
+                    }
+                } else {
+                    if (this.selectedItemsMap.has(id)) {
+                        this.selectedItemsMap.delete(id);
+                    }
+                }
+            });
+        }
+
+        this._updateSelectedView();
+    }
+
+    _updateSelectedView() {
+        const countSpan = document.getElementById('selected-count');
+        const listContainer = document.getElementById('selected-items-list');
+        if (!countSpan || !listContainer) return;
+
+        const items = Array.from(this.selectedItemsMap.values());
+        countSpan.textContent = items.length;
+
+        if (items.length === 0) {
+            listContainer.innerHTML = '<span class="text-muted">暂无选择</span>';
+        } else {
+            // [Fix] 样式适配
+            listContainer.innerHTML = items.map(item => `
+                <span class="badge bg-info text-dark me-1 mb-1" style="font-weight: normal; border: 1px solid var(--border-color);">
+                    ${item.sname || '未命名'}
+                    <i class="bi bi-x ms-1" style="cursor: pointer;" onclick="document.getElementById('remove-item-${item.id}').click()"></i>
+                    <button id="remove-item-${item.id}" class="d-none" data-id="${item.id}"></button>
+                </span>
+            `).join('');
+
+            listContainer.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idKey = btn.dataset.id;
+                    this._removeItem(idKey);
+                });
+            });
+        }
+    }
+
+    _removeItem(idKey) {
+        this.selectedItemsMap.delete(idKey);
+        if (this.genTaskTable && this.genTaskTable.selectedRows.has(idKey)) {
+            this.genTaskTable.selectedRows.delete(idKey);
+            this.genTaskTable.render(this.genTaskTable.container);
+        }
+        this._updateSelectedView();
+    }
+
+    // [修改] 使用 getTaskGenerationDeviceList 接口加载分组数据
+    async _loadGenTableData(filterParams = {}) {
+        if (!this.genTaskTable) return;
+        this.genTaskTable.toggleLoading(true);
+        try {
+            const params = { pageNum: this.genTaskTable.state.pageNum || 1, pageSize: 100, ...filterParams };
+
+            // 调用分组专用接口
+            const result = await getTaskGenerationDeviceList(params);
+
+            if (result && result.list) {
+                result.list.forEach(item => {
+                    // [关键] 构建前端唯一 ID: spmcode##sname
+                    item.id = `${item.spmcode}##${item.sname}`;
+                });
+            }
+            this.genTaskTable.updateView(result);
+            this._syncSelectionMap();
+
+        } catch (e) { console.error(e); }
+        finally { this.genTaskTable.toggleLoading(false); }
     }
 }

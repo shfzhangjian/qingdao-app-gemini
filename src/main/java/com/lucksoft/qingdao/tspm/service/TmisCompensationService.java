@@ -4,23 +4,21 @@ import cn.hutool.core.date.DateUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lucksoft.common.utils.GjjDebugLogger; // [新增] 引入日志工具
+import com.lucksoft.common.utils.GjjDebugLogger;
 import com.lucksoft.qingdao.oracle.service.AsyncTaskService;
 import com.lucksoft.qingdao.system.entity.TmisData;
 import com.lucksoft.qingdao.system.mapper.TmisDataMapper;
 import com.lucksoft.qingdao.tspm.dto.*;
+import com.lucksoft.qingdao.tspm.util.TimsApiAuthUtils; // [新增] 引入工具类
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
@@ -28,8 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * TMIS 数据补漏服务 (升级版 V2)
- * 集成详细的文件日志记录功能。
+ * TMIS 数据补漏服务 (升级版 V3 - 支持 API_AUTH)
  */
 @Service
 public class TmisCompensationService {
@@ -45,6 +42,9 @@ public class TmisCompensationService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private TimsApiAuthUtils authUtils; // [新增] 注入认证工具
+
     private final RestTemplate restTemplate = new RestTemplate();
     private final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
@@ -55,10 +55,8 @@ public class TmisCompensationService {
     public void compensateTopic(TmisData config) {
         String topic = config.getTopic();
         String description = config.getDescription() != null ? config.getDescription() : "未知接口";
-        // [日志] 构造日志文件名: 描述_Topic.log (例如: 轮保完成_tims.feedback.completed.rotational.task)
         String logFileName = description + "_" + topic;
 
-        // 设置 Logger 上下文 (GjjDebugLogger 使用 ThreadLocal)
         GjjDebugLogger.setLogNameContext(logFileName);
 
         String baseUrl = config.getApiUrl();
@@ -79,29 +77,35 @@ public class TmisCompensationService {
                 fixedParams = objectMapper.readValue(config.getFixedParams(), new TypeReference<Map<String, Object>>() {});
             }
 
-            // 判断请求方式
             boolean isGetRequest = "GET".equalsIgnoreCase((String) fixedParams.get("method"));
 
             JsonNode responseData;
-            String fullUrl = baseUrl;
-            Object requestBody = null;
-
             long startTime = System.currentTimeMillis();
+
+            // [新增] 准备公共 Header (apiAuth: API)
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.add(authUtils.getAuthHeaderKey(), authUtils.getAuthHeaderValue());
 
             if (isGetRequest) {
                 // --- GET 请求逻辑 ---
-                UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(baseUrl)
-                        .queryParam("lastSyncDateTime", lastTime);
 
+                // 1. 准备参数 Map
+                Map<String, Object> queryParams = new HashMap<>();
+                queryParams.put("lastSyncDateTime", lastTime);
                 if (fixedParams.containsKey("type")) {
-                    builder.queryParam("type", fixedParams.get("type"));
+                    queryParams.put("type", fixedParams.get("type"));
                 }
 
-                fullUrl = builder.toUriString();
-                log.debug("[补漏任务] GET 请求: {}", fullUrl);
-                GjjDebugLogger.log(topic, "发起 GET 请求", "URL: " + fullUrl);
+                // 2. [关键修改] 使用工具类生成带签名的 URI
+                URI signedUri = authUtils.signAndBuildUrl(baseUrl, queryParams, topic);
 
-                ResponseEntity<String> response = restTemplate.getForEntity(fullUrl, String.class);
+                log.debug("[补漏任务] GET 请求(Signed): {}", signedUri);
+                GjjDebugLogger.log(topic, "发起 GET 请求", "URL: " + signedUri);
+
+                // 3. 发送请求 (带 Header)
+                HttpEntity<?> entity = new HttpEntity<>(headers);
+                ResponseEntity<String> response = restTemplate.exchange(signedUri, HttpMethod.GET, entity, String.class);
 
                 GjjDebugLogger.log(topic, "收到响应",
                         String.format("Status: %s\nTime: %d ms\nBody: %s",
@@ -115,6 +119,8 @@ public class TmisCompensationService {
 
             } else {
                 // --- POST 请求逻辑 ---
+
+                // 1. 准备 Body 参数 (业务参数)
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("topic", topic);
                 payload.put("updateTime", lastTime);
@@ -129,16 +135,18 @@ public class TmisCompensationService {
                         payload.put("body", new HashMap<>());
                     }
                 }
-                requestBody = payload;
 
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
+                // 2. [关键修改] POST 请求的签名参数通常放在 URL 上
+                // 我们传入一个空的 extraParams map，因为参数都在 Body 里，
+                // 但根据文档 "url参数要包含如下公用参数"，我们需要把 _timestamp, _sign 等挂在 URL 上。
+                URI signedUri = authUtils.signAndBuildUrl(baseUrl, null, topic);
 
                 GjjDebugLogger.log(topic, "发起 POST 请求",
-                        String.format("URL: %s\nPayload: %s", baseUrl, objectMapper.writeValueAsString(payload)));
+                        String.format("URL: %s\nPayload: %s", signedUri, objectMapper.writeValueAsString(payload)));
 
-                ResponseEntity<String> response = restTemplate.postForEntity(baseUrl, request, String.class);
+                // 3. 发送请求 (带 Header)
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
+                ResponseEntity<String> response = restTemplate.exchange(signedUri, HttpMethod.POST, request, String.class);
 
                 GjjDebugLogger.log(topic, "收到响应",
                         String.format("Status: %s\nTime: %d ms\nBody: %s",
@@ -173,7 +181,6 @@ public class TmisCompensationService {
             log.error("[补漏任务] 主题 {} 处理异常: {}", topic, e.getMessage(), e);
             GjjDebugLogger.logError(topic, "发生异常", e);
         } finally {
-            // 清理 ThreadLocal
             GjjDebugLogger.clearLogNameContext();
         }
     }

@@ -30,7 +30,6 @@
     <!-- 1. 标题栏 -->
     <div class="text-center mb-5">
         <i class="bi bi-tools" style="font-size: 3rem; color: #0d6efd;"></i>
-        <!-- [修改] 调整标题和字号 -->
         <h1 class="display-10">青岛卷烟厂TSPM-TMIS开发调试面板</h1>
         <p class="lead text-muted">所有用于开发、测试和配置的工具页面 (调试模式)</p>
     </div>
@@ -44,7 +43,6 @@
                 <div class="card-body text-center">
                     <i class="bi bi-terminal-split card-icon text-primary mb-3"></i>
                     <h5 class="card-title">Kafka 日志监控</h5>
-                    <!-- [修改] 简化描述 -->
                     <p class="card-text text-muted small">实时查看推送和接收的Kafka消息日志。</p>
                     <a href="simulate.html" class="btn btn-primary" target="_blank">打开</a>
                 </div>
@@ -57,7 +55,6 @@
                 <div class="card-body text-center">
                     <i class="bi bi-cloud-upload card-icon text-info mb-3"></i>
                     <h5 class="card-title">Oracle API 推送模拟器</h5>
-                    <!-- [修改] 简化描述 -->
                     <p class="card-text text-muted small">Oracle数据库向后端接口发送 `保养事件` 触发推送。</p>
                     <a href="oracle_test.html" class="btn btn-info text-white" target="_blank">打开</a>
                 </div>
@@ -70,7 +67,6 @@
                 <div class="card-body text-center">
                     <i class="bi bi-broadcast card-icon text-warning mb-3"></i>
                     <h5 class="card-title">TIMS Kafka 模拟器</h5>
-                    <!-- [修改] 简化描述 -->
                     <p class="card-text text-muted small">模拟 TIMS 系统向 Kafka 主题发送消息，测试消费者逻辑。</p>
                     <a href="tims_simulator.html" class="btn btn-warning" target="_blank">打开</a>
                 </div>
@@ -83,9 +79,23 @@
                 <div class="card-body text-center">
                     <i class="bi bi-braces card-icon text-success mb-3"></i>
                     <h5 class="card-title">直接服务测试 (绕过Kafka)</h5>
-                    <!-- [修改] 简化描述 -->
                     <p class="card-text text-muted small">直接调用后端的测试接口，测试异步服务和 Oracle 存储过程。</p>
                     <a href="direct_test.html" class="btn btn-success" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- [新增] 卡片 8: TIMS 主动调用测试 (接口 7/8) -->
+        <div class="col">
+            <div class="card h-100 shadow-sm border-info">
+                <div class="card-body text-center">
+                    <i class="bi bi-arrow-up-right-circle-fill card-icon text-info mb-3"></i>
+                    <h5 class="card-title">TIMS 主动调用测试 (接口 7/8)</h5>
+                    <p class="card-text text-muted small">测试 TsPM 主动调用 TIMS 的业务接口（获取车速、创建自检）。</p>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <a href="tims_speed_test.html" class="btn btn-outline-info btn-sm" target="_blank">接口 7 (车速)</a>
+                        <a href="tims_self_check_test.html" class="btn btn-outline-primary btn-sm" target="_blank" style="border-color: #6f42c1; color: #6f42c1;">接口 8 (自检)</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -96,7 +106,6 @@
                 <div class="card-body text-center">
                     <i class="bi bi-clock-history card-icon text-secondary mb-3"></i>
                     <h5 class="card-title">动态定时任务配置</h5>
-                    <!-- [修改] 简化描述 -->
                     <p class="card-text text-muted small">修改并热重载 `time.json`，用于配置定时推送任务的 Cron 表达式。</p>
                     <a href="schedule_config.html" class="btn btn-secondary" target="_blank">打开</a>
                 </div>
@@ -109,7 +118,6 @@
                 <div class="card-body text-center">
                     <i class="bi bi-shield-check card-icon text-dark mb-3"></i>
                     <h5 class="card-title">IP 白名单配置</h5>
-                    <!-- [修改] 简化描述 -->
                     <p class="card-text text-muted small">配置 `ip-whitelist.json`，用于IP自动登录功能。</p>
                     <a href="whitelist-config.html" class="btn btn-dark" target="_blank">打开</a>
                 </div>
@@ -122,9 +130,20 @@
                 <div class="card-body text-center">
                     <i class="bi bi-key-fill card-icon text-danger mb-3"></i>
                     <h5 class="card-title">SSO Token 生成工具</h5>
-                    <!-- [修改] 简化描述 -->
                     <p class="card-text text-muted small">通过用户名密码登录，生成一个用于单点登录跳转的带 Token 的 URL。</p>
                     <a href="gen_token.html" class="btn btn-danger" target="_blank">打开</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- [新增] 接口测试入口卡片 (test_entry) -->
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-arrow-left-right card-icon text-primary mb-3"></i>
+                    <h5 class="card-title">TsPM-TIMS 同步接口测试</h5>
+                    <p class="card-text text-muted small">所有数据同步接口的独立测试入口页。</p>
+                    <a href="test_entry.html" class="btn btn-outline-primary" target="_blank">打开</a>
                 </div>
             </div>
         </div>
