@@ -13,18 +13,24 @@ import java.util.Map;
 @Mapper
 public interface SiTaskMapper {
 
+    /**
+     * [修复]
+     * 1. 移除了 @Param("params")，直接传递 Map。MyBatis 会将 Map 的 key 直接暴露为变量。
+     * 2. 在 XML script 中，直接使用 key 名称 (如 device, prodStatus) 而不是 params.device。
+     * 3. 这样可以确保 OGNL 表达式正确解析参数。
+     */
     @Select("<script>" +
             "SELECT * FROM T_SI_TASK " +
             "<where>" +
-            "   <if test='params.device != null and params.device != \"\"'>AND DEVICE LIKE '%' || #{params.device} || '%'</if>" +
-            "   <if test='params.prodStatus != null and params.prodStatus != \"\"'>AND PROD_STATUS = #{params.prodStatus}</if>" +
-            "   <if test='params.shiftType != null and params.shiftType != \"\"'>AND SHIFT_TYPE = #{params.shiftType}</if>" +
-            "   <if test='params.shift != null and params.shift != \"\"'>AND SHIFT = #{params.shift}</if>" +
-            "   <if test='params.checkStatus != null and params.checkStatus != \"\"'>AND CHECK_STATUS = #{params.checkStatus}</if>" +
-            "   <if test='params.confirmStatus != null and params.confirmStatus != \"\"'>AND CONFIRM_STATUS = #{params.confirmStatus}</if>" +
-            "   <if test='params.checkTime != null and params.checkTime != \"\"'>AND TO_CHAR(TASK_TIME, 'yyyy-MM-dd') = #{params.checkTime}</if>" +
-            "   <if test='params.checker != null and params.checker != \"\"'>AND CHECKER LIKE '%' || #{params.checker} || '%'</if>" +
-            "   <if test='params.confirmer != null and params.confirmer != \"\"'>AND CONFIRMER LIKE '%' || #{params.confirmer} || '%'</if>" +
+            "   <if test='device != null and device != \"\"'>AND DEVICE LIKE '%' || #{device} || '%'</if>" +
+            "   <if test='prodStatus != null and prodStatus != \"\"'>AND PROD_STATUS = #{prodStatus}</if>" +
+            "   <if test='shiftType != null and shiftType != \"\"'>AND SHIFT_TYPE = #{shiftType}</if>" +
+            "   <if test='shift != null and shift != \"\"'>AND SHIFT = #{shift}</if>" +
+            "   <if test='checkStatus != null and checkStatus != \"\"'>AND CHECK_STATUS = #{checkStatus}</if>" +
+            "   <if test='confirmStatus != null and confirmStatus != \"\"'>AND CONFIRM_STATUS = #{confirmStatus}</if>" +
+            "   <if test='checkTime != null and checkTime != \"\"'>AND TO_CHAR(TASK_TIME, 'yyyy-MM-dd') = #{checkTime}</if>" +
+            "   <if test='checker != null and checker != \"\"'>AND CHECKER LIKE '%' || #{checker} || '%'</if>" +
+            "   <if test='confirmer != null and confirmer != \"\"'>AND CONFIRMER LIKE '%' || #{confirmer} || '%'</if>" +
             "</where>" +
             "ORDER BY TASK_TIME DESC, ID DESC" +
             "</script>")
@@ -50,7 +56,7 @@ public interface SiTaskMapper {
             @Result(property = "confirmerNo", column = "CONFIRMER_NO"),
             @Result(property = "confirmTime", column = "CONFIRM_TIME")
     })
-    List<SiTask> findList(@Param("params") Map<String, Object> params);
+    List<SiTask> findList(Map<String, Object> params);
 
     @Select("SELECT * FROM T_SI_TASK WHERE ID = #{id}")
     @ResultMap("siTaskMap")
@@ -61,9 +67,6 @@ public interface SiTaskMapper {
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "ID")
     int insert(SiTask task);
 
-    /**
-     * [修复] 更新状态时同时更新人员 ID、工号和姓名
-     */
     @Update("UPDATE T_SI_TASK SET " +
             "CHECK_STATUS=#{checkStatus, jdbcType=VARCHAR}, " +
             "CONFIRM_STATUS=#{confirmStatus, jdbcType=VARCHAR}, " +

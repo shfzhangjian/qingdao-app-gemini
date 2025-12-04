@@ -31,11 +31,12 @@ public interface ZjzkTaskDetailMapper {
             "WHERE d.TASK_ID = #{taskId} ORDER BY d.INDOCNO ASC")
     List<ZjzkTaskDetail> findByTaskId(Long taskId);
 
+    // [修复] 为 batchInsert 中的字段添加 jdbcType=VARCHAR，防止插入 null 时报错
     @Insert("<script>" +
             "INSERT INTO ZJZK_TASK_DETAIL (INDOCNO, TASK_ID, TOOL_ID, ITEM_NAME, CHECK_RESULT, IS_CONFIRMED) " +
             "SELECT SEQ_ZJZK_TASK_DETAIL.NEXTVAL, A.* FROM (" +
             "<foreach collection='list' item='item' separator='UNION ALL'>" +
-            " SELECT #{item.taskId}, #{item.toolId}, #{item.itemName}, #{item.checkResult}, 0 FROM DUAL" +
+            " SELECT #{item.taskId}, #{item.toolId}, #{item.itemName, jdbcType=VARCHAR}, #{item.checkResult, jdbcType=VARCHAR}, 0 FROM DUAL" +
             "</foreach>" +
             ") A" +
             "</script>")

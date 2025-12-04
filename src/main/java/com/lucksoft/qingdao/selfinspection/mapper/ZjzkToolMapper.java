@@ -84,11 +84,9 @@ public interface ZjzkToolMapper {
     /**
      * [新增] 1. 分组查询设备列表 (Group By SJX, SFNAME, SBNAME, SNAME, SPMCODE)
      * 必须过滤 SPMCODE IS NOT NULL
-     * 注意：为了配合 Optimized_DataTable，我们通常需要在 SQL 里做分页，
-     * 这里使用 PageHelper，所以只需要写基本查询。
      */
     @Select("<script>" +
-            "SELECT SJX, SFNAME, SBNAME,  SPMCODE " +
+            "SELECT SJX, SFNAME, SBNAME, SPMCODE " +
             "FROM ZJZK_TOOL " +
             "WHERE SPMCODE IS NOT NULL AND LENGTH(TRIM(SPMCODE)) > 0 " +
             "<if test='params.sbname != null and params.sbname != \"\"'>AND SBNAME LIKE '%' || #{params.sbname} || '%'</if>" +
@@ -99,9 +97,10 @@ public interface ZjzkToolMapper {
     List<ZjzkTool> selectDeviceGroupList(@Param("params") Map<String, Object> params);
 
     /**
-     * [新增] 2. 根据联合主键查询该设备下的所有明细 (用于生成任务子表)
+     * [修复] 2. 根据 SPMCODE 查询该设备下的所有明细 (用于生成任务子表)
+     * 移除了 AND SNAME = #{sname}，因为生成任务时要获取该设备下所有的检查点
      */
-    @Select("SELECT * FROM ZJZK_TOOL WHERE SPMCODE = #{spmcode} AND SNAME = #{sname}")
+    @Select("SELECT * FROM ZJZK_TOOL WHERE SPMCODE = #{spmcode}")
     @ResultMap("zjzkToolMap")
-    List<ZjzkTool> selectByDeviceKey(@Param("spmcode") String spmcode, @Param("sname") String sname);
+    List<ZjzkTool> selectBySpmCode(@Param("spmcode") String spmcode);
 }

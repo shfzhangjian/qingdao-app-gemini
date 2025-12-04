@@ -52,7 +52,7 @@ public class SelfInspectionService {
     // ==========================================
 
     /**
-     * 生成任务 (基于联合主键)
+     * 生成任务
      */
     @Transactional
     public void generateTasks(GenerateTaskReq req) {
@@ -64,14 +64,18 @@ public class SelfInspectionService {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
 
         for (DeviceKeyDto deviceKey : req.getSelectedDevices()) {
-            // 1. 根据联合主键查询该设备下的所有明细
-            List<ZjzkTool> tools = toolMapper.selectByDeviceKey(deviceKey.getSpmcode(), deviceKey.getSname());
+            // [关键修复] 1. 仅根据 SPMCODE 查询该设备下的所有明细
+            // 修复了因 SNAME 为空导致的 MyBatis "Error setting null for parameter" 异常
+            // 同时逻辑上更正确：选中一个设备，应生成该设备下所有工具的检查明细
+            List<ZjzkTool> tools = toolMapper.selectBySpmCode(deviceKey.getSpmcode());
+
             if (tools == null || tools.isEmpty()) continue;
 
             ZjzkTool first = tools.get(0);
 
             // 2. 生成主表 (设备级)
             ZjzkTask task = new ZjzkTask();
+            // 生成更唯一的任务编号，防止同一秒生成时冲突
             task.setTaskNo("T" + sdf.format(now) + "-" + UUID.randomUUID().toString().substring(0, 4));
             task.setTaskTime(req.getTaskTime() != null ? req.getTaskTime() : now);
             task.setTaskType(req.getTaskType());
@@ -199,7 +203,6 @@ public class SelfInspectionService {
     // 附件管理 (ZJZK_STANDARD_FILE)
     // ==========================================
 
-    // 修改：不再依赖 linkId，而是返回所有文件（或者分页）
     public List<ZjzkStandardFile> getAllStandardFiles() {
         return fileMapper.findAll();
     }
@@ -221,7 +224,6 @@ public class SelfInspectionService {
 
     /**
      * 上传标准附件 (仅支持PDF)
-     * 移除 linkId 参数
      */
     @Transactional
     public void uploadStandardFile(MultipartFile file, String uploader) throws IOException {
@@ -244,7 +246,6 @@ public class SelfInspectionService {
 
         // 2. 保存记录到数据库 (不存 linkId)
         ZjzkStandardFile record = new ZjzkStandardFile();
-        // record.setLinkId(linkId);
         record.setFileName(originalFilename);
         record.setFilePath(storedPath);
         record.setUploader(uploader);
