@@ -190,6 +190,25 @@ public class TmisCompensationService {
         tmisDataMapper.updateLastTime(topic, now);
     }
 
+    /*
+       	TOPIC	LAST_UPDATE_TIME	API_URL	FIXED_PARAMS	DESCRIPTION	ENABLED	CRON_EXPRESSION	ROWID
+1	tims.feedback.completed.maintenance.task_0	2025-12-04 02:00:01	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/completed/task	{"method":"GET", "type":0}	接口2: 任务完成情况（例保）	1	0 0 14,20,22 * * ?	AABdIFAAMAAG6tuAAA
+10	tims.feedback.completed.maintenance.task_1	2025-12-04 02:00:01	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/completed/task	{"method":"GET", "type":1}	接口2: 任务完成情况（日保）	1	0 0 14,20,22 * * ?
+9	tims.feedback.completed.maintenance.task_2	2025-12-04 02:00:01	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/completed/task	{"method":"GET", "type":2}	接口2: 任务完成情况（月保）	1	0 0 14,20,22 * * ?
+8	tims.feedback.completed.maintenance.task_4	2025-12-04 02:00:01	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/completed/task	{"method":"GET", "type":4}	接口2: 任务完成情况（点检）	1	0 0 14,20,22 * * ?
+7	tims.feedback.completed.maintenance.task_5	2025-12-04 02:00:01	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/completed/task	{"method":"GET", "type":5}	接口2: 任务完成情况（润滑）	1	0 0 14,20,22 * * ?
+13	tims.feedback.maintenance.task.score_1	2025-12-04 11:17:20	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/task/score	{"method":"GET", "type":1}	接口3: 任务得分（日保）	1	0 0 2 * * ?
+12	tims.feedback.maintenance.task.score_2	2025-12-04 11:17:20	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/task/score	{"method":"GET", "type":2}	接口3: 任务得分（月保）	1	0 0 2 * * ?
+14	tims.feedback.maintenance.task.score_5	2025-12-04 11:17:20	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/task/score	{"method":"GET", "type":4}	接口3: 任务得分（点检）	1	0 0 2 * * ?
+11	tims.feedback.maintenance.task.score_4	2025-12-04 11:17:20	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/task/score	{"method":"GET", "type":5}	接口3: 任务得分（润滑）	1	0 0 2 * * ?
+2	tims.feedback.maintenance.task.score_0	2025-12-04 11:26:49	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/task/score	{"method":"GET", "type":0}	接口3: 任务得分（例保）	1	0 0 2 * * ?	AABdIFAAMAAG6tuAAB
+3	tims.recommend.rotational.task	2025-12-04 11:18:41	http://tims.qd.com/ctmc-api/mro-edge-integration/rotational/sync/recommend/task	{"method":"GET"}	接口6: 推荐任务	1	0 0 2 * * ?	AABdIFAAMAAG6tuAAD
+4	tims.feedback.completed.rotational.task	2025-12-04 02:00:01	http://tims.qd.com/ctmc-api/mro-edge-integration/rotational/sync/completed/task	{"method":"GET"}	接口8: 轮保完成	1	0 0 2 * * ?	AABdIFAAMAAG6tuAAE
+5	tims.feedback.rotational.task.score	2025-12-04 11:18:21	http://tims.qd.com/ctmc-api/mro-edge-integration/rotational/sync/task/score	{"method":"GET"}	接口9: 轮保得分	1	0 0 2 * * ?	AABdIFAAMAAG6tuAAF
+6	tims.feedback.completed.production.halt.maintenance.task	2025-12-04 02:00:01	http://tims.qd.com/ctmc-api/mro-edge-integration/maintenance/sync/completed/production-halt/task	{"method":"GET"}	接口14: 停产检修完成	1	0 0 2 * * ?	AABdIFAAMAAG6tuAAH
+
+     */
+
     private void processData(String topic, JsonNode listNode) throws Exception {
         // 逻辑保持不变，直接复用
         switch (topic) {
@@ -197,10 +216,58 @@ public class TmisCompensationService {
                 List<TaskCompletionFeedbackDTO> list2 = objectMapper.convertValue(listNode, new TypeReference<List<TaskCompletionFeedbackDTO>>() {});
                 list2.forEach(asyncTaskService::submitTaskCompletion);
                 break;
+
+            case "tims.feedback.completed.maintenance.task_0":
+                List<TaskCompletionFeedbackDTO> list2_0 = objectMapper.convertValue(listNode, new TypeReference<List<TaskCompletionFeedbackDTO>>() {});
+                list2_0.forEach(asyncTaskService::submitTaskCompletion);
+                break;
+            case "tims.feedback.completed.maintenance.task_1":
+                List<TaskCompletionFeedbackDTO> list2_1 = objectMapper.convertValue(listNode, new TypeReference<List<TaskCompletionFeedbackDTO>>() {});
+                list2_1.forEach(asyncTaskService::submitTaskCompletion);
+                break;
+            case "tims.feedback.completed.maintenance.task_2":
+                List<TaskCompletionFeedbackDTO> list2_2 = objectMapper.convertValue(listNode, new TypeReference<List<TaskCompletionFeedbackDTO>>() {});
+                list2_2.forEach(asyncTaskService::submitTaskCompletion);
+                break;
+
+            case "tims.feedback.completed.maintenance.task_4":
+                List<TaskCompletionFeedbackDTO> list2_4 = objectMapper.convertValue(listNode, new TypeReference<List<TaskCompletionFeedbackDTO>>() {});
+                list2_4.forEach(asyncTaskService::submitTaskCompletion);
+                break;
+
+            case "tims.feedback.completed.maintenance.task_5":
+                List<TaskCompletionFeedbackDTO> list2_5 = objectMapper.convertValue(listNode, new TypeReference<List<TaskCompletionFeedbackDTO>>() {});
+                list2_5.forEach(asyncTaskService::submitTaskCompletion);
+                break;
+
             case "tims.feedback.maintenance.task.score":
                 List<TaskScoreFeedbackDTO> list3 = objectMapper.convertValue(listNode, new TypeReference<List<TaskScoreFeedbackDTO>>() {});
                 list3.forEach(asyncTaskService::submitTaskScore);
                 break;
+
+            case "tims.feedback.maintenance.task.score_0":
+                List<TaskScoreFeedbackDTO> list3_0 = objectMapper.convertValue(listNode, new TypeReference<List<TaskScoreFeedbackDTO>>() {});
+                list3_0.forEach(asyncTaskService::submitTaskScore);
+                break;
+
+            case "tims.feedback.maintenance.task.score_1":
+                List<TaskScoreFeedbackDTO> list3_1 = objectMapper.convertValue(listNode, new TypeReference<List<TaskScoreFeedbackDTO>>() {});
+                list3_1.forEach(asyncTaskService::submitTaskScore);
+                break;
+            case "tims.feedback.maintenance.task.score_2":
+                List<TaskScoreFeedbackDTO> list3_2 = objectMapper.convertValue(listNode, new TypeReference<List<TaskScoreFeedbackDTO>>() {});
+                list3_2.forEach(asyncTaskService::submitTaskScore);
+                break;
+            case "tims.feedback.maintenance.task.score_4":
+                List<TaskScoreFeedbackDTO> list3_4 = objectMapper.convertValue(listNode, new TypeReference<List<TaskScoreFeedbackDTO>>() {});
+                list3_4.forEach(asyncTaskService::submitTaskScore);
+                break;
+
+            case "tims.feedback.maintenance.task.score_5":
+                List<TaskScoreFeedbackDTO> list3_5 = objectMapper.convertValue(listNode, new TypeReference<List<TaskScoreFeedbackDTO>>() {});
+                list3_5.forEach(asyncTaskService::submitTaskScore);
+                break;
+
             case "tims.recommend.rotational.task":
                 List<RecommendedRotationalTaskDTO> list6 = objectMapper.convertValue(listNode, new TypeReference<List<RecommendedRotationalTaskDTO>>() {});
                 list6.forEach(asyncTaskService::submitRecommendTask);
