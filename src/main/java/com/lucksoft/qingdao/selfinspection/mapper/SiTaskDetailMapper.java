@@ -47,8 +47,12 @@ public interface SiTaskDetailMapper {
     int update(SiTaskDetail detail);
 
     /**
-     * [新增] 统计查询专用接口
-     * 关联主表和明细表，返回扁平化数据 Map
+     * [新增] 统计查询专用接口 (修正 SQL 逻辑)
+     * 1. 关联 T_SI_TASK (t) 和 T_SI_TASK_DETAIL (d)
+     * 2. WHERE 子句中的参数名必须与 SiStats.js 传入的一致
+     * - params.device -> t.DEVICE (设备名)
+     * - params.checkStatus -> d.CHECK_RESULT (明细表中的正常/异常)
+     * - params.startDate/endDate -> t.TASK_TIME (主表任务时间)
      */
     @Select("<script>" +
             "SELECT " +
@@ -70,12 +74,12 @@ public interface SiTaskDetailMapper {
             "JOIN T_SI_TASK t ON d.TASK_ID = t.ID " +
             "<where>" +
             "   <if test='params.device != null and params.device != \"\"'>AND t.DEVICE LIKE '%' || #{params.device} || '%'</if>" +
-            // 注意：前端传来的 checkStatus (正常/异常) 对应的是明细表的 CHECK_RESULT
+            // 注意：checkStatus 对应明细表的检查结果
             "   <if test='params.checkStatus != null and params.checkStatus != \"\"'>AND d.CHECK_RESULT = #{params.checkStatus}</if>" +
             "   <if test='params.prodStatus != null and params.prodStatus != \"\"'>AND t.PROD_STATUS = #{params.prodStatus}</if>" +
             "   <if test='params.shiftType != null and params.shiftType != \"\"'>AND t.SHIFT_TYPE = #{params.shiftType}</if>" +
             "   <if test='params.shift != null and params.shift != \"\"'>AND t.SHIFT = #{params.shift}</if>" +
-            // 时间范围过滤
+            // 时间范围过滤 (TASK_TIME)
             "   <if test='params.startDate != null and params.startDate != \"\"'>" +
             "       AND t.TASK_TIME &gt;= TO_DATE(#{params.startDate}, 'yyyy-MM-dd')" +
             "   </if>" +

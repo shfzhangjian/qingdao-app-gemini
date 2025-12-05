@@ -212,6 +212,8 @@ class App {
                     console.log("[App] 检测到现有 Token，正在获取用户信息...");
                     // 动态导入 apiFetch
                     const api = (await import('./services/api.js')).apiFetch;
+
+
                     const userInfo = await api('api/system/auth/info');
                     if (userInfo && userInfo.user) {
                         this.updateUserInfo(userInfo.user);

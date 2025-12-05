@@ -1,5 +1,7 @@
 package com.lucksoft.qingdao.selfinspection.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lucksoft.qingdao.selfinspection.dto.GenerateTaskReq;
 import com.lucksoft.qingdao.selfinspection.entity.ZjzkStandardFile;
 import com.lucksoft.qingdao.selfinspection.entity.ZjzkTask;
@@ -10,6 +12,8 @@ import com.lucksoft.qingdao.system.dto.UserInfo;
 import com.lucksoft.qingdao.system.entity.User;
 import com.lucksoft.qingdao.system.util.AuthUtil;
 import com.lucksoft.qingdao.tmis.dto.PageResult;
+import com.lucksoft.qingdao.tmis.metrology.ExportColumn;
+import com.lucksoft.qingdao.tmis.util.ExcelExportUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +26,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.File;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -41,6 +48,9 @@ public class SelfInspectionController {
 
     @Autowired
     private AuthUtil authUtil;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     // ==================================================================================
     // 1. 自检自控台账 (Ledger) 接口
@@ -74,19 +84,15 @@ public class SelfInspectionController {
 
     @GetMapping("/ledger/options")
     public ResponseEntity<List<String>> getLedgerOptions(@RequestParam String field) {
-        // 字段映射
         String dbField;
         switch (field) {
             case "sdept": dbField = "SDEPT"; break;
             case "sjx": dbField = "SJX"; break;
             case "sbname": dbField = "SBNAME"; break;
             case "sfname": dbField = "SFNAME"; break;
-            // [修复] 添加对 checker 和 confirmer 的支持，避免 400 错误
-            // 由于 ZJZK_TOOL 表可能没有完全对应的字段，这里暂时映射到 SSTEPOPERNM (办理人)
-            // 或者如果只是为了让前端不报错，可以映射到一个存在的文本字段
             case "checker": dbField = "SSTEPOPERNM"; break;
             case "confirmer": dbField = "SSTEPOPERNM"; break;
-            case "device": dbField = "SFNAME"; break; // 增加 device 映射到 SFNAME
+            case "device": dbField = "SFNAME"; break;
             default: return ResponseEntity.badRequest().body(Collections.emptyList());
         }
         return ResponseEntity.ok(siService.getLedgerOptions(dbField));
@@ -165,7 +171,6 @@ public class SelfInspectionController {
     // --- 任务 (Task) & 明细 ---
     @GetMapping("/task/list")
     public ResponseEntity<PageResult<ZjzkTask>> getTaskList(@RequestParam Map<String, Object> params) {
-        // [修改] 现在调用真正的任务查询
         return ResponseEntity.ok(siService.getTaskPage(params));
     }
 
@@ -192,13 +197,42 @@ public class SelfInspectionController {
 
     /**
      * 获取点检统计列表
+     * [修正] 之前错误地调用了 getLedgerPage (查询 ZJZK_TOOL)，现在改为调用 getStatsPage (联表查询 ZJZK_TASK + DETAIL)
      */
     @GetMapping("/stats/list")
-    public ResponseEntity<PageResult<ZjzkTool>> getStatsList(@RequestParam Map<String, Object> params) {
+    public ResponseEntity<PageResult<Map<String, Object>>> getStatsList(@RequestParam Map<String, Object> params) {
         log.info("收到统计列表查询请求 /api/si/stats/list. 参数: {}", params);
-        // 同上，暂时复用台账查询以消除 404
-        PageResult<ZjzkTool> result = siService.getLedgerPage(params);
+        PageResult<Map<String, Object>> result = siService.getStatsPage(params);
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * [新增] 导出点检统计报表
+     * 支持按前端传入的列和查询条件导出Excel
+     */
+    @PostMapping("/stats/export")
+    public void exportStatsList(@RequestBody Map<String, Object> payload, HttpServletResponse response) throws IOException {
+        log.info("收到统计导出请求 /api/si/stats/export. Payload: {}", payload);
+
+        // 1. 解析列配置
+        List<ExportColumn> columns = null;
+        if (payload.containsKey("columns")) {
+            columns = objectMapper.convertValue(payload.get("columns"), new TypeReference<List<ExportColumn>>() {});
+            payload.remove("columns"); // 移除以防止干扰查询参数
+        }
+
+        if (columns == null || columns.isEmpty()) {
+            throw new IllegalArgumentException("导出列配置不能为空");
+        }
+
+        // 2. 查询数据 (不分页)
+        List<Map<String, Object>> dataList = siService.getStatsListForExport(payload);
+
+        // 3. 导出 Excel
+        // [修复] 这里将 List<Map<String, Object>> 强转为 List<Map>，或者直接传入 raw type
+        // Java 编译器无法自动将 List<Map<String, Object>> 视为 List<Map> (泛型不变性)
+        // 传入 (List) dataList 是最直接的兼容方式
+        ExcelExportUtil.export(response, "点检统计", columns, (List) dataList, Map.class);
     }
 
     /**
@@ -208,5 +242,58 @@ public class SelfInspectionController {
     public ResponseEntity<?> archiveData(@RequestBody Map<String, Object> params) {
         log.info("收到归档请求: {}", params);
         return ResponseEntity.ok(Collections.singletonMap("message", "归档成功 (模拟)"));
+    }
+
+
+    // [新增] 导出台账
+    @GetMapping("/ledger/export")
+    public void exportLedger(@RequestParam Map<String, Object> params, HttpServletResponse response) throws IOException {
+        List<ZjzkTool> list = siService.getLedgerListForExport(params);
+
+        List<ExportColumn> columns = Arrays.asList(
+                new ExportColumn("sdept", "车间"),
+                new ExportColumn("sname", "名称"),
+                new ExportColumn("sjx", "所属机型"),
+                new ExportColumn("sfname", "所属设备"),
+                new ExportColumn("sbname", "主数据名称"),
+                new ExportColumn("spmcode", "PM编码"),
+                new ExportColumn("sazwz", "安装位置"),
+                new ExportColumn("scj", "厂家"),
+                new ExportColumn("sxh", "规格型号"),
+                new ExportColumn("syl", "测量原理"),
+                new ExportColumn("sddno", "订单号"),
+                new ExportColumn("szcno", "资产编码"),
+                new ExportColumn("dtime", "初次使用时间"),
+                new ExportColumn("ssm", "使用寿命"),
+                new ExportColumn("sstepstate", "状态")
+        );
+
+        ExcelExportUtil.export(response, "自检自控台账", columns, list, ZjzkTool.class);
+    }
+
+// ==========================================
+    // [新增] 导入相关接口
+    // ==========================================
+
+    @PostMapping("/ledger/import")
+    public ResponseEntity<Map<String, Object>> importLedger(@RequestParam("file") MultipartFile file) {
+        Map<String, Object> result = siService.importLedgerData(file);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/ledger/import/error-report/{fileId}")
+    public ResponseEntity<Resource> downloadErrorReport(@PathVariable String fileId) throws UnsupportedEncodingException {
+        File file = siService.getErrorFile(fileId);
+        if (file == null || !file.exists()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Resource resource = new FileSystemResource(file);
+        String fileName = URLEncoder.encode("导入校验失败报告.xlsx", "UTF-8");
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
     }
 }

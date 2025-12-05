@@ -10,6 +10,10 @@ public class GetAvgSpeedReq implements Serializable {
     private String startTime;     // 可选 (yyyy-MM-dd HH:mm:ss)
     private String endTime;       // 可选 (yyyy-MM-dd HH:mm:ss)
 
+
+    public GetAvgSpeedReq() {
+    }
+
     public GetAvgSpeedReq(String equipmentCode) {
         this.equipmentCode = equipmentCode;
     }

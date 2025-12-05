@@ -5,6 +5,55 @@
  */
 import AuthManager from '../components/AuthManager.js';
 
+const CONTEXT_PATH = '/tmis';
+
+function getHeaders(isUpload = false) {
+    const headers = {};
+    const token = localStorage.getItem('jwt_token');
+    if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+    }
+
+    // [关键修复] 如果是上传文件 (isUpload=true)，千万不要设置 Content-Type
+    // 浏览器会自动设置为 multipart/form-data; boundary=...
+    if (!isUpload) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    return headers;
+}
+
+
+async function handleResponse(response) {
+    if (response.status === 401) {
+        // 未授权，跳转登录
+        window.location.href = 'login.html';
+        throw new Error("未登录或会话过期");
+    }
+
+    // 处理文件下载流
+    const contentType = response.headers.get("content-type");
+    if (contentType && (contentType.includes("application/octet-stream") || contentType.includes("application/pdf") || contentType.includes("application/vnd.ms-excel"))) {
+        return response.blob();
+    }
+
+    const text = await response.text();
+    let data;
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch (e) {
+        data = text;
+    }
+
+    if (!response.ok) {
+        const errorMsg = (data && data.message) || data.error || response.statusText;
+        throw new Error(errorMsg);
+    }
+
+    return data;
+}
+
+
 /**
  * 封装的fetch函数，用于处理通用逻辑（如添加认证头、处理JSON等）
  * @param {string} url - 请求的URL
@@ -164,3 +213,32 @@ export async function exportPointCheck(params) {
     window.URL.revokeObjectURL(url);
 }
 
+
+/**
+ * [关键] 文件上传专用请求
+ * @param {string} endpoint 接口地址
+ * @param {FormData} formData 文件表单数据
+ */
+export async function postUpload(endpoint, formData) {
+    let url = endpoint;
+    if (!url.startsWith('http') && !url.startsWith(CONTEXT_PATH)) {
+        url = CONTEXT_PATH + url;
+    }
+
+    const config = {
+        method: 'POST',
+        headers: {
+            ...getHeaders(true) // 传入 true，不设置 Content-Type
+            // 不要在这里手动加 'Content-Type': 'multipart/form-data' !!!
+        },
+        body: formData
+    };
+
+    try {
+        const response = await fetch(url, config);
+        return await handleResponse(response);
+    } catch (error) {
+        console.error('Upload Request Error:', error);
+        throw error;
+    }
+}

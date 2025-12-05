@@ -35,6 +35,17 @@ public class ZjzkTask implements Serializable {
 
     private Date createTime;
 
+    private String batchNo;      // [新增] 批次号
+
+
+    public String getBatchNo() {
+        return batchNo;
+    }
+
+    public void setBatchNo(String batchNo) {
+        this.batchNo = batchNo;
+    }
+
     // Getters/Setters
     public Long getIndocno() { return indocno; }
     public void setIndocno(Long indocno) { this.indocno = indocno; }

@@ -1,12 +1,12 @@
 /**
  * @file /js/views/SiStats.js
  * @description 点检统计界面视图。
- * v2.2.0 - [Fix] 修复日期列显示为 ISO 格式的问题，统一格式化为 yyyy-MM-dd HH:mm。
+ * v2.5.0 - [Feat] 实现 Excel 导出功能，与查询条件和表格列保持一致。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import Modal from '../components/Modal.js';
 import DatePicker from '../components/DatePicker.js';
-import { getSiStatsList, archiveSiData, getAutocompleteOptions } from '../services/selfInspectionApi.js';
+import { getSiStatsList, archiveSiData, getAutocompleteOptions, exportSiStats } from '../services/selfInspectionApi.js';
 
 // [新增] 日期格式化工具函数
 const formatDate = (val) => {
@@ -47,8 +47,8 @@ export default class SiStats {
                                 <datalist id="list-qs-device"></datalist>
                             </div>
                             <div class="col-md-4 d-flex align-items-center">
-                                <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary small">检查时间:</label>
-                                <input type="text" class="form-control form-control-sm" id="qs-checkTime">
+                                <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary small">任务日期:</label>
+                                <input type="text" class="form-control form-control-sm" id="qs-taskTimeRange">
                             </div>
                         </div>
                     </div>
@@ -61,7 +61,7 @@ export default class SiStats {
                             ${this._renderButtonGroup('生产状态', 'qs-prodStatus', [{v:'', l:'全部', c:true}, {v:'生产', l:'生产'}, {v:'停产', l:'停产'}])}
                             ${this._renderButtonGroup('班别', 'qs-shiftType', [{v:'', l:'全部', c:true}, {v:'甲班', l:'甲班'}, {v:'乙班', l:'乙班'}, {v:'丙班', l:'丙班'}, {v:'白班', l:'白班'}])}
                             ${this._renderButtonGroup('班次', 'qs-shift', [{v:'', l:'全部', c:true}, {v:'早班', l:'早班'}, {v:'中班', l:'中班'}, {v:'晚班', l:'晚班'}])}
-                            ${this._renderButtonGroup('点检状态', 'qs-checkStatus', [{v:'', l:'全部', c:true}, {v:'正常', l:'正常'}, {v:'异常', l:'异常'}])}
+                            ${this._renderButtonGroup('检查结果', 'qs-checkStatus', [{v:'', l:'全部', c:true}, {v:'正常', l:'正常'}, {v:'异常', l:'异常'}])}
                         </div>
 
                         <!-- 右侧：操作按钮组 -->
@@ -101,11 +101,10 @@ export default class SiStats {
     }
 
     _initDatePickers() {
-        const checkTimeInput = this.container.querySelector('#qs-checkTime');
+        const checkTimeInput = this.container.querySelector('#qs-taskTimeRange');
         const end = new Date();
         const start = new Date();
         start.setMonth(start.getMonth() - 1);
-        // const formatDate = d => d.toISOString().split('T')[0]; // Remove local var to avoid conflict
         const formatDateStr = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
         checkTimeInput.value = `${formatDateStr(start)} 至 ${formatDateStr(end)}`;
         this.datePicker = new DatePicker(checkTimeInput, { mode: 'range' });
@@ -123,8 +122,8 @@ export default class SiStats {
 
     _initTable() {
         const columns = [
-            // [修改] 添加 render: formatDate
-            { key: 'checkTime', title: '检查时间', width: 140, render: formatDate },
+            { key: '_index', title: '序号', width: 60, frozen: 'left' }, // [新增] 虚拟序号列
+            { key: 'checkTime', title: '任务日期', width: 120, render: (val) => val ? val.substring(0, 10) : '-' },
             { key: 'device', title: '检查设备', width: 120 },
             { key: 'itemName', title: '检查项目名称', width: 150, render: val => `<div class="text-start">${val}</div>` },
             {
@@ -136,11 +135,9 @@ export default class SiStats {
             { key: 'shift', title: '班次', width: 60 },
             { key: 'shiftType', title: '班别', width: 60 },
             { key: 'taskType', title: '任务类型', width: 100 },
-            // [修改] 添加 render: formatDate
             { key: 'actualCheckTime', title: '实际检查时间', width: 140, render: formatDate },
             { key: 'checker', title: '检查人', width: 80 },
             { key: 'confirmStatus', title: '确认状态', width: 80 },
-            // [修改] 添加 render: formatDate
             { key: 'confirmTime', title: '确认时间', width: 140, render: formatDate },
             { key: 'confirmer', title: '确认人', width: 80 },
         ];
@@ -152,33 +149,65 @@ export default class SiStats {
                 selectable: 'none',
                 pagination: true,
                 uniformRowHeight: true,
-                storageKey: 'siStatsList'
+                storageKey: 'siStatsList_v3' // Update key to force reload columns
             }
         });
         this.dataTable.render(this.container.querySelector('#table-wrapper'));
     }
 
-    async _loadData() {
-        this.dataTable.toggleLoading(true);
-
+    // [新增] 提取获取查询参数的逻辑
+    _getQueryParams() {
         const getRadioVal = (name) => {
             const el = this.container.querySelector(`input[name="${name}"]:checked`);
             return el ? el.value : '';
         };
 
-        const params = {
+        const timeRangeStr = this.container.querySelector('#qs-taskTimeRange').value;
+        let startDate = '', endDate = '';
+        if (timeRangeStr && timeRangeStr.includes(' 至 ')) {
+            const parts = timeRangeStr.split(' 至 ');
+            startDate = parts[0];
+            endDate = parts[1];
+        } else {
+            startDate = timeRangeStr;
+            endDate = timeRangeStr;
+        }
+
+        return {
             prodStatus: getRadioVal('qs-prodStatus'),
             shiftType: getRadioVal('qs-shiftType'),
             shift: getRadioVal('qs-shift'),
             checkStatus: getRadioVal('qs-checkStatus'),
             device: this.container.querySelector('#qs-device').value,
-            checkTime: this.container.querySelector('#qs-checkTime').value,
+            startDate: startDate,
+            endDate: endDate
+        };
+    }
+
+    async _loadData() {
+        this.dataTable.toggleLoading(true);
+
+        const params = {
+            ...this._getQueryParams(),
             pageNum: this.dataTable.state.pageNum,
             pageSize: this.dataTable.state.pageSize
         };
 
         try {
             const result = await getSiStatsList(params);
+
+            // [新增] 计算虚拟序号
+            if (result && result.list) {
+                const start = (result.pageNum - 1) * result.pageSize;
+                result.list.forEach((item, index) => {
+                    item._index = start + index + 1;
+                    // 顺便处理一下日期格式，虽然 column render 也处理了，但在这里处理数据源更稳妥
+                    if (item.checkTime && item.checkTime.length > 10) {
+                        item.checkTime = item.checkTime.substring(0, 10);
+                    }
+                });
+            }
+
             this.dataTable.updateView(result);
         } catch(e) {
             console.error(e);
@@ -198,22 +227,37 @@ export default class SiStats {
             radio.addEventListener('change', () => this._loadData());
         });
 
-        this.container.querySelector('#table-wrapper').addEventListener('pageChange', (e) => {
-            this.dataTable.state.pageNum = e.detail.pageNum;
-            this._loadData();
+        // [Fix] 修改监听事件为 'queryChange'，以适配 Optimized_DataTable.js
+        this.container.querySelector('#table-wrapper').addEventListener('queryChange', (e) => {
+            if (e.detail.pageNum) {
+                this.dataTable.state.pageNum = e.detail.pageNum;
+                this._loadData();
+            }
         });
 
         // 导出
-        this.container.querySelector('#btn-export').addEventListener('click', () => {
+        this.container.querySelector('#btn-export').addEventListener('click', async () => {
             const btn = this.container.querySelector('#btn-export');
             const originalText = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 导出中...';
-            setTimeout(() => {
+
+            try {
+                const params = {
+                    ...this._getQueryParams(),
+                    // 排除序号列，只导出实际数据列
+                    columns: this.dataTable.columns
+                        .filter(c => c.visible && c.key !== '_index')
+                        .map(c => ({ key: c.key, title: c.title }))
+                };
+                await exportSiStats(params);
+            } catch (e) {
+                console.error(e);
+                Modal.alert("导出失败: " + e.message);
+            } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalText;
-                Modal.alert("点检统计数据导出成功！(模拟)");
-            }, 1500);
+            }
         });
 
         // 归档
@@ -222,6 +266,7 @@ export default class SiStats {
 
     // --- 归档模态框 ---
     _openArchiveModal() {
+        // ... (保持原样)
         const bodyHtml = `
             <form id="archive-form">
                 <div class="mb-3">
@@ -253,7 +298,6 @@ export default class SiStats {
         const dateInput = modal.modalElement.querySelector('#arc-dateRange');
         const taskTypeSelect = modal.modalElement.querySelector('#arc-taskType');
 
-        // 初始化日期选择器
         const setDateRange = (months) => {
             const end = new Date();
             const start = new Date();
@@ -267,9 +311,8 @@ export default class SiStats {
         };
 
         this.archiveDatePicker = new DatePicker(dateInput, { mode: 'range' });
-        setDateRange(1); // 默认1个月
+        setDateRange(1);
 
-        // 初始化设备自动补全
         const initArchiveDeviceAutocomplete = async () => {
             const list = modal.modalElement.querySelector('#list-arc-device');
             if(list) {
@@ -281,7 +324,6 @@ export default class SiStats {
         };
         initArchiveDeviceAutocomplete();
 
-        // 联动日期
         taskTypeSelect.addEventListener('change', (e) => {
             if (e.target.value === '三班电气') {
                 setDateRange(1);
@@ -290,7 +332,6 @@ export default class SiStats {
             }
         });
 
-        // 确认归档
         modal.modalElement.querySelector('#btn-confirm-archive').addEventListener('click', async () => {
             const btn = modal.modalElement.querySelector('#btn-confirm-archive');
             const deviceVal = modal.modalElement.querySelector('#arc-device').value;

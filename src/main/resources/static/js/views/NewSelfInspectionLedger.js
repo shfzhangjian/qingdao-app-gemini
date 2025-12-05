@@ -1,7 +1,8 @@
 /**
  * @file /js/views/NewSelfInspectionLedger.js
  * @description 新自检自控台账管理视图 (重构版)。
- * v2.5.0 - [Fix] 修正生成任务时设备列表的数据源，严格调用分组接口 getTaskGenerationDeviceList。
+ * v2.6.0 - [Feat] 优化标准附件预览体验，点击预览弹出 iframe 模态框而非下载 (保持与执行界面一致)。
+ * v2.7.0 - [Feat] 新增台账导入和导出功能 (对接真实接口)。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import Modal from '../components/Modal.js';
@@ -15,7 +16,9 @@ import {
     deleteStandardFile,
     getFilePreviewUrl,
     generateSiTasks,
-    getTaskGenerationDeviceList // [修复] 必须导入此接口
+    getTaskGenerationDeviceList,
+    exportLedger,
+    importLedger
 } from '../services/selfInspectionApi.js';
 
 export default class NewSelfInspectionLedger {
@@ -48,6 +51,8 @@ export default class NewSelfInspectionLedger {
                                 <button class="btn btn-sm btn-outline-primary" id="btn-add"><i class="bi bi-plus-lg"></i> 增加</button>
                                 <button class="btn btn-sm btn-outline-secondary" id="btn-edit"><i class="bi bi-pencil-square"></i> 编辑</button>
                                 <button class="btn btn-sm btn-outline-danger" id="btn-delete"><i class="bi bi-trash"></i> 删除</button>
+                                <button class="btn btn-sm btn-outline-success" id="btn-import"><i class="bi bi-file-earmark-arrow-up"></i> 导入</button>
+                                <button class="btn btn-sm btn-outline-success" id="btn-export"><i class="bi bi-file-earmark-arrow-down"></i> 导出</button>
                                 <div class="vr mx-1 text-secondary"></div>
                                 <button class="btn btn-sm btn-info text-white" id="btn-files"><i class="bi bi-file-earmark-pdf"></i> 标准附件管理(PDF)</button>
                             </div>
@@ -175,8 +180,181 @@ export default class NewSelfInspectionLedger {
             }
         });
 
+        // 绑定导入导出按钮事件
+        this.container.querySelector('#btn-import').addEventListener('click', () => this._showImportModal());
+        this.container.querySelector('#btn-export').addEventListener('click', () => this._handleExport());
+
         this.container.querySelector('#btn-files').addEventListener('click', () => this._openFileManagementModal());
         this.container.querySelector('#btn-generate').addEventListener('click', () => this._openGenerateTaskModal());
+    }
+
+
+    // ==========================================
+    //  导入功能核心逻辑 (已修正 & 主题适配)
+    // ==========================================
+    _showImportModal() {
+        const bodyHtml = `
+            <div class="mb-3">
+                <label class="form-label">选择Excel文件 (.xlsx)</label>
+                <input class="form-control" type="file" id="import-file" accept=".xlsx" style="background-color: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color);">
+                <!-- [修改] 更新提示语，明确 12 字段防重 -->
+                <div class="form-text" style="color: var(--text-primary); opacity: 0.7;">
+                    提示：<b>PM编码</b>与<b>资产编码</b>为必填项。<br>
+                    系统将联合校验(车间、名称、机型、设备、主数据、PM、位置、厂家、规格、原理、资产、订单)共12个字段进行防重。
+                </div>
+            </div>
+            
+            <!-- 校验结果展示区域 -->
+            <div id="import-result-area" class="d-none">
+                <div class="alert alert-danger d-flex align-items-center justify-content-between" role="alert">
+                    <div>
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <span id="import-error-msg">校验未通过</span>
+                    </div>
+                    <button class="btn btn-sm btn-light text-danger fw-bold" id="btn-download-error-report">
+                        <i class="bi bi-download"></i> 下载修正文件
+                    </button>
+                </div>
+                
+                <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto; background-color: var(--bg-secondary); border-color: var(--border-color) !important;">
+                    <h6 class="text-danger border-bottom pb-1 mb-2" style="border-color: var(--border-color) !important;">错误详情 (点击展开)</h6>
+                    <ul class="list-group list-group-flush small" id="error-list">
+                        <!-- JS 动态填充错误行 -->
+                    </ul>
+                </div>
+            </div>
+            
+            <div id="import-success-area" class="d-none">
+                <div class="alert alert-success text-center">
+                    <i class="bi bi-check-circle-fill me-2"></i> <span id="import-success-msg"></span>
+                </div>
+            </div>
+        `;
+
+        const modal = new Modal({
+            title: "台账导入",
+            body: bodyHtml,
+            footer: `
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="btn-start-import">开始导入</button>
+            `
+        });
+        modal.show();
+
+        const fileInput = modal.modalElement.querySelector('#import-file');
+        const startBtn = modal.modalElement.querySelector('#btn-start-import');
+        const resultArea = modal.modalElement.querySelector('#import-result-area');
+        const successArea = modal.modalElement.querySelector('#import-success-area');
+        const errorList = modal.modalElement.querySelector('#error-list');
+        const downloadBtn = modal.modalElement.querySelector('#btn-download-error-report');
+
+        let currentErrorFileId = null;
+
+        // 点击下载修正文件
+        downloadBtn.addEventListener('click', () => {
+            if(currentErrorFileId) {
+                // 打开新窗口下载错误报告
+                window.location.href = `/tmis/api/si/ledger/import/error-report/${currentErrorFileId}`;
+            }
+        });
+
+        startBtn.addEventListener('click', async () => {
+            if (fileInput.files.length === 0) {
+                Modal.alert("请先选择文件！");
+                return;
+            }
+
+            // UI 重置
+            startBtn.disabled = true;
+            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 正在校验...';
+            resultArea.classList.add('d-none');
+            successArea.classList.add('d-none');
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            try {
+                const res = await importLedger(formData);
+
+                startBtn.disabled = false;
+                startBtn.innerHTML = '开始导入';
+
+                if (res.success) {
+                    successArea.classList.remove('d-none');
+                    modal.modalElement.querySelector('#import-success-msg').textContent = res.message;
+                    setTimeout(() => {
+                        modal.hide();
+                        this._loadData(); // 刷新列表
+                    }, 2000);
+                } else {
+                    // 校验失败
+                    resultArea.classList.remove('d-none');
+                    modal.modalElement.querySelector('#import-error-msg').textContent = res.message;
+                    currentErrorFileId = res.errorFileId;
+
+                    if (res.errorDetails && res.errorDetails.length > 0) {
+                        errorList.innerHTML = res.errorDetails.map(err => `
+                            <li class="list-group-item list-group-item-danger d-flex justify-content-between align-items-start py-1" 
+                                style="background-color: rgba(220, 53, 69, 0.1); color: var(--text-primary); border-color: rgba(220, 53, 69, 0.2);">
+                                <div class="ms-2 me-auto">
+                                    <div class="fw-bold text-danger">第 ${err.row} 行</div>
+                                    <span style="opacity: 0.8;">${err.msg}</span>
+                                </div>
+                            </li>
+                        `).join('');
+                    } else {
+                        errorList.innerHTML = '<li class="list-group-item" style="background-color: transparent; color: var(--text-primary);">校验未通过，请下载报告查看详情。</li>';
+                    }
+                }
+
+            } catch (e) {
+                console.error(e);
+                startBtn.disabled = false;
+                startBtn.innerHTML = '开始导入';
+                Modal.alert("系统错误: " + (e.message || "请求失败"));
+            }
+        });
+    }
+
+
+    // 处理导出逻辑
+    async _handleExport() {
+        // 收集当前查询条件
+        const params = {
+            sdept: this.container.querySelector('#search-sdept').value,
+            sjx: this.container.querySelector('#search-sjx').value,
+            sbname: this.container.querySelector('#search-sbname').value,
+            sname: this.container.querySelector('#search-sname').value,
+            spmcode: this.container.querySelector('#search-spmcode').value,
+            szcno: this.container.querySelector('#search-szcno').value
+        };
+
+        const btn = this.container.querySelector('#btn-export');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 导出中...';
+
+        try {
+            // 调用真实导出接口
+            const blob = await exportLedger(params);
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `自检自控台账_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+
+            // Modal.alert("导出成功"); // 导出通常是静默下载，不需要弹窗
+        } catch (e) {
+            console.error(e);
+            Modal.alert("导出失败: " + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
     }
 
     _openEditModal(data) {
@@ -232,7 +410,6 @@ export default class NewSelfInspectionLedger {
         `;
         const footerHtml = `<button class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" id="btn-save-modal">提交</button>`;
         const modal = new Modal({ title: title, body: formHtml, footer: footerHtml, size: 'xl' });
-
         const fillModalDatalist = async (field, listId) => {
             try {
                 const options = await getAutocompleteOptions(field);
@@ -243,7 +420,6 @@ export default class NewSelfInspectionLedger {
         fillModalDatalist('sdept', 'dl-sdept');
         fillModalDatalist('sjx', 'dl-sjx');
         fillModalDatalist('sbname', 'dl-sbname');
-
         modal.modalElement.querySelector('#btn-save-modal').addEventListener('click', async () => {
             const form = modal.modalElement.querySelector('form');
             if (!form.checkValidity()) { form.reportValidity(); return; }
@@ -319,8 +495,8 @@ export default class NewSelfInspectionLedger {
 
                     tbody.querySelectorAll('.btn-preview').forEach(btn => {
                         btn.addEventListener('click', () => {
-                            const url = getFilePreviewUrl(btn.dataset.id);
-                            window.open(url, '_blank');
+                            // [修改] 使用弹窗预览代替 window.open
+                            this._openPdfPreview(btn.dataset.id);
                         });
                     });
 
@@ -372,6 +548,22 @@ export default class NewSelfInspectionLedger {
 
         modal.show();
         loadFiles();
+    }
+
+    // [新增] PDF 预览弹窗方法
+    _openPdfPreview(fileId) {
+        const url = getFilePreviewUrl(fileId);
+        const bodyHtml = `
+            <div class="ratio ratio-4x3" style="height: 70vh;">
+                <iframe src="${url}" allowfullscreen style="border:none;"></iframe>
+            </div>
+        `;
+        new Modal({
+            title: "标准文件预览",
+            body: bodyHtml,
+            footer: '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>',
+            size: 'xl'
+        }).show();
     }
 
     // --- [修改] 生成任务模态框 (使用新接口) ---

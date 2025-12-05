@@ -103,4 +103,16 @@ public interface ZjzkToolMapper {
     @Select("SELECT * FROM ZJZK_TOOL WHERE SPMCODE = #{spmcode}")
     @ResultMap("zjzkToolMap")
     List<ZjzkTool> selectBySpmCode(@Param("spmcode") String spmcode);
+
+    // [新增] 严格根据7个联合键查找记录 (用于导入去重)
+    // 注意：NULL 值的处理。这里假设导入时关键字段不为空，或者数据库中匹配也是基于非空匹配。
+    @Select("SELECT * FROM ZJZK_TOOL WHERE " +
+            "SDEPT = #{sdept} AND " +
+            "SNAME = #{sname} AND " +
+            "SJX = #{sjx} AND " +
+            "SFNAME = #{sfname} AND " +
+            "SBNAME = #{sbname} AND " +
+            "SPMCODE = #{spmcode} AND " +
+            "SAZWZ = #{sazwz}")
+    List<ZjzkTool> findByUniqueKey(ZjzkTool tool);
 }

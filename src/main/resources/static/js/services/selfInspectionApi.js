@@ -4,8 +4,9 @@
  * 包含台账管理、附件管理、任务管理和统计分析的所有接口。
  */
 
-import { apiFetch } from './api.js';
+import { apiFetch,postUpload } from './api.js';
 
+const API_BASE = '/api/si';
 // ==================================================================================
 // --- 1. 自检自控台账 (Ledger) API ---
 // ==================================================================================
@@ -157,6 +158,29 @@ export async function getSiStatsList(params) {
 }
 
 /**
+ * [新增] 导出点检统计
+ * @param {Object} params - 查询参数及列定义
+ */
+export async function exportSiStats(params) {
+    const blob = await apiFetch('api/si/stats/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+    });
+
+    // 触发下载
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `点检统计_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+}
+
+
+/**
  * 归档操作
  * @param {Object} params - 归档参数 { device, taskType, dateRange }
  */
@@ -165,4 +189,39 @@ export async function archiveSiData(params) {
         method: 'POST',
         body: JSON.stringify(params)
     });
+}
+
+
+
+/**
+ * [新增] 导出台账 Excel
+ */
+export async function exportLedger(params) {
+    const queryParams = new URLSearchParams();
+    for (const key in params) {
+        if (params[key]) queryParams.append(key, params[key]);
+    }
+    // 使用原生 fetch 处理 Blob 流，因为 apiFetch 默认处理 JSON
+    const token = localStorage.getItem('jwt_token');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`/tmis/api/si/ledger/export?${queryParams.toString()}`, {
+        method: 'GET',
+        headers: headers
+    });
+
+    if (!response.ok) {
+        throw new Error("导出失败");
+    }
+    return response.blob();
+}
+
+
+
+/**
+ * [新增] 导入台账 Excel
+ */
+export function importLedger(formData) {
+    return postUpload(`${API_BASE}/ledger/import`, formData);
 }

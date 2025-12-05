@@ -1,7 +1,7 @@
 /**
  * @file /js/views/SiTasks.js
  * @description 点检任务管理主视图 (适配 ZJZK_TASK)。
- * v2.0.0 - 增加全面过滤条件，支持自动补全。
+ * v2.1.0 - [Fix] 修正查询参数名以匹配后端数据库字段，解决筛选无效问题。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import Modal from '../components/Modal.js';
@@ -32,8 +32,8 @@ export default class SiTasks {
                                 <datalist id="list-device"></datalist>
                             </div>
                             <div class="col-md-3 d-flex align-items-center">
-                                <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary small" style="width: 70px; text-align: right;">检查时间:</label>
-                                <input type="text" class="form-control form-control-sm" id="q-checkTime">
+                                <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary small" style="width: 70px; text-align: right;">任务时间:</label>
+                                <input type="text" class="form-control form-control-sm" id="q-taskTime" placeholder="选择日期">
                             </div>
                             <div class="col-md-3 d-flex align-items-center">
                                 <label class="form-label mb-0 me-2 flex-shrink-0 text-secondary small" style="width: 70px; text-align: right;">检查人:</label>
@@ -90,7 +90,7 @@ export default class SiTasks {
     }
 
     _initDatePickers() {
-        const checkTimeInput = this.container.querySelector('#q-checkTime');
+        const checkTimeInput = this.container.querySelector('#q-taskTime');
         // 默认选中今天
         const today = new Date().toISOString().split('T')[0];
         checkTimeInput.value = today;
@@ -112,7 +112,7 @@ export default class SiTasks {
         };
 
         // 并行加载所有下拉数据
-        fillDatalist('device', 'list-device');    // 对应后端 field=device
+        fillDatalist('device', 'list-device');    // 对应后端 field=device (映射为 SFNAME)
         fillDatalist('checker', 'list-checker');  // 对应后端 field=checker
         fillDatalist('confirmer', 'list-confirmer'); // 对应后端 field=confirmer
     }
@@ -150,11 +150,10 @@ export default class SiTasks {
         this.dataTable.toggleLoading(true);
         const getRadioVal = (name) => { const el = this.container.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ''; };
 
+        // [Fix] 修改参数名以匹配 ZjzkTaskMapper.xml 中的参数
         const params = {
-            // 对应后端 SiTaskMapper.xml 中的参数名
-            device: this.container.querySelector('#q-sfname').value, // 注意：后端xml中用的是 'device' 匹配 'DEVICE' 列
-            // sfname: this.container.querySelector('#q-sfname').value, // 如果后端改成了 sfname，请用这一行
-            checkTime: this.container.querySelector('#q-checkTime').value, // 对应 'checkTime' 匹配 TASK_TIME
+            sfname: this.container.querySelector('#q-sfname').value, // 改为 sfname
+            taskTime: this.container.querySelector('#q-taskTime').value, // 改为 taskTime
             checker: this.container.querySelector('#q-checker').value,
             confirmer: this.container.querySelector('#q-confirmer').value,
             prodStatus: getRadioVal('prodStatus'),
@@ -165,13 +164,6 @@ export default class SiTasks {
             pageNum: this.dataTable.state.pageNum,
             pageSize: this.dataTable.state.pageSize
         };
-
-        // 兼容性处理：如果后端接口 `getSiTaskList` 把 `device` 映射成了 `sfname`，这里做个适配
-        // 在 SelfInspectionService.java 中，如果用的是 taskMapper.findList(params)，它直接透传 Map
-        // 所以需要确保 key 与 mapper xml 中的 #{params.xxx} 一致
-        // 目前 mapper 中用的是: params.device, params.prodStatus ...
-        // 但我们输入框是 'sfname'。
-        // *修正*：将上面的 device 参数名设为 'device' 以匹配 mapper
 
         try {
             const result = await getSiTaskList(params);

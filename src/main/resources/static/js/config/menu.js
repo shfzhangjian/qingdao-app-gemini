@@ -24,7 +24,6 @@ const menuConfig = [
                     { id: "si_stats", title: "点检统计", url: "/tmis/performance_opt/self_inspection_mgmt/si_stats", component: "./views/SiStats.js" },
 
                     { id: "new_si_ledger", title: "自检自控台账", url: "/tmis/performance_opt/self_inspection_mgmt/new_si_ledger", component: "./views/NewSelfInspectionLedger.js" },
-                    { id: "si_ledger", title: "自检自控台账TREE", url: "/tmis/performance_opt/self_inspection_mgmt/si_ledger", component: "./views/SelfInspectionLedger.js" }
                 ]
             },
             { id: "asset_mgmt", title: "备件管理", url: "/tmis/performance_opt/asset_mgmt", component: "./views/Placeholder.js" },
