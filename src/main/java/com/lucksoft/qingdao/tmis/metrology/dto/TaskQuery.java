@@ -10,8 +10,9 @@ public class TaskQuery extends PageQuery {
     private String dateRange;
     private String taskStatus;
     private String abcCategory;
+    private String exceptionStatus; // [新增] 异常状态: "all" or "abnormal"
     private List<ExportColumn> columns;
-    private String loginId; // 新增: 用于传递当前登录用户的ID
+    private String loginId;
 
     // Getters and Setters
     public String getDeviceName() {
@@ -54,6 +55,14 @@ public class TaskQuery extends PageQuery {
         this.abcCategory = abcCategory;
     }
 
+    public String getExceptionStatus() {
+        return exceptionStatus;
+    }
+
+    public void setExceptionStatus(String exceptionStatus) {
+        this.exceptionStatus = exceptionStatus;
+    }
+
     public List<ExportColumn> getColumns() {
         return columns;
     }
@@ -62,11 +71,11 @@ public class TaskQuery extends PageQuery {
         this.columns = columns;
     }
 
-    public String getLoginId() { // 新增 Getter
+    public String getLoginId() {
         return loginId;
     }
 
-    public void setLoginId(String loginId) { // 新增 Setter
+    public void setLoginId(String loginId) {
         this.loginId = loginId;
     }
 
@@ -78,7 +87,8 @@ public class TaskQuery extends PageQuery {
                 ", dateRange='" + dateRange + '\'' +
                 ", taskStatus='" + taskStatus + '\'' +
                 ", abcCategory='" + abcCategory + '\'' +
-                ", loginId='" + loginId + '\'' + // 新增
+                ", exceptionStatus='" + exceptionStatus + '\'' +
+                ", loginId='" + loginId + '\'' +
                 ", pageNum=" + getPageNum() +
                 ", pageSize=" + getPageSize() +
                 '}';

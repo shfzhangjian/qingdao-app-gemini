@@ -1,6 +1,7 @@
 package com.lucksoft.qingdao.tmis.metrology.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.util.Date;
 
 /**
@@ -44,6 +45,30 @@ public class MetrologyTaskDTO {
     // 根据 SCHECKRESULT 动态计算
     @JsonProperty("isAbnormal")
     private boolean isAbnormal;
+
+    // --- 异常详情字段 (新增) ---
+    @JsonProperty("exceptionDesc")
+    private String exceptionDesc; // 异常描述
+
+    @JsonProperty("reportTime")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private Date reportTime; // 提报时间
+
+    @JsonProperty("reporterName")
+    private String reporterName; // 提报人
+
+    private Long exceptionId; // [新增] 异常记录ID，用于 Mapper 映射
+
+
+    // [新增] exceptionId 的 Getter/Setter
+    public Long getExceptionId() {
+        return exceptionId;
+    }
+
+    public void setExceptionId(Long exceptionId) {
+        this.exceptionId = exceptionId;
+    }
+
 
     // --- 隐藏字段 ---
     private String scheckresult; // 检查结果 (用于计算 isAbnormal)
@@ -223,4 +248,13 @@ public class MetrologyTaskDTO {
     public void setSlc(String slc) { this.slc = slc; }
     public String getDinit() { return dinit; }
     public void setDinit(String dinit) { this.dinit = dinit; }
+
+    public String getExceptionDesc() { return exceptionDesc; }
+    public void setExceptionDesc(String exceptionDesc) { this.exceptionDesc = exceptionDesc; }
+
+    public Date getReportTime() { return reportTime; }
+    public void setReportTime(Date reportTime) { this.reportTime = reportTime; }
+
+    public String getReporterName() { return reporterName; }
+    public void setReporterName(String reporterName) { this.reporterName = reporterName; }
 }

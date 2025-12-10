@@ -31,7 +31,7 @@ public class SecurityConfig {
                 // 静态资源
                 "/assets/**", "/js/**", "/libs/**", "/stomp.min.js", "/sockjs.min.js",
                 // 登录与认证页面
-                "/login.html", "/gen_token.html", "/sso.html",
+                "/login.html", "/gen_token.html", "/sso.html", "/tims_speed_test.html", "/speed_debug.html",
                 // 调试页面
                 "/test_entry.html", "/test_index.html", "/direct_test.html",
                 "/tims_simulator.html", "/schedule_config.html", "/whitelist-config.html",

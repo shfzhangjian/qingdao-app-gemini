@@ -45,12 +45,12 @@ public class PointCheckStatsController {
 
         log.info("接收到真实数据点检统计查询: {}", query);
         com.lucksoft.qingdao.system.dto.UserInfo userInfo = authUtil.getCurrentUserInfo(request);
-        if (userInfo != null && userInfo.getUser() != null) {
-            query.setUserId(userInfo.getUser().getId());
-            log.info("查询已根据用户ID: {} 进行过滤", query.getUserId());
-        } else {
-            log.warn("无法获取当前用户信息，查询将不过滤用户。");
-        }
+//        if (userInfo != null && userInfo.getUser() != null) {
+//            query.setUserId(userInfo.getUser().getId());
+//            log.info("查询已根据用户ID: {} 进行过滤", query.getUserId());
+//        } else {
+//            log.warn("无法获取当前用户信息，查询将不过滤用户。");
+//        }
 
         PageHelper.clearPage();
         List<PointCheckStatsDTO> stats = pointCheckStatsService.getStatistics(query);

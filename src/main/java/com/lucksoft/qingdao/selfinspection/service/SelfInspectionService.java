@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -486,10 +487,13 @@ public class SelfInspectionService {
         }
     }
 
+
     private String getCellValue(Cell cell) {
         if (cell == null) return "";
         DataFormatter formatter = new DataFormatter();
-        return formatter.formatCellValue(cell).trim();
+        String value = formatter.formatCellValue(cell);
+        // [优化] 同时去除普通空格和不间断空格(NBSP, ASCII 160)，防止肉眼看不见的空格导致校验失败
+        return value.replace((char) 160, ' ').trim();
     }
 
     private Date parseDate(String dateStr) {
@@ -749,6 +753,74 @@ public class SelfInspectionService {
         Comment comment = drawing.createCellComment(anchor);
         comment.setString(new XSSFRichTextString(message));
         cell.setCellComment(comment);
+    }
+
+    /**
+     * [新增] 批量刷新所有设备车速
+     * 这是一个耗时操作，将在后台线程运行
+     */
+    @Async // 确保开启了 @EnableAsync
+    public void refreshAllDeviceSpeeds() {
+        log.info(">>> 开始批量刷新所有设备车速...");
+
+        // 1. 获取所有有 PM编码 的设备
+        List<String> spmCodes = toolMapper.findAllSpmCodes();
+        log.info("共找到 {} 个设备需要更新车速。", spmCodes.size());
+
+        List<Map<String, Object>> records = new ArrayList<>();
+        String batchNo = "MANUAL_REFRESH_" + System.currentTimeMillis();
+        Date now = new Date();
+        Date startTime = new Date(now.getTime() - 15 * 60 * 1000); // 查询过去15分钟
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+        int successCount = 0;
+
+        for (String code : spmCodes) {
+            try {
+                GetAvgSpeedReq req = new GetAvgSpeedReq();
+                req.setEquipmentCode(code);
+                req.setStartTime(sdf.format(startTime));
+                req.setEndTime(sdf.format(now));
+
+                Double speed = timsClient.getAverageSpeed(req);
+
+                // 只有获取到有效车速才记录
+                if (speed != null) {
+                    Map<String, Object> record = new HashMap<>();
+                    record.put("batchNo", batchNo);
+                    record.put("spmcode", code);
+                    record.put("avgSpeed", speed);
+                    record.put("startTime", startTime);
+                    record.put("endTime", now);
+                    records.add(record);
+                    successCount++;
+                }
+
+                // 简单的限流，防止把对方接口打挂
+                Thread.sleep(50);
+
+            } catch (Exception e) {
+                log.warn("获取设备 {} 车速失败: {}", code, e.getMessage());
+            }
+        }
+
+        if (!records.isEmpty()) {
+            // 分批插入，防止 SQL 过长
+            int batchSize = 100;
+            for (int i = 0; i < records.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, records.size());
+                speedCheckMapper.batchInsert(records.subList(i, end));
+            }
+        }
+
+        log.info("<<< 批量刷新车速完成。成功更新 {}/{} 个设备。", successCount, spmCodes.size());
+    }
+
+    /**
+     * [新增] 获取最近的车速检查记录
+     */
+    public List<Map<String, Object>> getRecentSpeedRecords() {
+        return speedCheckMapper.findRecentRecords();
     }
 
 }

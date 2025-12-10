@@ -1,6 +1,7 @@
 package com.lucksoft.qingdao.tmis.metrology.controller;
 
 import com.lucksoft.qingdao.qdjl.mapper.MetrologyTaskMapper;
+import com.lucksoft.qingdao.system.dto.UserInfo;
 import com.lucksoft.qingdao.system.util.AuthUtil;
 import com.lucksoft.qingdao.tmis.dto.PageResult;
 import com.lucksoft.qingdao.tmis.metrology.dto.MetrologyTaskDTO;
@@ -73,10 +74,24 @@ public class MetrologyTaskController {
     }
 
     /**
-     * [核心修复] 将返回类型从 String 修改为 Map<String, Object> 以返回JSON
+     * [核心修复] 更新/异常标记接口
+     * 增加 HttpServletRequest 参数，并填充用户信息
      */
     @PostMapping("/update")
-    public ResponseEntity<Map<String, Object>> updateTask(@RequestBody UpdateTaskRequestDTO request) {
+    public ResponseEntity<Map<String, Object>> updateTask(@RequestBody UpdateTaskRequestDTO request, HttpServletRequest httpRequest) {
+        // 1. 获取当前登录用户
+        UserInfo userInfo = authUtil.getCurrentUserInfo(httpRequest);
+        if (userInfo != null && userInfo.getUser() != null) {
+            // 2. 填充到 DTO
+            request.setLoginId(userInfo.getUser().getLoginid());
+            request.setUserName(userInfo.getUser().getName());
+            log.info("任务更新操作人: {} ({})", request.getUserName(), request.getLoginId());
+        } else {
+            log.warn("任务更新操作无法获取用户信息 (可能是未登录或Token失效)，将记录为未知用户。");
+            request.setLoginId("unknown");
+            request.setUserName("未知用户");
+        }
+
         try {
             int affectedRows = metrologyTaskService.updateTasks(request);
             Map<String, Object> response = new HashMap<>();

@@ -7,9 +7,11 @@ import org.apache.ibatis.annotations.*;
 import org.apache.ibatis.mapping.StatementType;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface MetrologyTaskMapper {
+
 
     @Results(id = "metrologyTaskResultMap", value = {
             @Result(property = "indocno", column = "INDOCNO"),
@@ -32,37 +34,48 @@ public interface MetrologyTaskMapper {
             @Result(property = "sproduct", column = "SPRODUCT"),
             @Result(property = "suser", column = "SUSER"),
             @Result(property = "seq", column = "SEQ"),
-            @Result(property = "scheckuser", column = "SCHECKUSER")
+            @Result(property = "scheckuser", column = "SCHECKUSER"),
+            // [新增] 异常信息映射
+            @Result(property = "exceptionDesc", column = "EXCEPTION_DESC"),
+            @Result(property = "reportTime", column = "REPORT_TIME"),
+            @Result(property = "reporterName", column = "REPORTER_NAME"),
+            // [新增] 关联异常ID字段映射
+            @Result(property = "exceptionId", column = "EXCEPTION_ID")
     })
     @Select("<script>" +
-            "SELECT * FROM V_JL_EQUIP_DXJ " +
+            "SELECT " +
+            "   A.INDOCNO, A.DUPCHECK, A.IDJSTATE, A.SJNO, A.SJNAME, A.SGGXH, " +
+            "   A.SFACTORYNO, A.SPLACE, A.SLEVEL, A.ISTATE, A.SABC, " +
+            "   A.SCHECKRESULT, A.SCHECKREMARK, A.SUSEDEPT, A.SLC, " +
+            "   A.SERPNO, A.DINIT, A.SPRODUCT, A.SUSER, A.SEQ, A.SCHECKUSER, " +
+            "   A.EXCEPTION_ID, " + // 显式选择 A 表的字段，避免歧义
+            "   B.EXCEPTION_DESC, B.REPORT_TIME, B.REPORTER_NAME " +
+            "FROM V_JL_EQUIP_DXJ A " +
+            "LEFT JOIN T_METROLOGY_EXCEPTION B ON A.EXCEPTION_ID = B.ID " +
             "<where>" +
-            "   ISTATE &lt;&gt; '备用' " +
+            "   A.ISTATE &lt;&gt; '备用' " +
             "   <if test='deviceName != null and deviceName != \"\"'>" +
-            "       AND SJNAME LIKE '%' || #{deviceName} || '%'" +
+            "       AND A.SJNAME LIKE '%' || #{deviceName} || '%'" +
             "   </if>" +
             "   <if test='enterpriseId != null and enterpriseId != \"\"'>" +
-            "       AND SJNO LIKE '%' || #{enterpriseId} || '%'" +
+            "       AND A.SJNO LIKE '%' || #{enterpriseId} || '%'" +
             "   </if>" +
             "   <if test='abcCategory != null and abcCategory != \"\" and abcCategory != \"all\"'>" +
-            "       AND SABC = #{abcCategory}" +
+            "       AND A.SABC = #{abcCategory}" +
             "   </if>" +
             "   <if test='taskStatus != null and taskStatus != \"\" and taskStatus != \"all\"'>" +
-            "       AND IDJSTATE = #{taskStatus}" +
+            "       AND A.IDJSTATE = #{taskStatus}" +
+            "   </if>" +
+            "   <if test='exceptionStatus != null and exceptionStatus == \"abnormal\"'>" +
+            "       AND A.SCHECKRESULT = '异常'" +
             "   </if>" +
             "   <if test='dateRange != null and dateRange != \"\"'>" +
             "       <bind name='startDate' value=\"dateRange.split(' 至 ')[0]\" />" +
             "       <bind name='endDate' value=\"dateRange.split(' 至 ')[1]\" />" +
-            "       AND DUPCHECK &gt;= TO_DATE(#{startDate}, 'YYYY-MM-DD') AND DUPCHECK &lt;= TO_DATE(#{endDate}, 'YYYY-MM-DD')" +
+            "       AND A.DUPCHECK &gt;= TO_DATE(#{startDate}, 'YYYY-MM-DD') AND A.DUPCHECK &lt;= TO_DATE(#{endDate}, 'YYYY-MM-DD')" +
             "   </if>" +
-
-//            // 假设 SUSER 存储的是责任人的登录账号 (loginid)
-//            "   <if test='loginId != null and loginId != \"\"'>" +
-//            "       AND SUSER = #{loginId}" +
-//            "   </if>" +
-
             "</where>" +
-            "ORDER BY DINIT DESC, IDJSTATE, SJNO" +
+            "ORDER BY A.DINIT DESC, A.IDJSTATE, A.SJNO" +
             "</script>")
     List<MetrologyTaskDTO> findTasksByCriteria(TaskQuery query);
 
@@ -81,23 +94,11 @@ public interface MetrologyTaskMapper {
             "</script>")
     int updateTask(@Param("req") UpdateTaskRequestDTO req);
 
-    /**
-     * 查询指定列的去重值，用于前端下拉补全。
-     * 注意：columnName 由 Service 层校验，防止 SQL 注入。
-     */
     @Select("SELECT DISTINCT ${columnName} FROM V_JL_EQUIP_DXJ WHERE ${columnName} IS NOT NULL ORDER BY NLSSORT(${columnName}, 'NLS_SORT=SCHINESE_PINYIN_M')")
     List<String> findDistinctValues(@Param("columnName") String columnName);
 
     /**
-     * [新增] 调用 tmis.update_jl_task 存储过程。
-     * 假设存储过程签名为:
-     * PROCEDURE update_jl_task(
-     * p_ids_str IN VARCHAR2,      -- 逗号分隔的ID字符串
-     * p_result  IN VARCHAR2,      -- 检查结果 (正常/异常)
-     * p_remark  IN VARCHAR2,      -- 备注/异常描述
-     * p_loginid IN VARCHAR2,      -- 操作员账号
-     * p_username IN VARCHAR2      -- 操作员姓名
-     * )
+     * 调用旧的通用更新过程 (用于正常提交)
      */
     @Update("{CALL tmis.update_jl_task(" +
             "#{idsStr, jdbcType=VARCHAR, mode=IN}, " +
@@ -114,4 +115,17 @@ public interface MetrologyTaskMapper {
             @Param("loginId") String loginId,
             @Param("userName") String userName
     );
+
+    /**
+     * [新增] 调用批量异常提报存储过程
+     */
+    @Select(value = "{call PKG_METROLOGY.P_REPORT_BATCH_EXCEPTION(" +
+            "#{idsStr, mode=IN, jdbcType=VARCHAR}, " +
+            "#{reason, mode=IN, jdbcType=VARCHAR}, " +
+            "#{loginId, mode=IN, jdbcType=VARCHAR}, " +
+            "#{userName, mode=IN, jdbcType=VARCHAR}, " +
+            "#{outCount, mode=OUT, jdbcType=INTEGER}, " +
+            "#{outMsg, mode=OUT, jdbcType=VARCHAR})}")
+    @Options(statementType = StatementType.CALLABLE)
+    void callBatchReportException(Map<String, Object> params);
 }

@@ -46,38 +46,60 @@ public class MetrologyTaskService {
         return metrologyTaskMapper.findTasksByCriteria(query);
     }
 
+    /**
+     * 统一的任务更新入口
+     */
     @Transactional
     public int updateTasks(UpdateTaskRequestDTO requestDTO) {
         if (requestDTO.getIds() == null || requestDTO.getIds().isEmpty()) {
             return 0;
         }
 
-        // [修改] 移除本地 updateTask 调用，直接调用存储过程
-        // int rows = metrologyTaskMapper.updateTask(requestDTO);
-        // log.info("本地任务状态更新完成，影响行数: {}", rows);
+        String idsStr = String.join(",", requestDTO.getIds());
+        String checkResult = requestDTO.getCheckResult();
+        String remark = requestDTO.getAbnormalDesc() != null ? requestDTO.getAbnormalDesc() : requestDTO.getCheckRemark();
 
-        try {
-            // 将 ID 列表转换为逗号分隔的字符串
-            String idsStr = String.join(",", requestDTO.getIds());
-            String remark = requestDTO.getAbnormalDesc() != null ? requestDTO.getAbnormalDesc() : requestDTO.getCheckRemark();
+        // [新增] 路由逻辑：如果是 "异常"，调用专门的异常提报过程
+        if ("异常".equals(checkResult)) {
+            log.info("检测到异常提报请求，调用 PKG_METROLOGY.P_REPORT_BATCH_EXCEPTION...");
 
-            log.info("正在调用存储过程 tmis.update_jl_task. IDs: {}, User: {}", idsStr, requestDTO.getLoginId());
+            Map<String, Object> params = new HashMap<>();
+            params.put("idsStr", idsStr);
+            params.put("reason", remark); // 异常描述
+            params.put("loginId", requestDTO.getLoginId());
+            params.put("userName", requestDTO.getUserName());
+            params.put("outCount", 0);
+            params.put("outMsg", "");
 
-            metrologyTaskMapper.callUpdateJlTaskProcedure(
-                    idsStr,
-                    requestDTO.getCheckResult(),
-                    remark,
-                    requestDTO.getLoginId(),
-                    requestDTO.getUserName()
-            );
-            log.info("存储过程调用成功。");
+            metrologyTaskMapper.callBatchReportException(params);
 
-            // 由于存储过程不直接返回影响行数，这里返回处理的ID数量作为近似值
-            return requestDTO.getIds().size();
+            String msg = (String) params.get("outMsg");
+            if (!"SUCCESS".equals(msg)) {
+                log.error("异常提报存储过程执行失败: {}", msg);
+                throw new RuntimeException("操作失败: " + msg);
+            }
 
-        } catch (Exception e) {
-            log.error("调用存储过程 tmis.update_jl_task 失败", e);
-            throw new RuntimeException("存储过程执行失败: " + e.getMessage());
+            return (Integer) params.get("outCount");
+
+        } else {
+            // 正常的提交逻辑 (调用 tmis.update_jl_task)
+            try {
+                log.info("正在调用存储过程 tmis.update_jl_task. IDs: {}, User: {}", idsStr, requestDTO.getLoginId());
+
+                metrologyTaskMapper.callUpdateJlTaskProcedure(
+                        idsStr,
+                        checkResult,
+                        remark,
+                        requestDTO.getLoginId(),
+                        requestDTO.getUserName()
+                );
+                log.info("存储过程调用成功。");
+                return requestDTO.getIds().size();
+
+            } catch (Exception e) {
+                log.error("调用存储过程 tmis.update_jl_task 失败", e);
+                throw new RuntimeException("存储过程执行失败: " + e.getMessage());
+            }
         }
     }
 

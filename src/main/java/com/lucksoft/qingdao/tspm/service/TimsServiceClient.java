@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
@@ -55,11 +56,13 @@ public class TimsServiceClient {
      */
     public Double getAverageSpeed(GetAvgSpeedReq req) {
         String topic = "TIMS_GET_AVG_SPEED";
-        GjjDebugLogger.setLogNameContext("获取平均车速_" + req.getEquipmentCode());
+        // 去除设备编码可能存在的首尾空格
+        String equipmentCode = req.getEquipmentCode() != null ? req.getEquipmentCode().trim() : "";
+        GjjDebugLogger.setLogNameContext("获取平均车速_" + equipmentCode);
 
         try {
             Map<String, Object> queryParams = new HashMap<>();
-            queryParams.put("equipmentCode", req.getEquipmentCode());
+            queryParams.put("equipmentCode", equipmentCode);
             if (req.getStartTime() != null) queryParams.put("startTime", req.getStartTime());
             if (req.getEndTime() != null) queryParams.put("endTime", req.getEndTime());
 
@@ -78,28 +81,47 @@ public class TimsServiceClient {
 
             GjjDebugLogger.log(topic, "响应", String.format("Status: %s, Time: %dms, Body: %s", response.getStatusCode(), duration, response.getBody()));
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            if (response.getStatusCode().is2xxSuccessful()) {
+                String body = response.getBody();
+                if (body == null || body.trim().isEmpty() || "null".equalsIgnoreCase(body.trim())) {
+                    log.info("设备[{}]车速接口返回空值，视为无数据。", equipmentCode);
+                    return null;
+                }
+
                 try {
-                    // 响应体直接是 double 值，例如 "320.0"
-                    return Double.valueOf(response.getBody());
+                    // 尝试直接解析 double (例如 "320.0")
+                    return Double.valueOf(body);
                 } catch (NumberFormatException e) {
                     // 尝试解析 JSON 包装格式 {"code":200, "data": 320.0}
                     try {
-                        JsonNode root = objectMapper.readTree(response.getBody());
-                        if (root.has("data")) {
+                        JsonNode root = objectMapper.readTree(body);
+                        if (root.has("data") && !root.get("data").isNull()) {
                             return root.get("data").asDouble();
+                        } else {
+                            log.info("设备[{}]车速接口返回JSON但无有效data数据: {}", equipmentCode, body);
+                            return null;
                         }
-                    } catch (Exception ex) { /* ignore */ }
-
-                    log.error("解析车速失败: {}", response.getBody());
-                    throw new RuntimeException("TIMS返回的车速格式无效");
+                    } catch (Exception ex) {
+                        log.warn("设备[{}]车速接口返回格式无法解析: {}", equipmentCode, body);
+                        // 不抛出异常，视为无数据
+                        return null;
+                    }
                 }
             } else {
                 throw new RuntimeException("获取车速失败，状态码: " + response.getStatusCode());
             }
+
+        } catch (HttpClientErrorException e) {
+            // [新增保护] 捕获 4xx 错误 (如 400 Bad Request "不存的设备!编码...")
+            log.warn("[接口7] 获取车速请求被拒绝 (可能是设备不存在或参数错误): {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            GjjDebugLogger.log(topic, "客户端错误", "Status: " + e.getStatusCode() + ", Body: " + e.getResponseBodyAsString());
+            // 视为该设备无车速数据，不抛出异常阻断流程
+            return null;
+
         } catch (Exception e) {
-            log.error("[接口7] 获取平均车速异常", e);
+            log.error("[接口7] 获取平均车速系统异常", e);
             GjjDebugLogger.logError(topic, "异常", e);
+            // 这里抛出异常，因为可能是网络或服务挂了，需要上层知道
             throw new RuntimeException("获取平均车速服务异常: " + e.getMessage());
         } finally {
             GjjDebugLogger.clearLogNameContext();

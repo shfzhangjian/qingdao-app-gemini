@@ -19,7 +19,7 @@
 <div class="container">
     <div class="text-center mb-4">
         <h2><i class="bi bi-plus-circle-fill text-success"></i> 故障报告创建测试</h2>
-        <p class="text-muted">验证接口: <code>POST /api/tims/fault-report</code></p>
+        <p class="text-muted">验证接口: <code>POST /api/tims/create/fault/report</code></p>
     </div>
 
     <div class="card">
@@ -141,7 +141,7 @@
             const headers = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            const response = await fetch('/tmis/api/tims/fault-report', {
+            const response = await fetch('/tmis/api/tims/create/fault/report', {
                 method: 'POST',
                 headers: headers,
                 body: document.getElementById('jsonPreview').value

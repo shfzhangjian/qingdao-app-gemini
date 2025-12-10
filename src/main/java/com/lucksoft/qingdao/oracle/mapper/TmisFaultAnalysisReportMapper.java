@@ -15,6 +15,8 @@ import org.apache.ibatis.mapping.StatementType;
 @Mapper
 public interface TmisFaultAnalysisReportMapper {
 
+
+
     @Select(value = "{CALL tmis.CREATE_FAULT_ANALYSIS_REPORT(" +
             "p_tims_id => #{dto.id, jdbcType=VARCHAR, mode=IN}," +
             "p_name => #{dto.name, jdbcType=VARCHAR, mode=IN}," +
@@ -35,8 +37,10 @@ public interface TmisFaultAnalysisReportMapper {
             "p_fault_site_desc => #{dto.faultSiteDesc, jdbcType=VARCHAR, mode=IN}," +
             "p_fault_causes_analysis => #{dto.faultCausesAnalysis, jdbcType=VARCHAR, mode=IN}," +
 
-            "p_new_code => #{report.code, jdbcType=VARCHAR, mode=OUT}" +
+            // [重点修改] 这里也要改为 dto.code
+            "p_new_code => #{dto.code, jdbcType=VARCHAR, mode=OUT}" +
             ")}")
     @Options(statementType = StatementType.CALLABLE)
     void createFaultAnalysisReportViaSP(@Param("dto") FaultAnalysisReportDTO dto);
+
 }

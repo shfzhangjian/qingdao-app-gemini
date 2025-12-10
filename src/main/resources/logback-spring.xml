@@ -98,38 +98,29 @@
     <logger name="kafka.consumer.production_halt_completion" level="INFO" additivity="false"><appender-ref ref="PRODUCTION_HALT_COMPLETION_FILE"/></logger>
 
     <!-- 动态SQL查询服务专用 Logger -->
-    <logger name="com.lucksoft.qingdao.tspm.service.DynamicQueryService" level="DEBUG" additivity="false">
+    <logger name="com.lucksoft.qingdao.tspm.service.DynamicQueryService" level="INFO" additivity="false">
         <appender-ref ref="SQL_QUERY_FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>
 
     <!-- ===================================================================== -->
-    <!-- 【新增】打印MyBatis SQL和参数                                           -->
+    <!-- [修改] 恢复 MyBatis 日志级别为 INFO，停止打印详细SQL参数                -->
     <!-- ===================================================================== -->
-    <!-- 将Mapper接口的日志级别设为TRACE，即可在控制台看到执行的SQL及绑定的参数 -->
-    <logger name="com.lucksoft.qingdao.selfinspection.mapper" level="DEBUG" additivity="false">
+    <logger name="com.lucksoft.qingdao.selfinspection.mapper" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
 
-    <logger name="com.lucksoft.qingdao.qdjl.mapper" level="TRACE" additivity="false">
+    <logger name="com.lucksoft.qingdao.qdjl.mapper" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
-    <logger name="com.lucksoft.qingdao.system.mapper" level="TRACE" additivity="false">
+    <logger name="com.lucksoft.qingdao.system.mapper" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
-    <logger name="com.lucksoft.qingdao.eam.maintainbook.mapper" level="TRACE" additivity="false">
-        <appender-ref ref="CONSOLE"/>
-    </logger>
-
-    <logger name="com.lucksoft.qingdao.system.mapper" level="TRACE" additivity="false">
-        <appender-ref ref="CONSOLE"/>
-    </logger>
-    <logger name="com.lucksoft.qingdao.eam.maintainbook.mapper" level="TRACE" additivity="false">
+    <logger name="com.lucksoft.qingdao.eam.maintainbook.mapper" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
 
-    <!-- 【新增】为 Oracle API Controller 对应的 Mapper 添加 TRACE 日志 -->
-    <logger name="com.lucksoft.qingdao.oracle.mapper" level="TRACE" additivity="false">
+    <logger name="com.lucksoft.qingdao.oracle.mapper" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
 
@@ -144,4 +135,3 @@
         <appender-ref ref="CONSOLE"/>
     </root>
 </configuration>
-

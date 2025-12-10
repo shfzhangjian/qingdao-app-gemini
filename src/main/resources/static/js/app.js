@@ -1,17 +1,14 @@
 /**
  * 源码路径: js/app.js
  * 功能说明: 应用的主入口文件，负责初始化、路由管理、页面调度和主框架渲染。
- * v1.7.0 - 2025-10-15: Integrated with AuthManager for re-authentication and UI updates.
- * v1.8.0 - 2025-11-14: [新增] IP白名单自动登录逻辑
- * v1.9.0 - 2025-11-15: [修改] 切换到 HTML5 History 模式路由
- * v1.9.1 - 2025-11-16: [修复] 修复了 IP 登录后白屏的问题
- * v1.9.2 - 2025-11-18: [修复] 增加 isAuthReady 状态管理，修复403/加载竞态条件
- * v1.9.3 - 2025-11-19: [修复] 修复 view=content 模式下因跳过认证初始化导致的黑屏问题
- * v1.9.4 - 2025-11-19: [修复] 修复IP登录同步执行导致的竞态条件（pendingPath赋值过晚）
+ * v1.9.5 - [Fix] 修复 URL 参数解析，兼容 'code' 参数作为用户工号。
+ * v1.9.9 - [Fix] 修正 AuthManager 方法调用错误 (requireLogin -> requestCredentials) 及实例化问题。
  */
 import menuConfig from './config/menu.js';
 import Breadcrumb from './components/Breadcrumb.js';
 import Modal from './components/Modal.js';
+// [修正] AuthManager.js 默认导出的是单例对象，直接导入即可
+import authManagerInstance from './components/AuthManager.js';
 
 class App {
     constructor(menuConfig) {
@@ -27,6 +24,9 @@ class App {
         this.breadcrumb = new Breadcrumb();
         this.themeToggler = document.getElementById('theme-toggler');
 
+        // [修正] AuthManager 已经是实例，直接赋值，无需 new
+        this.authManager = authManagerInstance;
+
         this.isAuthReady = false; // [NEW] 1. 添加认证就绪状态
         this.pendingPath = null; // [NEW] 2. 存储因等待认证而挂起的路径
 
@@ -39,7 +39,10 @@ class App {
     async init() {
         // 1. 在执行任何操作前，首先检查 URL 参数
         const urlParams = new URLSearchParams(window.location.search);
-        const loginid = urlParams.get('userCode');
+
+        // [关键修复] 兼容 'userCode' 和 'code' 两个参数名。优先取 userCode，如果没有则取 code。
+        const loginid = urlParams.get('userCode') || urlParams.get('code');
+
         const view = urlParams.get('view');
         const theme = urlParams.get('theme');
         const currentLoginId = localStorage.getItem('current_loginid');
@@ -50,7 +53,7 @@ class App {
         // 仅当 URL 提供了 loginid，且该 loginid 与 localStorage 中已存的 loginid 不一致时，
         // 才触发 IP 自动登录流程。
         if (loginid && loginid !== currentLoginId) {
-            console.log(`[App] 检测到 URL loginid (${loginid}) 与当前用户 (${currentLoginId}) 不符。`);
+            console.log(`[App] 检测到 URL loginid/code (${loginid}) 与当前用户 (${currentLoginId}) 不符。`);
             console.log("[App] 正在尝试 IP 白名单自动登录...");
             try {
                 // 3. 调用新的后端端点
@@ -88,11 +91,13 @@ class App {
     }
 
     /**
-     * [新增] 从 URL 中移除 loginid 参数，防止刷新时重复登录
+     * [新增] 从 URL 中移除 loginid/code 参数，防止刷新时重复登录
      */
     removeLoginParamsFromURL() {
         const url = new URL(window.location);
         url.searchParams.delete('loginid');
+        url.searchParams.delete('userCode');
+        url.searchParams.delete('code'); // [新增] 同时清理 code 参数
         // 保留 view 等其他参数
         window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
     }
@@ -221,8 +226,15 @@ class App {
                         localStorage.setItem('current_loginid', userInfo.user.loginid);
                     }
                 } else {
-                    // [NEW] 即使没有 token, 认证也算"就绪" (未登录状态)
-                    console.log("[App] 未检测到 Token, 认证就绪 (未登录)。");
+                    // [Fix] 恢复：未登录时强制要求登录 (弹出对话框)
+                    console.log("[App] 未检测到 Token, 调用 AuthManager 强制登录...");
+                    // [关键修正] 调用正确的方法名 requestCredentials (AuthManager.js源码中定义的方法)
+                    if (this.authManager && typeof this.authManager.requestCredentials === 'function') {
+                        this.authManager.requestCredentials();
+                    } else {
+                        console.error("[App] AuthManager 未初始化或无 requestCredentials 方法，降级处理：跳转登录页。");
+                        window.location.href = 'login.html';
+                    }
                 }
             }
         } catch (error) {

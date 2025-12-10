@@ -31,7 +31,7 @@ public class TimsFaultReportController {
      * Path: /api/tims/fault-report
      * Method: POST
      */
-    @PostMapping("/fault-report")
+    @PostMapping("/create/fault/report")
     public ResponseEntity<?> createFaultReport(@RequestBody FaultReportDTO reportDto) {
         log.info("收到故障报告创建请求: name={}, equipmentCode={}", reportDto.getName(), reportDto.getEquipmentCode());
 

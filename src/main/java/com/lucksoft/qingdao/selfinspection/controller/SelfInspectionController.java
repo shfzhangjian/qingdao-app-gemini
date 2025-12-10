@@ -296,4 +296,19 @@ public class SelfInspectionController {
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
     }
+
+    /**
+     * [新增] 手动触发全量车速更新
+     */
+    @PostMapping("/speed/refresh-all")
+    public ResponseEntity<?> refreshAllSpeeds() {
+        // 异步执行，立即返回
+        siService.refreshAllDeviceSpeeds();
+        return ResponseEntity.ok(Collections.singletonMap("message", "全量车速刷新任务已在后台启动，请稍后刷新台账列表查看。"));
+    }
+
+    @GetMapping("/speed/list")
+    public ResponseEntity<List<Map<String, Object>>> getSpeedRecords() {
+        return ResponseEntity.ok(siService.getRecentSpeedRecords());
+    }
 }

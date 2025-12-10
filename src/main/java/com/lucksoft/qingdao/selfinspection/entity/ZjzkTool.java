@@ -54,6 +54,18 @@ public class ZjzkTool implements Serializable {
     private String sstepopernm; // 办理人
     private String snote;       // 备注
 
+    // [新增] 车速相关字段 (非数据库表 ZJZK_TOOL 原生字段，通过关联查询获得)
+    private Double lastAvgSpeed;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private Date lastSpeedTime;
+
+    public Double getLastAvgSpeed() { return lastAvgSpeed; }
+    public void setLastAvgSpeed(Double lastAvgSpeed) { this.lastAvgSpeed = lastAvgSpeed; }
+
+    public Date getLastSpeedTime() { return lastSpeedTime; }
+    public void setLastSpeedTime(Date lastSpeedTime) { this.lastSpeedTime = lastSpeedTime; }
+
     // Getters and Setters
     public Long getIndocno() { return indocno; }
     public void setIndocno(Long indocno) { this.indocno = indocno; }

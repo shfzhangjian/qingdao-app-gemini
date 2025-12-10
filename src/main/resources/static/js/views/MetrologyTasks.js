@@ -3,7 +3,9 @@
  * 功能说明: 计量任务页面的视图逻辑 (已适配真实数据)
  * 版本变动:
  * v4.1.0 - 2025-11-18: [新增] 设备名称和企业编号字段升级为可补全下拉框。
- * @version 4.0.0 - 2025-10-15
+ * v4.2.0 - [新增] 异常标记列和详情查看功能。
+ * v4.3.0 - [新增] 增加“异常状态”过滤条件。
+ * @version 4.3.0
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import QueryForm from '../components/QueryForm.js';
@@ -42,9 +44,25 @@ export default class MetrologyTasks {
         return date.toLocaleDateString();
     }
 
+    // [新增] 格式化完整时间 (yyyy-MM-dd HH:mm:ss)
+    _formatDateTime(dateString) {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) {
+            return '-';
+        }
+        // 简单格式化，或者使用 localeString
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    }
+
 
     _renderQueryForm(container) {
-        // [修改] 将 'text' 改为 'autocomplete' 并提供 dataSource
         const formFields = [
             { type: 'daterange', label: '确认时间范围', name: 'dateRange', containerClass: 'col-12 col-md-4' },
             {
@@ -52,26 +70,40 @@ export default class MetrologyTasks {
                 label: '设备名称',
                 name: 'deviceName',
                 containerClass: 'col-12 col-md-4',
-                dataSource: () => getMetrologyTaskOptions('deviceName') // 绑定后端 API
+                dataSource: () => getMetrologyTaskOptions('deviceName')
             },
             {
                 type: 'autocomplete',
                 label: '企业编号',
                 name: 'enterpriseId',
                 containerClass: 'col-12 col-md-4',
-                dataSource: () => getMetrologyTaskOptions('enterpriseId') // 绑定后端 API
+                dataSource: () => getMetrologyTaskOptions('enterpriseId')
             },
         ];
 
         this.queryForm = new QueryForm({ fields: formFields });
         container.innerHTML = `<div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);"><div class="row g-3 align-items-center">${this.queryForm._createFieldsHtml()}</div></div>`;
-        this.queryForm.container = container; // Hack: bind container manually before initializing inputs
+        this.queryForm.container = container;
         this.queryForm._initializeDatePickers();
-        this.queryForm._initializeAutocompletes(); // 手动调用初始化 (虽然 render 里已调用，但因为我们分两步，这里确保安全)
+        this.queryForm._initializeAutocompletes();
     }
 
     _renderDataTable(container) {
         const columns = [
+            // [新增] 异常标记列
+            {
+                key: 'isAbnormal',
+                title: '异常',
+                width: 60,
+                frozen: 'left',
+                render: (val, row) => {
+                    if (val || row.pointCheckStatus === '异常' || row.status === '异常') {
+                        // 使用 text-danger 显示红色图标，并添加点击事件类
+                        return `<i class="bi bi-exclamation-triangle-fill text-danger fs-5 btn-view-exception" style="cursor: pointer;" title="点击查看异常详情" data-id="${row.id}"></i>`;
+                    }
+                    return '';
+                }
+            },
             { key: 'dinit', title: '生成任务时间', visible: true, width: 120, sortable: true, render: (val) => this._formatDate(val) },
             { key: 'date', title: '确认时间', visible: true, width: 120, sortable: true, render: (val) => this._formatDate(val) },
             { key: 'pointCheckStatus', title: '点检状态', visible: true, width: 100 },
@@ -101,6 +133,8 @@ export default class MetrologyTasks {
 
         const filters = [
             { type: 'pills', label: '任务状态', name: 'taskStatus', options: [{label: '待检', value: 'unchecked', checked: true}, {label: '已检', value: 'checked'}, {label: '全部', value: 'all'}] },
+            // [新增] 异常状态过滤器
+            { type: 'pills', label: '异常状态', name: 'exceptionStatus', options: [{label: '全部', value: 'all', checked: true}, {label: '有异常', value: 'abnormal'}] },
             { type: 'pills', label: 'ABC分类', name: 'abcCategory', options: [{label: '全部', value: 'all', checked: true}, {label: 'A', value: 'A'}, {label: 'B', 'value': 'B'}, {label: 'C', value: 'C'}] }
         ];
 
@@ -109,15 +143,13 @@ export default class MetrologyTasks {
             options: {
                 uniformRowHeight: true,
                 configurable: true,
-                storageKey: 'metrologyTasksTable',
+                storageKey: 'metrologyTasksTable_v3', // 更新 storageKey
                 selectable: 'multiple',
             }
         });
 
         this.dataTable.render(container);
     }
-
-    // ... (其余方法保持不变: _loadData, _showAbnormalWorkOrderModal, _attachEventListeners) ...
 
     async _loadData() {
         this.dataTable.toggleLoading(true);
@@ -136,6 +168,17 @@ export default class MetrologyTasks {
             };
 
             const pageResult = await getMetrologyTasks(params);
+
+            // 确保 id 字段存在 (后端 DTO 已经是 id)
+            if (pageResult && pageResult.list) {
+                pageResult.list.forEach(item => {
+                    // 如果后端没有返回 id，尝试使用 indocno
+                    if (!item.id && item.indocno) {
+                        item.id = item.indocno;
+                    }
+                });
+            }
+
             this.dataTable.updateView(pageResult);
         } catch (error) {
             console.error("加载计量任务失败:", error);
@@ -196,11 +239,63 @@ export default class MetrologyTasks {
         modal.show();
     }
 
+    // [新增] 显示异常详情模态框
+    _showExceptionDetailModal(rowData) {
+        // 从 rowData 中获取异常信息
+        // 假设后端返回的字段是: exceptionDesc, reportTime, reporterName
+        // 如果是从 checkRemark 中获取，则使用 checkRemark
+        const desc = rowData.exceptionDesc || rowData.checkRemark || rowData.scheckremark || '暂无描述';
+        // 优先使用 reportTime，如果没有则尝试使用 checkTime 或其他时间字段
+        const time = this._formatDateTime(rowData.reportTime || rowData.checkTime);
+        const reporter = rowData.reporterName || rowData.checker || rowData.scheckuser || '未知';
+
+        const bodyHtml = `
+            <div class="container-fluid">
+                <div class="row mb-3">
+                    <div class="col-md-3 text-end fw-bold">设备名称:</div>
+                    <div class="col-md-9">${rowData.deviceName || rowData.sjname || '-'}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-3 text-end fw-bold">异常描述:</div>
+                    <div class="col-md-9 text-danger">${desc}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-3 text-end fw-bold">提报人:</div>
+                    <div class="col-md-9">${reporter}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-3 text-end fw-bold">提报时间:</div>
+                    <div class="col-md-9">${time}</div>
+                </div>
+            </div>
+        `;
+
+        const footerHtml = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>`;
+
+        new Modal({
+            title: '异常详情',
+            body: bodyHtml,
+            footer: footerHtml
+        }).show();
+    }
+
     _attachEventListeners() {
         const tableContainer = this.container.querySelector('#data-table-container');
         if (!tableContainer) return;
 
         tableContainer.addEventListener('click', async (e) => {
+            // [新增] 监听异常图标点击
+            if (e.target.classList.contains('btn-view-exception')) {
+                e.stopPropagation(); // 防止触发行选择
+                const rowId = e.target.dataset.id;
+                // 从当前数据中查找行数据
+                const rowData = this.dataTable.data.find(d => String(d.id) === String(rowId));
+                if (rowData) {
+                    this._showExceptionDetailModal(rowData);
+                }
+                return;
+            }
+
             const button = e.target.closest('button[data-action]');
             if (!button) return;
 

@@ -1,7 +1,7 @@
 /**
  * 源码路径: js/components/Optimized_DataTable.js
  * 功能说明: 一个功能强大的数据表格组件
- * @version 3.6.0 - [Fix] 修复点击特定交互元素(如异常图标)时与行选择冲突的问题。
+ * @version 3.5.8 - 2025-10-15: [新增] uniformRowHeight 选项，可根据内容统一所有数据行的高度。
  */
 import Modal from './Modal.js';
 
@@ -496,12 +496,6 @@ export default class DataTable {
                 if (row && row.dataset.rowId) this.container.querySelectorAll(`tr[data-row-id="${row.dataset.rowId}"]`).forEach(r => r.classList.remove('table-hover-custom'));
             });
             table.addEventListener('click', e => {
-                // [Fix] 检查点击的目标是否是特定的交互元素（如异常图标 btn-view-exception）。
-                // 如果是，则直接返回，不阻止冒泡（以便父容器处理），也不触发行选中。
-                if (e.target.closest('.btn-view-exception') || e.target.closest('.prevent-row-select')) {
-                    return;
-                }
-
                 // [新增] 停止事件冒泡，避免触发上层 queryChange（如排序或分页）
                 e.stopPropagation();
                 const row = e.target.closest('tr');

@@ -47,19 +47,33 @@ public interface ZjzkToolMapper {
             @Result(property = "istepcharttype", column = "ISTEPCHARTTYPE"),
             @Result(property = "sstepoperid", column = "SSTEPOPERID"),
             @Result(property = "sstepopernm", column = "SSTEPOPERNM"),
+
+            // [新增] 映射车速字段
+            @Result(property = "lastAvgSpeed", column = "LAST_AVG_SPEED"),
+            @Result(property = "lastSpeedTime", column = "LAST_SPEED_TIME"),
+
             @Result(property = "snote", column = "SNOTE")
     })
     @Select("<script>" +
-            "SELECT * FROM ZJZK_TOOL " +
+            "SELECT t.*, s.AVG_SPEED as LAST_AVG_SPEED, s.END_TIME as LAST_SPEED_TIME " +
+            "FROM ZJZK_TOOL t " +
+            // [新增] LEFT JOIN 子查询：获取每个 SPMCODE 最新的一条车速记录
+            "LEFT JOIN (" +
+            "    SELECT SPMCODE, AVG_SPEED, END_TIME FROM (" +
+            "        SELECT SPMCODE, AVG_SPEED, END_TIME, " +
+            "               ROW_NUMBER() OVER(PARTITION BY SPMCODE ORDER BY END_TIME DESC) as rn " +
+            "        FROM ZJZK_SPEED_CHECK" +
+            "    ) WHERE rn = 1" +
+            ") s ON t.SPMCODE = s.SPMCODE " +
             "<where>" +
-            "   <if test='params.sdept != null and params.sdept != \"\"'>AND SDEPT LIKE '%' || #{params.sdept} || '%'</if>" +
-            "   <if test='params.sjx != null and params.sjx != \"\"'>AND SJX LIKE '%' || #{params.sjx} || '%'</if>" +
-            "   <if test='params.sbname != null and params.sbname != \"\"'>AND SBNAME LIKE '%' || #{params.sbname} || '%'</if>" +
-            "   <if test='params.sname != null and params.sname != \"\"'>AND SNAME LIKE '%' || #{params.sname} || '%'</if>" +
-            "   <if test='params.spmcode != null and params.spmcode != \"\"'>AND SPMCODE LIKE '%' || #{params.spmcode} || '%'</if>" +
-            "   <if test='params.szcno != null and params.szcno != \"\"'>AND SZCNO LIKE '%' || #{params.szcno} || '%'</if>" +
+            "   <if test='params.sdept != null and params.sdept != \"\"'>AND t.SDEPT LIKE '%' || #{params.sdept} || '%'</if>" +
+            "   <if test='params.sjx != null and params.sjx != \"\"'>AND t.SJX LIKE '%' || #{params.sjx} || '%'</if>" +
+            "   <if test='params.sbname != null and params.sbname != \"\"'>AND t.SBNAME LIKE '%' || #{params.sbname} || '%'</if>" +
+            "   <if test='params.sname != null and params.sname != \"\"'>AND t.SNAME LIKE '%' || #{params.sname} || '%'</if>" +
+            "   <if test='params.spmcode != null and params.spmcode != \"\"'>AND t.SPMCODE LIKE '%' || #{params.spmcode} || '%'</if>" +
+            "   <if test='params.szcno != null and params.szcno != \"\"'>AND t.SZCNO LIKE '%' || #{params.szcno} || '%'</if>" +
             "</where>" +
-            "ORDER BY INDOCNO DESC" +
+            "ORDER BY t.INDOCNO DESC" +
             "</script>")
     List<ZjzkTool> findList(@Param("params") Map<String, Object> params);
 
@@ -91,10 +105,14 @@ public interface ZjzkToolMapper {
             "WHERE SPMCODE IS NOT NULL AND LENGTH(TRIM(SPMCODE)) > 0 " +
             "<if test='params.sbname != null and params.sbname != \"\"'>AND SBNAME LIKE '%' || #{params.sbname} || '%'</if>" +
             "<if test='params.spmcode != null and params.spmcode != \"\"'>AND SPMCODE LIKE '%' || #{params.spmcode} || '%'</if>" +
+            "<if test='params.sjx != null and params.sjx != \"\"'>AND SJX LIKE '%' || #{params.sjx} || '%'</if>" +     // 新增
+            "<if test='params.sfname != null and params.sfname != \"\"'>AND SFNAME LIKE '%' || #{params.sfname} || '%'</if>" + // 新增
             "GROUP BY SJX, SFNAME, SBNAME, SPMCODE " +
             "ORDER BY SPMCODE" +
             "</script>")
     List<ZjzkTool> selectDeviceGroupList(@Param("params") Map<String, Object> params);
+
+
 
     /**
      * [修复] 2. 根据 SPMCODE 查询该设备下的所有明细 (用于生成任务子表)
@@ -115,4 +133,10 @@ public interface ZjzkToolMapper {
             "SPMCODE = #{spmcode} AND " +
             "SAZWZ = #{sazwz}")
     List<ZjzkTool> findByUniqueKey(ZjzkTool tool);
+
+    /**
+     * [新增] 获取所有不重复的 SPMCODE 列表，用于批量更新车速
+     */
+    @Select("SELECT DISTINCT SPMCODE FROM ZJZK_TOOL WHERE SPMCODE IS NOT NULL")
+    List<String> findAllSpmCodes();
 }

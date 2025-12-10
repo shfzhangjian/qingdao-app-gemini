@@ -1,8 +1,11 @@
 /**
  * @file /js/views/NewSelfInspectionLedger.js
  * @description 新自检自控台账管理视图 (重构版)。
- * v2.6.0 - [Feat] 优化标准附件预览体验，点击预览弹出 iframe 模态框而非下载 (保持与执行界面一致)。
- * v2.7.0 - [Feat] 新增台账导入和导出功能 (对接真实接口)。
+ * v2.8.0 - [Fix] 修复生成任务时已选设备显示“未命名”的问题 (改用 sbname)。
+ * v2.8.1 - [Feat] 生成任务弹窗增加多列过滤 (机型、设备、主数据、PM编码)。
+ * v2.8.2 - [Fix] 修复车速为空时 toFixed 报错的问题。
+ * v2.8.3 - [Refactor] 调整表格列顺序，将序号、车速、车速更新时间放在前面。
+ * v2.9.0 - [UI] 生成任务弹窗顶部过滤适配黑白主题，view=content 模式下隐藏操作按钮。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import Modal from '../components/Modal.js';
@@ -27,12 +30,19 @@ export default class NewSelfInspectionLedger {
         this.dataTable = null;
         // 缓存生成任务列表的数据表格实例
         this.genTaskTable = null;
-        // [New] 缓存已选设备信息 {id: {name, ...}}，用于跨页显示名称
+        // [New] 缓存已选设备信息，使用 spmcode 作为 Key
         this.selectedItemsMap = new Map();
     }
 
+
     render(container) {
         this.container = container;
+
+        // 检查是否为 content-only 模式
+        const isContentOnly = document.body.classList.contains('content-only-mode');
+        // 如果是 content-only 模式，隐藏生成任务、导入、导出按钮
+        const actionButtonsVisibility = isContentOnly ? 'd-none' : '';
+
         container.innerHTML = `
             <div class="d-flex flex-column h-100">
                 <div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);">
@@ -48,16 +58,16 @@ export default class NewSelfInspectionLedger {
                         
                         <div class="col-12 d-flex justify-content-between align-items-center mt-2 pt-2 border-top border-secondary">
                             <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-primary" id="btn-add"><i class="bi bi-plus-lg"></i> 增加</button>
-                                <button class="btn btn-sm btn-outline-secondary" id="btn-edit"><i class="bi bi-pencil-square"></i> 编辑</button>
-                                <button class="btn btn-sm btn-outline-danger" id="btn-delete"><i class="bi bi-trash"></i> 删除</button>
-                                <button class="btn btn-sm btn-outline-success" id="btn-import"><i class="bi bi-file-earmark-arrow-up"></i> 导入</button>
-                                <button class="btn btn-sm btn-outline-success" id="btn-export"><i class="bi bi-file-earmark-arrow-down"></i> 导出</button>
+                                <button class="btn btn-sm btn-outline-primary  ${actionButtonsVisibility}" id="btn-add"><i class="bi bi-plus-lg"></i> 增加</button>
+                                <button class="btn btn-sm btn-outline-secondary  ${actionButtonsVisibility}" id="btn-edit"><i class="bi bi-pencil-square"></i> 编辑</button>
+                                <button class="btn btn-sm btn-outline-danger  ${actionButtonsVisibility}" id="btn-delete"><i class="bi bi-trash"></i> 删除</button>
+                                <button class="btn btn-sm btn-outline-success ${actionButtonsVisibility}" id="btn-import"><i class="bi bi-file-earmark-arrow-up"></i> 导入</button>
+                                <button class="btn btn-sm btn-outline-success ${actionButtonsVisibility}" id="btn-export"><i class="bi bi-file-earmark-arrow-down"></i> 导出</button>
                                 <div class="vr mx-1 text-secondary"></div>
                                 <button class="btn btn-sm btn-info text-white" id="btn-files"><i class="bi bi-file-earmark-pdf"></i> 标准附件管理(PDF)</button>
                             </div>
                             <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-warning text-dark" id="btn-generate"><i class="bi bi-lightning-charge-fill"></i> 生成任务</button>
+                                <button class="btn btn-sm btn-warning text-dark ${actionButtonsVisibility}" id="btn-generate"><i class="bi bi-lightning-charge-fill"></i> 生成任务</button>
                                 <button class="btn btn-sm btn-primary" id="btn-search" style="min-width: 80px;"><i class="bi bi-search"></i> 查询</button>
                                 <button class="btn btn-sm btn-secondary" id="btn-clear" style="min-width: 80px;"><i class="bi bi-eraser"></i> 清空</button>
                             </div>
@@ -75,16 +85,65 @@ export default class NewSelfInspectionLedger {
 
     _initTable() {
         const columns = [
-            { key: 'sstepstate', title: '审批状态', width: 80, render: val => `<span class="badge bg-success">${val || '草稿'}</span>` },
-            // 虚拟序号列
-            { key: '_index', title: '序号', width: 60 },
-            { key: 'sdept', title: '车间', width: 100 },
-            { key: 'sname', title: '名称', width: 180 },
-            { key: 'sjx', title: '所属机型', width: 120 },
-            { key: 'sfname', title: '所属设备', width: 120 },
-            { key: 'sbname', title: '主设备名称', width: 200 },
-            { key: 'spmcode', title: 'PM编码', width: 120 },
-            { key: 'sazwz', title: '安装位置', width: 150 },
+            { key: '_index', title: '序号', width: 60, frozen: 'left' },
+            {
+                key: 'hasStandard',
+                title: '是否过期', // 前端标题叫“是否过期”，实际上对应后端“是否上传标准”逻辑，或者这里复用字段名
+                width: 90,
+                render: (val) => val
+                    ? '<i class="bi bi-check-circle-fill text-success" title="已上传"></i>'
+                    : '<i class="bi bi-x-circle-fill text-secondary" title="未上传"></i>'
+            },
+            {
+                key: 'isLinked', // 前端虚拟字段，如果后端没有返回，需确保不报错
+                title: '台账挂接',
+                width: 90,
+                render: (val) => val
+                    ? '<i class="bi bi-link-45deg text-primary" title="已挂接"></i>'
+                    : '<i class="bi bi-unlink text-secondary" title="未挂接"></i>'
+            },
+            // 系统编号通常可以是 ID 或者其他唯一标识，这里暂且展示 indocno 或其他
+            { key: 'sname', title: '企业编号', width: 120 }, // 注意：这里字段映射可能需要根据实际调整，暂用 sname 占位
+            { key: 'sfname', title: '设备名称', width: 180 },
+            { key: 'sxh', title: '规格型号', width: 150 },
+            { key: 'scj', title: '出厂编号', width: 150 }, // 注意：字段需确认
+            { key: 'sazwz', title: '安装位置/使用人', width: 180 },
+            { key: 'slevel', title: '准确度等级', width: 100 }, // 注意：字段需确认
+            { key: 'dtime', title: '下次确认日期', width: 120, render: (val) => val ? val.substring(0, 10) : '-' },
+            { key: 'sbname', title: '所属设备', width: 200 },
+            { key: 'sdept', title: '使用部门', width: 100 },
+            { key: 'sabc', title: 'ABC分类', width: 80 }, // 注意：字段需确认
+            { key: 'iqj', title: '强检标识', width: 80 }, // 注意：字段需确认
+            { key: 'izj', title: '质检仪器', width: 80 }, // 注意：字段需确认
+            { key: 'syl', title: '量程范围', width: 120 }, // 这里暂时用 syl (测量原理) 代替，具体需确认
+            { key: 'scj', title: '制造单位', width: 150 }, // 这里暂时用 scj (厂家)
+            { key: 'dfactory', title: '出厂时间', width: 120 }, // 注意：字段需确认
+            { key: 'suser', title: '责任人', width: 100 }, // 注意：字段需确认
+            { key: 'sverifier', title: '检定员', width: 100 }, // 注意：字段需确认
+            { key: 'sdefine1', title: '确认方式', width: 100 }, // 注意：字段需确认
+            { key: 'scertificate', title: '证书编号', width: 120 }, // 注意：字段需确认
+            { key: 'sbuytype', title: '购置形式', width: 100 }, // 注意：字段需确认
+            { key: 'sconfirmbasis', title: '确认依据', width: 120 }, // 注意：字段需确认
+            { key: 'snote', title: '备注', width: 150 },
+            // [新增] 车速显示列
+            {
+                key: 'lastAvgSpeed',
+                title: '车速',
+                width: 100,
+                render: (val) => {
+                    // [修复] 增加类型检查和转换，防止 toFixed 报错
+                    if (val !== null && val !== undefined && !isNaN(Number(val))) {
+                        return `<strong>${Number(val).toFixed(1)}</strong>`;
+                    }
+                    return '<span class="text-muted">-</span>';
+                }
+            },
+            {
+                key: 'lastSpeedTime',
+                title: '车速更新时间',
+                width: 140,
+                render: (val) => val ? val.substring(5, 16) : '-' // 只显示 MM-dd HH:mm
+            }
         ];
 
         this.dataTable = new DataTable({
@@ -94,7 +153,7 @@ export default class NewSelfInspectionLedger {
                 selectable: 'single',
                 pagination: true,
                 uniformRowHeight: true,
-                storageKey: 'zjzkToolTable_v2'
+                storageKey: 'zjzkToolTable_v5' // Update storage key
             }
         });
         this.dataTable.render(this.container.querySelector('#table-container'));
@@ -135,7 +194,8 @@ export default class NewSelfInspectionLedger {
                 const start = (result.pageNum - 1) * result.pageSize;
                 result.list.forEach((item, index) => {
                     item._index = start + index + 1;
-                    item.id = item.indocno;
+                    // 确保 id 字段存在，用于表格操作
+                    if (!item.id) item.id = item.indocno;
                 });
             }
 
@@ -181,30 +241,29 @@ export default class NewSelfInspectionLedger {
         });
 
         // 绑定导入导出按钮事件
-        this.container.querySelector('#btn-import').addEventListener('click', () => this._showImportModal());
-        this.container.querySelector('#btn-export').addEventListener('click', () => this._handleExport());
+        const btnImport = this.container.querySelector('#btn-import');
+        if(btnImport) btnImport.addEventListener('click', () => this._showImportModal());
+
+        const btnExport = this.container.querySelector('#btn-export');
+        if(btnExport) btnExport.addEventListener('click', () => this._handleExport());
 
         this.container.querySelector('#btn-files').addEventListener('click', () => this._openFileManagementModal());
-        this.container.querySelector('#btn-generate').addEventListener('click', () => this._openGenerateTaskModal());
+
+        const btnGenerate = this.container.querySelector('#btn-generate');
+        if(btnGenerate) btnGenerate.addEventListener('click', () => this._openGenerateTaskModal());
     }
 
-
-    // ==========================================
-    //  导入功能核心逻辑 (已修正 & 主题适配)
-    // ==========================================
     _showImportModal() {
         const bodyHtml = `
             <div class="mb-3">
                 <label class="form-label">选择Excel文件 (.xlsx)</label>
                 <input class="form-control" type="file" id="import-file" accept=".xlsx" style="background-color: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color);">
-                <!-- [修改] 更新提示语，明确 12 字段防重 -->
                 <div class="form-text" style="color: var(--text-primary); opacity: 0.7;">
                     提示：<b>PM编码</b>与<b>资产编码</b>为必填项。<br>
                     系统将联合校验(车间、名称、机型、设备、主数据、PM、位置、厂家、规格、原理、资产、订单)共12个字段进行防重。
                 </div>
             </div>
             
-            <!-- 校验结果展示区域 -->
             <div id="import-result-area" class="d-none">
                 <div class="alert alert-danger d-flex align-items-center justify-content-between" role="alert">
                     <div>
@@ -219,7 +278,6 @@ export default class NewSelfInspectionLedger {
                 <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto; background-color: var(--bg-secondary); border-color: var(--border-color) !important;">
                     <h6 class="text-danger border-bottom pb-1 mb-2" style="border-color: var(--border-color) !important;">错误详情 (点击展开)</h6>
                     <ul class="list-group list-group-flush small" id="error-list">
-                        <!-- JS 动态填充错误行 -->
                     </ul>
                 </div>
             </div>
@@ -250,10 +308,8 @@ export default class NewSelfInspectionLedger {
 
         let currentErrorFileId = null;
 
-        // 点击下载修正文件
         downloadBtn.addEventListener('click', () => {
             if(currentErrorFileId) {
-                // 打开新窗口下载错误报告
                 window.location.href = `/tmis/api/si/ledger/import/error-report/${currentErrorFileId}`;
             }
         });
@@ -264,7 +320,6 @@ export default class NewSelfInspectionLedger {
                 return;
             }
 
-            // UI 重置
             startBtn.disabled = true;
             startBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 正在校验...';
             resultArea.classList.add('d-none');
@@ -284,10 +339,9 @@ export default class NewSelfInspectionLedger {
                     modal.modalElement.querySelector('#import-success-msg').textContent = res.message;
                     setTimeout(() => {
                         modal.hide();
-                        this._loadData(); // 刷新列表
+                        this._loadData();
                     }, 2000);
                 } else {
-                    // 校验失败
                     resultArea.classList.remove('d-none');
                     modal.modalElement.querySelector('#import-error-msg').textContent = res.message;
                     currentErrorFileId = res.errorFileId;
@@ -316,10 +370,7 @@ export default class NewSelfInspectionLedger {
         });
     }
 
-
-    // 处理导出逻辑
     async _handleExport() {
-        // 收集当前查询条件
         const params = {
             sdept: this.container.querySelector('#search-sdept').value,
             sjx: this.container.querySelector('#search-sjx').value,
@@ -335,7 +386,6 @@ export default class NewSelfInspectionLedger {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 导出中...';
 
         try {
-            // 调用真实导出接口
             const blob = await exportLedger(params);
 
             const url = window.URL.createObjectURL(blob);
@@ -346,8 +396,6 @@ export default class NewSelfInspectionLedger {
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-
-            // Modal.alert("导出成功"); // 导出通常是静默下载，不需要弹窗
         } catch (e) {
             console.error(e);
             Modal.alert("导出失败: " + e.message);
@@ -477,7 +525,7 @@ export default class NewSelfInspectionLedger {
         const loadFiles = async () => {
             const tbody = modal.modalElement.querySelector('#file-list-tbody');
             try {
-                const files = await getStandardFiles(); // 获取所有
+                const files = await getStandardFiles();
                 if (files.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary p-3">暂无上传文件</td></tr>';
                 } else {
@@ -495,7 +543,6 @@ export default class NewSelfInspectionLedger {
 
                     tbody.querySelectorAll('.btn-preview').forEach(btn => {
                         btn.addEventListener('click', () => {
-                            // [修改] 使用弹窗预览代替 window.open
                             this._openPdfPreview(btn.dataset.id);
                         });
                     });
@@ -532,7 +579,6 @@ export default class NewSelfInspectionLedger {
                 uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 上传中...';
 
                 try {
-                    // 上传时不传 ID
                     await uploadStandardFile(file);
                     fileInput.value = '';
                     await loadFiles();
@@ -550,7 +596,6 @@ export default class NewSelfInspectionLedger {
         loadFiles();
     }
 
-    // [新增] PDF 预览弹窗方法
     _openPdfPreview(fileId) {
         const url = getFilePreviewUrl(fileId);
         const bodyHtml = `
@@ -566,18 +611,18 @@ export default class NewSelfInspectionLedger {
         }).show();
     }
 
-    // --- [修改] 生成任务模态框 (使用新接口) ---
+    // --- [修改] 生成任务模态框 (支持多列过滤 + 主题适配) ---
     _openGenerateTaskModal() {
-        this.selectedItemsMap.clear(); // 每次打开清空已选
+        this.selectedItemsMap.clear();
 
         const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
 
-        // 使用 Flex 布局确保弹窗内容不溢出，内部滚动
+        // [修改] 为过滤输入框和背景添加主题变量，确保黑白主题下显示正常
         const bodyHtml = `
-            <div class="container-fluid h-100 d-flex flex-column" style="height: 70vh; overflow: hidden;">
+            <div class="container-fluid h-100 d-flex flex-column" style="height: 75vh; overflow: hidden;">
                 <!-- 1. 任务参数表单 -->
-                <div class="card mb-3" style="flex-shrink: 0; background-color: var(--bg-secondary); border-color: var(--border-color); color: var(--text-primary);">
+                <div class="card mb-3 flex-shrink-0" style="background-color: var(--bg-secondary); border-color: var(--border-color); color: var(--text-primary);">
                     <div class="card-header fw-bold py-2" style="background-color: var(--bg-primary); border-bottom: 1px solid var(--border-color);">任务参数配置</div>
                     <div class="card-body py-2">
                         <form id="gen-task-form" class="row g-2 align-items-center">
@@ -621,10 +666,9 @@ export default class NewSelfInspectionLedger {
                     </div>
                 </div>
                 
-                <!-- 2. 已选设备展示栏 (固定高度，使用变量颜色) -->
-                <div class="card mb-2" style="flex-shrink: 0; background-color: var(--bg-secondary); border-color: var(--border-color);">
+                <!-- 2. 已选设备展示栏 -->
+                <div class="card mb-2 flex-shrink-0" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
                     <div class="card-body py-2 d-flex align-items-center justify-content-between">
-                        <!-- [修复] 字体颜色使用 var(--text-primary) 和 var(--accent-color) -->
                         <span class="small" style="color: var(--text-primary);">已选设备: <strong id="selected-count" style="color: var(--accent-color);">0</strong> 个</span>
                         <button class="btn btn-xs btn-link text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#selected-items-panel">
                             查看详情 <i class="bi bi-chevron-down"></i>
@@ -637,17 +681,23 @@ export default class NewSelfInspectionLedger {
                     </div>
                 </div>
 
-                <!-- 3. 设备选择列表 (自动填充剩余高度，内部滚动) -->
-                <div class="card flex-grow-1" id="device-selection-card" style="display: flex; flex-direction: column; overflow: hidden; background-color: var(--bg-secondary); border-color: var(--border-color);">
+                <!-- 3. 设备选择列表 (带多列过滤) -->
+                <div class="card flex-grow-1 d-flex flex-column overflow-hidden" id="device-selection-card" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
                     <div class="card-header fw-bold py-2 d-flex justify-content-between align-items-center flex-shrink-0" style="background-color: var(--bg-primary); border-bottom: 1px solid var(--border-color); color: var(--text-primary);">
                         <span>选择设备 (支持多选)</span>
-                        <div class="input-group input-group-sm" style="width: 200px;">
-                            <input type="text" class="form-control" id="gen-filter-input" placeholder="过滤主数据名称...">
-                            <button class="btn btn-outline-secondary" type="button" id="gen-filter-btn"><i class="bi bi-search"></i></button>
-                        </div>
                     </div>
-                    <!-- [关键] card-body 设置为 flex-grow: 1 和 overflow: hidden -->
-                    <div class="card-body p-0 position-relative" id="gen-table-container" style="height:300px;flex-grow: 1; overflow: hidden; display: flex; flex-direction: column;">
+                    
+                    <!-- [新增] 过滤工具栏：使用透明背景或根据主题变色，移除硬编码的 bg-light-subtle -->
+                    <div class="p-2 border-bottom d-flex gap-2 align-items-center" style="background-color: var(--bg-primary); border-color: var(--border-color) !important;">
+                        <input type="text" class="form-control form-control-sm" id="gen-filter-sjx" placeholder="机型" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
+                        <input type="text" class="form-control form-control-sm" id="gen-filter-sfname" placeholder="所属设备" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
+                        <input type="text" class="form-control form-control-sm" id="gen-filter-sbname" placeholder="主数据名称" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
+                        <input type="text" class="form-control form-control-sm" id="gen-filter-spmcode" placeholder="PM编码" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
+                        <button class="btn btn-sm btn-primary" type="button" id="gen-filter-btn"><i class="bi bi-search"></i></button>
+                        <button class="btn btn-sm btn-secondary" type="button" id="gen-reset-btn"><i class="bi bi-arrow-counterclockwise"></i></button>
+                    </div>
+
+                    <div class="card-body p-0 position-relative flex-grow-1 overflow-hidden d-flex flex-column" id="gen-table-container">
                         <!-- DataTable 挂载点 -->
                     </div>
                 </div>
@@ -661,13 +711,11 @@ export default class NewSelfInspectionLedger {
 
         const modal = new Modal({ title: "生成点检任务", body: bodyHtml, footer: footerHtml, size: 'xl' });
 
-        // [修改] 列定义：移除 ID，按要求添加字段 (只显示分组字段)
         const columns = [
             { key: 'sjx', title: '所属机型', width: 150 },
             { key: 'sfname', title: '所属设备', width: 180 },
             { key: 'sbname', title: '主数据名称', width: 200 },
             { key: 'spmcode', title: 'PM编码', width: 200 },
-            // { key: 'sazwz', title: '安装位置', width: 120 }, // 列表是分组后的，位置可能有多个，暂不显示
         ];
 
         this.genTaskTable = new DataTable({
@@ -677,31 +725,41 @@ export default class NewSelfInspectionLedger {
                 selectable: 'multiple',
                 pagination: true,
                 uniformRowHeight: true,
-                storageKey: 'genTaskSelectTable_v2'
+                storageKey: 'genTaskSelectTable_v3' // Update storage key
             }
         });
 
-        // 延时渲染并计算高度
         setTimeout(() => {
             const tableContainer = modal.modalElement.querySelector('#gen-table-container');
-            const deviceCard = modal.modalElement.querySelector('#device-selection-card');
-
-            if (tableContainer && deviceCard) {
-                console.log(`[Layout Debug] Device Card Height: ${deviceCard.clientHeight}px`);
-                console.log(`[Layout Debug] Table Container Height: ${tableContainer.clientHeight}px`);
-            }
-
             this.genTaskTable.render(tableContainer);
-            this._loadGenTableData(); // [修改] 调用分组加载
+            this._loadGenTableData();
 
-            // 绑定选择事件
             tableContainer.addEventListener('click', () => this._syncSelectionMap());
             tableContainer.addEventListener('change', () => this._syncSelectionMap());
+            tableContainer.addEventListener('pageChange', (e) => {
+                this.genTaskTable.state.pageNum = e.detail.pageNum;
+                this._loadGenTableData();
+            });
+
         }, 100);
 
+        // 绑定过滤事件
+        const getFilterParams = () => ({
+            sjx: modal.modalElement.querySelector('#gen-filter-sjx').value,
+            sfname: modal.modalElement.querySelector('#gen-filter-sfname').value,
+            sbname: modal.modalElement.querySelector('#gen-filter-sbname').value,
+            spmcode: modal.modalElement.querySelector('#gen-filter-spmcode').value
+        });
+
         modal.modalElement.querySelector('#gen-filter-btn').addEventListener('click', () => {
-            const val = modal.modalElement.querySelector('#gen-filter-input').value;
-            this._loadGenTableData({ sbname: val });
+            this.genTaskTable.state.pageNum = 1;
+            this._loadGenTableData(getFilterParams());
+        });
+
+        modal.modalElement.querySelector('#gen-reset-btn').addEventListener('click', () => {
+            modal.modalElement.querySelectorAll('input[id^="gen-filter-"]').forEach(inp => inp.value = '');
+            this.genTaskTable.state.pageNum = 1;
+            this._loadGenTableData();
         });
 
         modal.modalElement.querySelector('#btn-confirm-gen').addEventListener('click', async () => {
@@ -717,10 +775,11 @@ export default class NewSelfInspectionLedger {
             const payload = Object.fromEntries(formData.entries());
             payload.taskTime = payload.taskTime.replace(' ', 'T');
 
-            // [修改] 提交联合主键列表: {spmcode, sname}
+            // [修改] 提交 spmcode 和 sname (后端需要 sname 做校验或展示，但主要是 spmcode)
+            // 注意：这里的 sname 其实取的是 sbname (见 _syncSelectionMap)
             payload.selectedDevices = allSelectedItems.map(item => ({
                 spmcode: item.spmcode,
-                sname: item.sname
+                sname: item.sbname || item.sfname // 优先取主数据名
             }));
 
             const btn = modal.modalElement.querySelector('#btn-confirm-gen');
@@ -748,7 +807,8 @@ export default class NewSelfInspectionLedger {
 
         if (this.genTaskTable.data) {
             this.genTaskTable.data.forEach(row => {
-                const id = row.id; // 此处 id 为复合键 spmcode##sname
+                // [修改] 使用 spmcode 作为 ID
+                const id = row.spmcode;
                 if (currentSelectionIds.has(id)) {
                     if (!this.selectedItemsMap.has(id)) {
                         this.selectedItemsMap.set(id, row);
@@ -760,7 +820,6 @@ export default class NewSelfInspectionLedger {
                 }
             });
         }
-
         this._updateSelectedView();
     }
 
@@ -775,12 +834,12 @@ export default class NewSelfInspectionLedger {
         if (items.length === 0) {
             listContainer.innerHTML = '<span class="text-muted">暂无选择</span>';
         } else {
-            // [Fix] 样式适配
+            // [Fix] 显示 sbname 或 sfname，解决“未命名”问题
             listContainer.innerHTML = items.map(item => `
                 <span class="badge bg-info text-dark me-1 mb-1" style="font-weight: normal; border: 1px solid var(--border-color);">
-                    ${item.sname || '未命名'}
-                    <i class="bi bi-x ms-1" style="cursor: pointer;" onclick="document.getElementById('remove-item-${item.id}').click()"></i>
-                    <button id="remove-item-${item.id}" class="d-none" data-id="${item.id}"></button>
+                    ${item.sbname || item.sfname || item.spmcode}
+                    <i class="bi bi-x ms-1" style="cursor: pointer;" onclick="document.getElementById('remove-item-${item.spmcode}').click()"></i>
+                    <button id="remove-item-${item.spmcode}" class="d-none" data-id="${item.spmcode}"></button>
                 </span>
             `).join('');
 
@@ -798,29 +857,48 @@ export default class NewSelfInspectionLedger {
         this.selectedItemsMap.delete(idKey);
         if (this.genTaskTable && this.genTaskTable.selectedRows.has(idKey)) {
             this.genTaskTable.selectedRows.delete(idKey);
+            // 刷新视图以更新 checkbox 状态
             this.genTaskTable.render(this.genTaskTable.container);
         }
         this._updateSelectedView();
     }
 
-    // [修改] 使用 getTaskGenerationDeviceList 接口加载分组数据
     async _loadGenTableData(filterParams = {}) {
         if (!this.genTaskTable) return;
         this.genTaskTable.toggleLoading(true);
         try {
             const params = { pageNum: this.genTaskTable.state.pageNum || 1, pageSize: 100, ...filterParams };
 
-            // 调用分组专用接口
             const result = await getTaskGenerationDeviceList(params);
 
             if (result && result.list) {
                 result.list.forEach(item => {
-                    // [关键] 构建前端唯一 ID: spmcode##sname
-                    item.id = `${item.spmcode}##${item.sname}`;
+                    // [修改] 使用 SPMCODE 作为前端 ID，因为它在生成列表里是唯一的
+                    item.id = item.spmcode;
                 });
             }
             this.genTaskTable.updateView(result);
-            this._syncSelectionMap();
+
+            // 恢复选中状态 (翻页后保持)
+            if (this.selectedItemsMap.size > 0) {
+                const currentRows = this.genTaskTable.data;
+                currentRows.forEach(row => {
+                    if (this.selectedItemsMap.has(row.spmcode)) {
+                        this.genTaskTable.selectedRows.add(row.spmcode);
+                    }
+                });
+                // 重新渲染以显示勾选
+                // 注意：updateView 已经调用了 render，但此时 selectedRows 可能刚被更新
+                // 我们需要一种机制让 DataTable 根据 selectedRows 渲染 checkbox
+                // 目前 DataTable 的 render 逻辑依赖于 selectedRows Set，所以再次调用 render 是安全的
+                // 但为了避免闪烁，最好是 updateView 内部处理。
+                // 由于 Optimized_DataTable 的 updateView 只是简单的覆盖数据并 render，
+                // 我们可以在数据赋值后手动同步一下 Set。
+                // 这里的逻辑是：数据加载 -> 检查 selectedItemsMap -> 更新 selectedRows Set -> render
+
+                // 简单的做法：再次调用 render，虽然有点浪费但最稳妥
+                this.genTaskTable.render(this.genTaskTable.container);
+            }
 
         } catch (e) { console.error(e); }
         finally { this.genTaskTable.toggleLoading(false); }
