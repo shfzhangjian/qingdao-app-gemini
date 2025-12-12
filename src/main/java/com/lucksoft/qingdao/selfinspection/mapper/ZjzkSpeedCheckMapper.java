@@ -48,9 +48,4 @@ public interface ZjzkSpeedCheckMapper {
     List<Map<String, Object>> findRecentRecords(@Param("params") Map<String, Object> params);
 
 
-    /**
-     * [新增] 查询最近的车速检查记录
-     */
-    @Select("SELECT * FROM ZJZK_SPEED_CHECK ORDER BY INDOCNO DESC FETCH FIRST 100 ROWS ONLY")
-    List<Map<String, Object>> findRecentRecords();
 }

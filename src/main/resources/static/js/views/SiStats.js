@@ -1,12 +1,12 @@
 /**
  * @file /js/views/SiStats.js
  * @description 点检统计界面视图。
- * v2.5.0 - [Feat] 实现 Excel 导出功能，与查询条件和表格列保持一致。
+ * v2.7.0 - [Feature] 实现真实的归档报表预览与导出功能 (适配主题)。
  */
 import DataTable from '../components/Optimized_DataTable.js';
 import Modal from '../components/Modal.js';
 import DatePicker from '../components/DatePicker.js';
-import { getSiStatsList, archiveSiData, getAutocompleteOptions, exportSiStats } from '../services/selfInspectionApi.js';
+import { getSiStatsList, getAutocompleteOptions, exportSiStats, getArchiveReportData, exportArchiveReport, getTaskGenerationDeviceList } from '../services/selfInspectionApi.js';
 
 // [新增] 日期格式化工具函数
 const formatDate = (val) => {
@@ -29,6 +29,7 @@ export default class SiStats {
         this.dataTable = null;
         this.datePicker = null;
         this.archiveDatePicker = null; // 归档弹窗用的日期选择器
+        this.selectedArchiveDevice = null; // 归档选中的设备对象 {spmcode, name}
     }
 
     render(container) {
@@ -68,7 +69,7 @@ export default class SiStats {
                         <div class="d-flex gap-2">
                              <button class="btn btn-sm btn-primary px-3" id="btn-query"><i class="bi bi-search"></i> 查询</button>
                              <button class="btn btn-sm btn-success px-3" id="btn-export"><i class="bi bi-file-earmark-excel"></i> 导出</button>
-                             <button class="btn btn-sm btn-warning px-3 text-dark" id="btn-archive"><i class="bi bi-archive"></i> 归档</button>
+                             <button class="btn btn-sm btn-warning px-3 text-dark" id="btn-archive"><i class="bi bi-archive"></i> 归档/报表</button>
                         </div>
                     </div>
                 </div>
@@ -264,103 +265,241 @@ export default class SiStats {
         this.container.querySelector('#btn-archive').addEventListener('click', () => this._openArchiveModal());
     }
 
-    // --- 归档模态框 ---
+    // --- 归档/报表生成模态框 ---
     _openArchiveModal() {
-        // ... (保持原样)
         const bodyHtml = `
-            <form id="archive-form">
-                <div class="mb-3">
-                    <label for="arc-device" class="form-label">选择设备</label>
-                    <input type="text" class="form-control" id="arc-device" list="list-arc-device" placeholder="请输入设备名称...">
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label for="arc-device" class="form-label">选择机台 (必须选择)</label>
+                    <input type="text" class="form-control" id="arc-device" list="list-arc-device" placeholder="输入机台名称或编号...">
                     <datalist id="list-arc-device"></datalist>
+                    <input type="hidden" id="arc-spmcode">
                 </div>
-                <div class="mb-3">
+                <div class="col-md-6">
                     <label for="arc-taskType" class="form-label">任务类型</label>
                     <select class="form-select" id="arc-taskType">
-                        <option value="三班电气">三班电气 (默认1个月)</option>
-                        <option value="白班电气">白班电气 (默认半年)</option>
+                        <option value="三班电气" selected>三班电气</option>
+                        <option value="白班电气">白班电气</option>
+                        <option value="年检">年检</option>
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label for="arc-dateRange" class="form-label">归档日期</label>
+                <div class="col-md-6">
+                    <label for="arc-dateRange" class="form-label">报表月份 / 范围</label>
                     <input type="text" class="form-control" id="arc-dateRange">
                 </div>
-            </form>
+            </div>
+            
+            <hr>
+            
+            <div id="report-preview-container" class="border rounded p-2 d-none" style="max-height: 500px; overflow: auto; background-color: var(--bg-secondary); border-color: var(--border-color) !important;">
+                <!-- 报表预览区 -->
+            </div>
         `;
 
         const footerHtml = `
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-            <button type="button" class="btn btn-primary" id="btn-confirm-archive">确定</button>
+            <button type="button" class="btn btn-primary" id="btn-preview-report">预览</button>
+            <button type="button" class="btn btn-success d-none" id="btn-export-excel"><i class="bi bi-file-earmark-excel"></i> 导出 Excel</button>
         `;
 
-        const modal = new Modal({ title: "数据归档", body: bodyHtml, footer: footerHtml });
+        const modal = new Modal({ title: "自检自控归档报表", body: bodyHtml, footer: footerHtml, size: 'xl' });
 
-        const dateInput = modal.modalElement.querySelector('#arc-dateRange');
-        const taskTypeSelect = modal.modalElement.querySelector('#arc-taskType');
+        // 自动补全处理
+        const deviceInput = modal.modalElement.querySelector('#arc-device');
+        const spmcodeInput = modal.modalElement.querySelector('#arc-spmcode');
+        const datalist = modal.modalElement.querySelector('#list-arc-device');
 
-        const setDateRange = (months) => {
-            const end = new Date();
-            const start = new Date();
-            start.setMonth(start.getMonth() - months);
-            const formatDateStr = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
-            if (this.archiveDatePicker && this.archiveDatePicker.instance) {
-                this.archiveDatePicker.instance.setDate([start, end]);
-            } else {
-                dateInput.value = `${formatDateStr(start)} 至 ${formatDateStr(end)}`;
-            }
-        };
+        // 加载设备列表 (包含 PM 编码)
+        getTaskGenerationDeviceList({ pageSize: 500 }).then(res => {
+            if(res && res.list) {
+                const devices = res.list;
+                datalist.innerHTML = devices.map(d => `<option value="${d.sfname} (${d.spmcode})">`).join('');
 
-        this.archiveDatePicker = new DatePicker(dateInput, { mode: 'range' });
-        setDateRange(1);
-
-        const initArchiveDeviceAutocomplete = async () => {
-            const list = modal.modalElement.querySelector('#list-arc-device');
-            if(list) {
-                try {
-                    const options = await getAutocompleteOptions('device');
-                    list.innerHTML = options.map(o => `<option value="${o}">`).join('');
-                } catch(e) {}
-            }
-        };
-        initArchiveDeviceAutocomplete();
-
-        taskTypeSelect.addEventListener('change', (e) => {
-            if (e.target.value === '三班电气') {
-                setDateRange(1);
-            } else if (e.target.value === '白班电气') {
-                setDateRange(6);
+                deviceInput.addEventListener('input', () => {
+                    const val = deviceInput.value;
+                    const match = val.match(/\((.*?)\)$/);
+                    if (match) {
+                        spmcodeInput.value = match[1];
+                    } else {
+                        const found = devices.find(d => d.sfname === val || d.spmcode === val);
+                        if (found) spmcodeInput.value = found.spmcode;
+                        else spmcodeInput.value = "";
+                    }
+                });
             }
         });
 
-        modal.modalElement.querySelector('#btn-confirm-archive').addEventListener('click', async () => {
-            const btn = modal.modalElement.querySelector('#btn-confirm-archive');
-            const deviceVal = modal.modalElement.querySelector('#arc-device').value;
+        // 日期选择器
+        const dateInput = modal.modalElement.querySelector('#arc-dateRange');
+        const taskTypeSelect = modal.modalElement.querySelector('#arc-taskType');
 
-            if (!deviceVal) {
-                Modal.alert("请选择设备！");
-                return;
-            }
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 处理中...';
+        const fp = new DatePicker(dateInput, {
+            mode: 'range',
+            defaultDate: [startOfMonth, endOfMonth]
+        });
 
-            const params = {
-                device: deviceVal,
+        // 按钮事件
+        const previewBtn = modal.modalElement.querySelector('#btn-preview-report');
+        const exportBtn = modal.modalElement.querySelector('#btn-export-excel');
+        const previewContainer = modal.modalElement.querySelector('#report-preview-container');
+
+        const getRequestData = () => {
+            return {
+                spmcode: spmcodeInput.value,
+                deviceName: deviceInput.value.split(' (')[0],
                 taskType: taskTypeSelect.value,
                 dateRange: dateInput.value
             };
+        };
+
+        previewBtn.addEventListener('click', async () => {
+            const req = getRequestData();
+            if (!req.spmcode) {
+                Modal.alert("请选择有效的机台（必须包含PM编号）！");
+                return;
+            }
+
+            previewBtn.disabled = true;
+            previewBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 加载中...';
 
             try {
-                const result = await archiveSiData(params);
-                modal.hide();
-                Modal.alert(result.message);
+                const data = await getArchiveReportData(req);
+                this._renderReportPreview(previewContainer, data);
+                previewContainer.classList.remove('d-none');
+                exportBtn.classList.remove('d-none');
             } catch (e) {
-                Modal.alert("归档失败");
+                Modal.alert("生成报表失败: " + e.message);
+                previewContainer.classList.add('d-none');
+                exportBtn.classList.add('d-none');
             } finally {
-                btn.disabled = false;
+                previewBtn.disabled = false;
+                previewBtn.innerHTML = '预览';
+            }
+        });
+
+        exportBtn.addEventListener('click', async () => {
+            const req = getRequestData();
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 导出中...';
+            try {
+                await exportArchiveReport(req);
+            } catch (e) {
+                Modal.alert("导出失败: " + e.message);
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = '<i class="bi bi-file-earmark-excel"></i> 导出 Excel';
             }
         });
 
         modal.show();
+    }
+
+    /**
+     * 渲染报表 HTML 预览 (支持深浅色主题)
+     */
+    _renderReportPreview(container, data) {
+        if (!data || !data.rows || data.rows.length === 0) {
+            container.innerHTML = '<div class="text-center p-4 text-muted">该时间段内无数据</div>';
+            return;
+        }
+
+        // 构建日期列头 (1..31)
+        let dayHeaders = '';
+        for (let i = 1; i <= 31; i++) {
+            dayHeaders += `<th class="text-center p-0 align-middle" style="min-width: 25px; font-size: 0.8rem;">${i}</th>`;
+        }
+
+        // 构建数据行
+        const rowsHtml = data.rows.map(row => {
+            let cells = '';
+            for (let i = 1; i <= 31; i++) {
+                const res = (row.dailyResults && row.dailyResults[i]) || '';
+                // 样式处理
+                let styleClass = '';
+                if (res === '√') styleClass = 'text-success fw-bold';
+                else if (res === '×') styleClass = 'text-danger fw-bold';
+
+                cells += `<td class="text-center p-0 align-middle ${styleClass}" style="font-size: 0.8rem; height: 30px;">${res}</td>`;
+            }
+            return `
+                <tr>
+                    <td class="text-center align-middle">${row.seq}</td>
+                    <td class="text-nowrap align-middle" style="font-size: 0.85rem;" title="${row.itemName}">${row.itemName}</td>
+                    ${cells}
+                </tr>
+            `;
+        }).join('');
+
+        // 构建签字行
+        const buildSignRow = (label, signMap) => {
+            let cells = '';
+            for (let i = 1; i <= 31; i++) {
+                const name = (signMap && signMap[i]) || '';
+                // 竖排显示模拟
+                cells += `<td class="text-center p-1 align-bottom" style="font-size: 0.75rem; height: 100px;">
+                    <div style="writing-mode: vertical-lr; margin: 0 auto; letter-spacing: 2px; text-orientation: upright;">${name}</div>
+                </td>`;
+            }
+            return `<tr><td colspan="2" class="text-center fw-bold align-middle">${label}</td>${cells}</tr>`;
+        };
+
+        const checkerRow = buildSignRow("检查人签字", data.checkerSigns);
+        const operatorRow = buildSignRow("操作工确认签字", data.operatorSigns);
+
+        // 使用CSS变量来控制颜色，确保深色/浅色主题下的可见性
+        const tableStyle = `
+            width: 100%; 
+            border-collapse: collapse; 
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        `;
+
+        const html = `
+            <div class="text-center mb-3" style="color: var(--text-primary);">
+                <h5 class="fw-bold mb-2">${data.title}</h5>
+                <div class="d-flex justify-content-between px-2 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
+                    <span><strong>日期:</strong> ${data.yearMonth}</span>
+                    <span><strong>机台:</strong> ${data.machineName}</span>
+                    <span><strong>编号:</strong> JL-QD SG 190</span>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm mb-0" style="${tableStyle}">
+                    <thead style="background-color: var(--bg-primary);">
+                        <tr>
+                            <th class="text-center align-middle" rowspan="2" style="width: 40px;">序号</th>
+                            <th class="text-center align-middle" rowspan="2" style="min-width: 150px;">检测装置</th>
+                            <th class="text-center align-middle" colspan="31">检查结果 (第一行填写日期，并对应进行记录)</th>
+                        </tr>
+                        <tr>
+                            ${dayHeaders}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                        ${checkerRow}
+                        ${operatorRow}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-3 small px-2 border-top pt-2" style="color: var(--text-secondary); border-color: var(--border-color) !important;">
+                <div class="d-flex mb-1">
+                    <span class="fw-bold me-2">备注1:</span> 
+                    <span>停 / 休</span>
+                </div>
+                <div class="d-flex">
+                    <span class="fw-bold me-2">备注2:</span> 
+                    <span>当班电工对包机自检自控项目进行检查，检测项目正常打“√”，异常打“×”，并注明相应处理措施，不能进行项目打“/”杠掉。检查后签字确认。保存期1年。</span>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
     }
 }

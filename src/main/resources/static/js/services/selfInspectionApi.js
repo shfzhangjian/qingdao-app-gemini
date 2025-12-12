@@ -217,7 +217,29 @@ export async function exportLedger(params) {
     return response.blob();
 }
 
+export async function getArchiveReportData(req) {
+    return apiFetch('/tmis/api/si/report/preview', {
+        method: 'POST',
+        body: JSON.stringify(req)
+    });
+}
 
+export async function exportArchiveReport(req) {
+    const blob = await apiFetch('/tmis/api/si/report/export', {
+        method: 'POST',
+        body: JSON.stringify(req)
+    });
+
+    // 触发下载
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `检查记录表_${req.deviceName}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+}
 
 /**
  * [新增] 导入台账 Excel

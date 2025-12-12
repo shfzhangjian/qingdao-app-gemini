@@ -3,6 +3,7 @@ package com.lucksoft.qingdao.selfinspection.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
+import com.lucksoft.qingdao.selfinspection.dto.ArchiveReportDTO;
 import com.lucksoft.qingdao.selfinspection.dto.DeviceKeyDto;
 import com.lucksoft.qingdao.selfinspection.dto.GenerateTaskReq;
 import com.lucksoft.qingdao.selfinspection.entity.*;
@@ -13,6 +14,7 @@ import com.lucksoft.qingdao.tspm.dto.tims.CreateSelfCheckTaskReq;
 import com.lucksoft.qingdao.tspm.dto.tims.GetAvgSpeedReq;
 import com.lucksoft.qingdao.tspm.service.TimsServiceClient;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFRichTextString;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
@@ -29,6 +31,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -820,7 +823,325 @@ public class SelfInspectionService {
      * [新增] 获取最近的车速检查记录
      */
     public List<Map<String, Object>> getRecentSpeedRecords() {
-        return speedCheckMapper.findRecentRecords();
+        Map<String, Object> params = new HashMap<>();
+        return speedCheckMapper.findRecentRecords(params);
     }
+
+    /**
+     * 生成归档报表预览数据
+     */
+    public ArchiveReportDTO.Response generateArchiveReportData(ArchiveReportDTO.Request req) {
+        // 1. 解析日期范围
+        String startDateStr, endDateStr;
+        if (req.getDateRange() != null && req.getDateRange().contains(" 至 ")) {
+            String[] parts = req.getDateRange().split(" 至 ");
+            startDateStr = parts[0];
+            endDateStr = parts[1];
+        } else {
+            // 默认当前月
+            LocalDate now = LocalDate.now();
+            startDateStr = now.withDayOfMonth(1).toString();
+            endDateStr = now.withDayOfMonth(now.lengthOfMonth()).toString();
+        }
+
+        // 2. 查询该范围内该设备的所有任务
+        Map<String, Object> queryParams = new HashMap<>();
+        // 注意：这里我们假设前端传入的 spmcode 对应数据库的 SPMCODE
+        // 但 ZJZK_TASK 表中存储的是 SPMCODE，查询参数需要适配 Mapper
+        queryParams.put("spmcode", req.getSpmcode());
+        queryParams.put("taskType", req.getTaskType());
+        queryParams.put("startDate", startDateStr);
+        queryParams.put("endDate", endDateStr);
+        // 不分页，查询全部
+        List<Map<String, Object>> flatDataList = taskDetailMapper.findStatsList(queryParams);
+
+        // 3. 聚合数据
+        ArchiveReportDTO.Response response = new ArchiveReportDTO.Response();
+
+        // 设置表头基础信息
+        response.setMachineCode(req.getSpmcode());
+        response.setMachineName(req.getDeviceName());
+
+        // 尝试从第一条数据获取更准确的机台名
+        if (!flatDataList.isEmpty()) {
+            response.setMachineName((String) flatDataList.get(0).get("device"));
+        }
+
+        // 格式化年月显示
+        try {
+            Date startD = new SimpleDateFormat("yyyy-MM-dd").parse(startDateStr);
+            response.setYearMonth(new SimpleDateFormat("yyyy年 M月").format(startD));
+        } catch (Exception e) {
+            response.setYearMonth(startDateStr);
+        }
+
+        // 标题
+        response.setTitle(response.getMachineName() + " 自检自控检查记录表 (" + req.getTaskType() + ")");
+
+        // 构建 1-31 天
+        List<Integer> days = new ArrayList<>();
+        for (int i = 1; i <= 31; i++) days.add(i);
+        response.setDays(days);
+
+        // 核心聚合逻辑
+        // Map<ItemName, Map<Day, Result>>
+        Map<String, Map<Integer, String>> itemMatrix = new LinkedHashMap<>();
+        // Map<Day, String> checkerMap
+        Map<Integer, String> checkerMap = new HashMap<>();
+        Map<Integer, String> operatorMap = new HashMap<>();
+
+        // 用于保持项目顺序
+        Set<String> orderedItems = new LinkedHashSet<>();
+
+        for (Map<String, Object> row : flatDataList) {
+            String itemName = (String) row.get("itemName");
+            Object checkTimeObj = row.get("checkTime"); // 任务时间
+            String result = (String) row.get("result");
+            String checker = (String) row.get("checker");
+            String confirmer = (String) row.get("confirmer"); // 操作工确认
+
+            if (itemName == null || checkTimeObj == null) continue;
+
+            orderedItems.add(itemName);
+
+            // 获取该记录是几号
+            int day = getDayFromDate(checkTimeObj);
+
+            // 填充矩阵
+            itemMatrix.computeIfAbsent(itemName, k -> new HashMap<>());
+
+            // 转换结果为符号
+            String symbol = "";
+            if ("正常".equals(result)) symbol = "√";
+            else if ("异常".equals(result)) symbol = "×";
+            else if ("不用".equals(result)) symbol = "/";
+            else symbol = result; // 其他保持原样
+
+            itemMatrix.get(itemName).put(day, symbol);
+
+            // 填充签字 (简单的覆盖策略，假设同一天同一机台只有一次主检)
+            if (checker != null && !checker.isEmpty()) {
+                checkerMap.put(day, checker);
+            }
+            if (confirmer != null && !confirmer.isEmpty()) {
+                operatorMap.put(day, confirmer);
+            }
+        }
+
+        // 构建 Rows 列表
+        List<ArchiveReportDTO.RowData> rows = new ArrayList<>();
+        int seq = 1;
+        for (String item : orderedItems) {
+            ArchiveReportDTO.RowData rowData = new ArchiveReportDTO.RowData(seq++, item);
+            rowData.setDailyResults(itemMatrix.get(item));
+            rows.add(rowData);
+        }
+
+        response.setRows(rows);
+        response.setCheckerSigns(checkerMap);
+        response.setOperatorSigns(operatorMap);
+
+        return response;
+    }
+
+    private int getDayFromDate(Object dateObj) {
+        try {
+            if (dateObj instanceof java.sql.Timestamp) {
+                return ((java.sql.Timestamp) dateObj).toLocalDateTime().getDayOfMonth();
+            } else if (dateObj instanceof Date) {
+                Calendar cal = Calendar.getInstance();
+                cal.setTime((Date) dateObj);
+                return cal.get(Calendar.DAY_OF_MONTH);
+            }
+        } catch (Exception e) {
+            log.warn("日期解析失败", e);
+        }
+        return 0;
+    }
+
+    /**
+     * 导出 Excel 报表
+     */
+    public Workbook exportArchiveReportExcel(ArchiveReportDTO.Request req) {
+        ArchiveReportDTO.Response data = generateArchiveReportData(req);
+
+        XSSFWorkbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("检查记录表");
+
+        // 样式定义
+        CellStyle titleStyle = workbook.createCellStyle();
+        titleStyle.setAlignment(HorizontalAlignment.CENTER);
+        titleStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        Font titleFont = workbook.createFont();
+        titleFont.setFontHeightInPoints((short) 16);
+        titleFont.setBold(true);
+        titleStyle.setFont(titleFont);
+
+        CellStyle headerStyle = workbook.createCellStyle();
+        headerStyle.setBorderBottom(BorderStyle.THIN);
+        headerStyle.setBorderTop(BorderStyle.THIN);
+        headerStyle.setBorderLeft(BorderStyle.THIN);
+        headerStyle.setBorderRight(BorderStyle.THIN);
+        headerStyle.setAlignment(HorizontalAlignment.CENTER);
+        headerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        headerStyle.setWrapText(true);
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerStyle.setFont(headerFont);
+
+        CellStyle centerStyle = workbook.createCellStyle();
+        centerStyle.setBorderBottom(BorderStyle.THIN);
+        centerStyle.setBorderTop(BorderStyle.THIN);
+        centerStyle.setBorderLeft(BorderStyle.THIN);
+        centerStyle.setBorderRight(BorderStyle.THIN);
+        centerStyle.setAlignment(HorizontalAlignment.CENTER);
+        centerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        CellStyle leftStyle = workbook.createCellStyle();
+        leftStyle.setBorderBottom(BorderStyle.THIN);
+        leftStyle.setBorderTop(BorderStyle.THIN);
+        leftStyle.setBorderLeft(BorderStyle.THIN);
+        leftStyle.setBorderRight(BorderStyle.THIN);
+        leftStyle.setAlignment(HorizontalAlignment.LEFT);
+        leftStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        // 垂直文本样式 (用于签字栏)
+        CellStyle verticalStyle = workbook.createCellStyle();
+        verticalStyle.cloneStyleFrom(centerStyle);
+        verticalStyle.setRotation((short) 255); // 竖排文字 (部分Excel版本兼容性可能不同) or setWrapText(true) with narrow column
+        verticalStyle.setWrapText(true);
+
+
+        // --- 构建表格 ---
+
+        // 1. 标题行 (Row 0)
+        Row titleRow = sheet.createRow(0);
+        titleRow.setHeightInPoints(40);
+        Cell titleCell = titleRow.createCell(0);
+        titleCell.setCellValue(data.getTitle());
+        titleCell.setCellStyle(titleStyle);
+        // 合并单元格：序号(1) + 检测装置(1) + 31天 = 33列
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 32));
+
+        // 2. 信息行 (Row 1): 日期、机台、编号
+        Row infoRow = sheet.createRow(1);
+        infoRow.setHeightInPoints(20);
+        infoRow.createCell(0).setCellValue("日期: " + data.getYearMonth());
+        infoRow.createCell(5).setCellValue("机台: " + data.getMachineName());
+        // 假设编号是固定的或者从某处获取
+        infoRow.createCell(25).setCellValue("编号: JL-QD SG 190");
+
+        // 3. 表头行 (Row 2, 3)
+        // 复杂表头：序号(合并2行), 检测装置(合并2行), 检查结果(跨31列) -> 下一行 1..31
+        Row headerRow1 = sheet.createRow(2);
+        Row headerRow2 = sheet.createRow(3);
+
+        Cell h1_0 = headerRow1.createCell(0); h1_0.setCellValue("序号"); h1_0.setCellStyle(headerStyle);
+        Cell h1_1 = headerRow1.createCell(1); h1_1.setCellValue("检测装置"); h1_1.setCellStyle(headerStyle);
+        Cell h1_2 = headerRow1.createCell(2); h1_2.setCellValue("检查结果 (第一行填写日期，并对应进行记录)"); h1_2.setCellStyle(headerStyle);
+
+        // 补全边框
+        for(int i=3; i<=32; i++) headerRow1.createCell(i).setCellStyle(headerStyle);
+
+        // 合并
+        sheet.addMergedRegion(new CellRangeAddress(2, 3, 0, 0)); // 序号
+        sheet.addMergedRegion(new CellRangeAddress(2, 3, 1, 1)); // 检测装置
+        sheet.addMergedRegion(new CellRangeAddress(2, 2, 2, 32)); // 检查结果标题
+
+        // 日期行 (1..31)
+        headerRow2.createCell(0).setCellStyle(headerStyle);
+        headerRow2.createCell(1).setCellStyle(headerStyle);
+        for (int i = 0; i < 31; i++) {
+            Cell c = headerRow2.createCell(i + 2);
+            c.setCellValue(i + 1);
+            c.setCellStyle(headerStyle);
+            sheet.setColumnWidth(i + 2, 256 * 3); // 设置窄列宽
+        }
+        sheet.setColumnWidth(0, 256 * 5);
+        sheet.setColumnWidth(1, 256 * 30); // 检测装置列宽
+
+        // 4. 数据行
+        int currentRowIdx = 4;
+        for (ArchiveReportDTO.RowData rowData : data.getRows()) {
+            Row row = sheet.createRow(currentRowIdx++);
+            row.setHeightInPoints(20);
+
+            Cell c0 = row.createCell(0); c0.setCellValue(rowData.getSeq()); c0.setCellStyle(centerStyle);
+            Cell c1 = row.createCell(1); c1.setCellValue(rowData.getItemName()); c1.setCellStyle(leftStyle);
+
+            for (int i = 1; i <= 31; i++) {
+                Cell c = row.createCell(i + 1);
+                String val = rowData.getDailyResults() != null ? rowData.getDailyResults().get(i) : "";
+                c.setCellValue(val);
+                c.setCellStyle(centerStyle);
+            }
+        }
+
+        // 5. 签字行 (检查人)
+        Row checkSignRow = sheet.createRow(currentRowIdx++);
+        checkSignRow.setHeightInPoints(40); // 签字行高一点
+        Cell cCheckLabel = checkSignRow.createCell(0);
+        cCheckLabel.setCellValue("检查人签字");
+        cCheckLabel.setCellStyle(centerStyle);
+        sheet.addMergedRegion(new CellRangeAddress(currentRowIdx-1, currentRowIdx-1, 0, 1));
+        checkSignRow.createCell(1).setCellStyle(centerStyle); // 补边框
+
+        for (int i = 1; i <= 31; i++) {
+            Cell c = checkSignRow.createCell(i + 1);
+            // 竖排显示名字，如果太长可能需要换行
+            String name = data.getCheckerSigns() != null ? data.getCheckerSigns().get(i) : "";
+            if (name != null && name.length() > 3) {
+                // 简单处理：插入换行符
+                name = name.replaceAll("(.{2})", "$1\n");
+            }
+            c.setCellValue(name);
+            c.setCellStyle(verticalStyle);
+        }
+
+        // 6. 签字行 (操作工)
+        Row opSignRow = sheet.createRow(currentRowIdx++);
+        opSignRow.setHeightInPoints(40);
+        Cell cOpLabel = opSignRow.createCell(0);
+        cOpLabel.setCellValue("操作工确认签字");
+        cOpLabel.setCellStyle(centerStyle);
+        sheet.addMergedRegion(new CellRangeAddress(currentRowIdx-1, currentRowIdx-1, 0, 1));
+        opSignRow.createCell(1).setCellStyle(centerStyle);
+
+        for (int i = 1; i <= 31; i++) {
+            Cell c = opSignRow.createCell(i + 1);
+            String name = data.getOperatorSigns() != null ? data.getOperatorSigns().get(i) : "";
+            if (name != null && name.length() > 3) name = name.replaceAll("(.{2})", "$1\n");
+            c.setCellValue(name);
+            c.setCellStyle(verticalStyle);
+        }
+
+        // 7. 备注行
+        Row remarkRow1 = sheet.createRow(currentRowIdx++);
+        remarkRow1.createCell(0).setCellValue("备注1");
+        remarkRow1.getCell(0).setCellStyle(centerStyle);
+        sheet.addMergedRegion(new CellRangeAddress(currentRowIdx-1, currentRowIdx-1, 0, 1));
+        remarkRow1.createCell(1).setCellStyle(centerStyle);
+        Cell remarkContent1 = remarkRow1.createCell(2);
+        remarkContent1.setCellValue("停 / 休 (示例)");
+        remarkContent1.setCellStyle(leftStyle);
+        sheet.addMergedRegion(new CellRangeAddress(currentRowIdx-1, currentRowIdx-1, 2, 32));
+        // 补边框
+        for(int k=3; k<=32; k++) remarkRow1.createCell(k).setCellStyle(leftStyle);
+
+
+        Row remarkRow2 = sheet.createRow(currentRowIdx++);
+        remarkRow2.createCell(0).setCellValue("备注2");
+        remarkRow2.getCell(0).setCellStyle(centerStyle);
+        sheet.addMergedRegion(new CellRangeAddress(currentRowIdx-1, currentRowIdx-1, 0, 1));
+        remarkRow2.createCell(1).setCellStyle(centerStyle);
+        Cell remarkContent2 = remarkRow2.createCell(2);
+        remarkContent2.setCellValue("当班电工对包机自检自控项目进行检查，检测项目正常打“√”，异常打“×”，并注明相应处理措施...");
+        remarkContent2.setCellStyle(leftStyle);
+        sheet.addMergedRegion(new CellRangeAddress(currentRowIdx-1, currentRowIdx-1, 2, 32));
+        for(int k=3; k<=32; k++) remarkRow2.createCell(k).setCellStyle(leftStyle);
+
+        return workbook;
+    }
+
 
 }

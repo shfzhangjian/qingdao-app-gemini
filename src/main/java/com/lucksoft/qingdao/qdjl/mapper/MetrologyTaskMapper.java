@@ -74,6 +74,17 @@ public interface MetrologyTaskMapper {
             "       <bind name='endDate' value=\"dateRange.split(' 至 ')[1]\" />" +
             "       AND A.DUPCHECK &gt;= TO_DATE(#{startDate}, 'YYYY-MM-DD') AND A.DUPCHECK &lt;= TO_DATE(#{endDate}, 'YYYY-MM-DD')" +
             "   </if>" +
+            "   <if test='loginId != null and loginId != \"\"'>" +
+            "       AND EXISTS (" +
+            "           SELECT 1 FROM USERS B " +
+            "           WHERE B.LOGINID = #{loginId} " +
+            "           AND INSTR(" +
+            "               decode('','true', ','||B.IDEPTSEE||',', '', ','||B.DEP_SCOPE_ID||',')," +
+            "               ','||A.IUSEDEPT||','" +
+            "           ) > 0" +
+            "       )" +
+            "   </if>" +
+
             "</where>" +
             "ORDER BY A.DINIT DESC, A.IDJSTATE, A.SJNO" +
             "</script>")

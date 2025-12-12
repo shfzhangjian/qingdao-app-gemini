@@ -2,6 +2,7 @@ package com.lucksoft.qingdao.selfinspection.controller;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lucksoft.qingdao.selfinspection.dto.ArchiveReportDTO;
 import com.lucksoft.qingdao.selfinspection.dto.GenerateTaskReq;
 import com.lucksoft.qingdao.selfinspection.entity.ZjzkStandardFile;
 import com.lucksoft.qingdao.selfinspection.entity.ZjzkTask;
@@ -14,6 +15,7 @@ import com.lucksoft.qingdao.system.util.AuthUtil;
 import com.lucksoft.qingdao.tmis.dto.PageResult;
 import com.lucksoft.qingdao.tmis.metrology.ExportColumn;
 import com.lucksoft.qingdao.tmis.util.ExcelExportUtil;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -310,5 +312,32 @@ public class SelfInspectionController {
     @GetMapping("/speed/list")
     public ResponseEntity<List<Map<String, Object>>> getSpeedRecords() {
         return ResponseEntity.ok(siService.getRecentSpeedRecords());
+    }
+
+
+
+    // ==========================================
+    // [新增] 归档报表接口
+    // ==========================================
+
+    @PostMapping("/report/preview")
+    public ResponseEntity<ArchiveReportDTO.Response> previewArchiveReport(@RequestBody ArchiveReportDTO.Request req) {
+        log.info("收到归档报表预览请求: Device={}, Type={}, Date={}", req.getDeviceName(), req.getTaskType(), req.getDateRange());
+        return ResponseEntity.ok(siService.generateArchiveReportData(req));
+    }
+
+    @PostMapping("/report/export")
+    public void exportArchiveReport(@RequestBody ArchiveReportDTO.Request req, HttpServletResponse response) throws IOException {
+        log.info("收到归档报表导出请求: Device={}", req.getDeviceName());
+
+        try (Workbook workbook = siService.exportArchiveReportExcel(req)) {
+            String fileName = URLEncoder.encode("自检自控记录表_" + req.getDeviceName() + ".xlsx", StandardCharsets.UTF_8.toString());
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+            workbook.write(response.getOutputStream());
+        } catch (Exception e) {
+            log.error("导出报表失败", e);
+            response.sendError(500, "导出失败: " + e.getMessage());
+        }
     }
 }
